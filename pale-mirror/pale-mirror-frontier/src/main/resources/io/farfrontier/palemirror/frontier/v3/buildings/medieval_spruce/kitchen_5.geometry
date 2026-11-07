@@ -1,0 +1,331 @@
+# Minecraft registry collision facts; regenerate through building authoring, never hand-edit.
+2|domum_ornamentum:blockpaperwall|domum_ornamentum:blockpaperwall|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.4375,0.0,0.0,0.5625,1.0,1.0
+2|domum_ornamentum:blockpaperwall|domum_ornamentum:blockpaperwall|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625
+2|domum_ornamentum:brown_bricks|domum_ornamentum:brown_bricks|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:double_crossed|domum_ornamentum:double_crossed|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:double_crossed|domum_ornamentum:double_crossed|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:double_crossed|domum_ornamentum:double_crossed|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:double_crossed|domum_ornamentum:double_crossed|facing=up	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:double_crossed|domum_ornamentum:double_crossed|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=up	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_lr|domum_ornamentum:one_crossed_lr|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:one_crossed_rl|domum_ornamentum:one_crossed_rl|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=down	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=east	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=north	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=south	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=up	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:plain|domum_ornamentum:plain|facing=west	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=east,shape=one_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=east,shape=two_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=north,shape=one_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=north,shape=two_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=south,shape=one_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=south,shape=two_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=west,shape=one_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle_slab|domum_ornamentum:shingle_slab|facing=west,shape=two_way,waterlogged=false	1	true	0.0,0.0,0.0,0.99375,0.49375,0.99375
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=east,half=bottom,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=east,half=bottom,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=east,half=bottom,shape=outer_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=east,half=bottom,shape=outer_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=east,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=north,half=bottom,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=north,half=bottom,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=north,half=bottom,shape=outer_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=north,half=bottom,shape=outer_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=north,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=south,half=bottom,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=south,half=bottom,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=south,half=bottom,shape=outer_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=south,half=bottom,shape=outer_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,0.5,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=south,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=west,half=bottom,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=west,half=bottom,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=west,half=bottom,shape=outer_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,0.5,1.0,1.0
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=west,half=bottom,shape=outer_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,0.5
+2|domum_ornamentum:shingle|domum_ornamentum:shingle|facing=west,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|domum_ornamentum:vanilla_stairs_compat|domum_ornamentum:vanilla_stairs_compat|facing=east,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|domum_ornamentum:vanilla_stairs_compat|domum_ornamentum:vanilla_stairs_compat|facing=east,half=top,shape=straight,waterlogged=false	1	true	0.5,0.0,0.0,1.0,1.0,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|domum_ornamentum:vanilla_stairs_compat|domum_ornamentum:vanilla_stairs_compat|facing=north,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:vanilla_stairs_compat|domum_ornamentum:vanilla_stairs_compat|facing=north,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:vanilla_stairs_compat|domum_ornamentum:vanilla_stairs_compat|facing=south,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0
+2|domum_ornamentum:vanilla_stairs_compat|domum_ornamentum:vanilla_stairs_compat|facing=south,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|domum_ornamentum:vanilla_stairs_compat|domum_ornamentum:vanilla_stairs_compat|facing=west,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|domum_ornamentum:vanilla_stairs_compat|domum_ornamentum:vanilla_stairs_compat|facing=west,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=east,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.625,1.0
+2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=north,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.625,1.0
+2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=south,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.625,1.0
+2|handcrafted:spruce_chair|handcrafted:spruce_chair|color=none,facing=west,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.625,1.0
+2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=east_side,waterlogged=false	1	true	0.0625,0.0,0.0625,0.25,1.0,0.25;0.0625,0.0,0.75,0.25,1.0,0.9375;0.0,0.75,0.0,0.0625,1.0,1.0;0.0625,0.75,0.0,1.0,1.0,0.0625;0.0625,0.75,0.25,1.0,1.0,0.75;0.0625,0.75,0.9375,1.0,1.0,1.0;0.25,0.75,0.0625,1.0,1.0,0.25;0.25,0.75,0.75,1.0,1.0,0.9375
+2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=east_west_center,waterlogged=false	1	true	0.0,0.75,0.0,1.0,1.0,1.0
+2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=north_side,waterlogged=false	1	true	0.0625,0.0,0.75,0.25,1.0,0.9375;0.75,0.0,0.75,0.9375,1.0,0.9375;0.0,0.75,0.0,0.0625,1.0,1.0;0.0625,0.75,0.0,1.0,1.0,0.75;0.0625,0.75,0.9375,1.0,1.0,1.0;0.25,0.75,0.75,0.75,1.0,0.9375;0.9375,0.75,0.75,1.0,1.0,0.9375
+2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=north_south_center,waterlogged=false	1	true	0.0,0.75,0.0,1.0,1.0,1.0
+2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=single,waterlogged=false	1	true	0.0625,0.0,0.0625,0.25,1.0,0.25;0.0625,0.0,0.75,0.25,1.0,0.9375;0.75,0.0,0.0625,0.9375,1.0,0.25;0.75,0.0,0.75,0.9375,1.0,0.9375;0.0,0.75,0.0,0.0625,1.0,1.0;0.0625,0.75,0.0,1.0,1.0,0.0625;0.0625,0.75,0.25,1.0,1.0,0.75;0.0625,0.75,0.9375,1.0,1.0,1.0;0.25,0.75,0.0625,0.75,1.0,0.25;0.25,0.75,0.75,0.75,1.0,0.9375;0.9375,0.75,0.0625,1.0,1.0,0.25;0.9375,0.75,0.75,1.0,1.0,0.9375
+2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=south_side,waterlogged=false	1	true	0.0625,0.0,0.0625,0.25,1.0,0.25;0.75,0.0,0.0625,0.9375,1.0,0.25;0.0,0.75,0.0,0.0625,1.0,1.0;0.0625,0.75,0.0,1.0,1.0,0.0625;0.0625,0.75,0.25,1.0,1.0,1.0;0.25,0.75,0.0625,0.75,1.0,0.25;0.9375,0.75,0.0625,1.0,1.0,0.25
+2|handcrafted:spruce_table|handcrafted:spruce_table|color=none,shape=west_side,waterlogged=false	1	true	0.75,0.0,0.0625,0.9375,1.0,0.25;0.75,0.0,0.75,0.9375,1.0,0.9375;0.0,0.75,0.0,0.75,1.0,1.0;0.75,0.75,0.0,1.0,1.0,0.0625;0.75,0.75,0.25,1.0,1.0,0.75;0.75,0.75,0.9375,1.0,1.0,1.0;0.9375,0.75,0.0625,1.0,1.0,0.25;0.9375,0.75,0.75,1.0,1.0,0.9375
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=east,variant=blockrackair	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=east,variant=blockrackempty	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=east,variant=blockrackemptysingle	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=north,variant=blockrackair	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=north,variant=blockrackempty	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=north,variant=blockrackemptysingle	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=south,variant=blockrackair	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=south,variant=blockrackempty	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=south,variant=blockrackemptysingle	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=west,variant=blockrackair	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=west,variant=blockrackempty	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecolonies:blockminecoloniesrack|minecolonies:blockminecoloniesrack|facing=west,variant=blockrackemptysingle	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:andesite|minecraft:andesite|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:barrel|minecraft:barrel|facing=east,open=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:barrel|minecraft:barrel|facing=north,open=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:barrel|minecraft:barrel|facing=south,open=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:barrel|minecraft:barrel|facing=west,open=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:black_carpet|minecraft:black_carpet|	1	true	0.0,0.0,0.0,1.0,0.0625,1.0
+2|minecraft:black_stained_glass_pane|minecraft:black_stained_glass_pane|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.4375,0.0,0.0,0.5625,1.0,1.0
+2|minecraft:black_stained_glass_pane|minecraft:black_stained_glass_pane|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625
+2|minecraft:black_wall_banner|minecraft:black_banner|facing=east	1	true	
+2|minecraft:black_wall_banner|minecraft:black_banner|facing=north	1	true	
+2|minecraft:black_wall_banner|minecraft:black_banner|facing=south	1	true	
+2|minecraft:black_wall_banner|minecraft:black_banner|facing=west	1	true	
+2|minecraft:blue_terracotta|minecraft:blue_terracotta|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:blue_wall_banner|minecraft:blue_banner|facing=east	1	true	
+2|minecraft:blue_wall_banner|minecraft:blue_banner|facing=north	1	true	
+2|minecraft:blue_wall_banner|minecraft:blue_banner|facing=south	1	true	
+2|minecraft:blue_wall_banner|minecraft:blue_banner|facing=west	1	true	
+2|minecraft:bookshelf|minecraft:bookshelf|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:cake|minecraft:cake|bites=0	1	true	0.0625,0.0,0.0625,0.9375,0.5,0.9375
+2|minecraft:chest|minecraft:chest|facing=east,type=single,waterlogged=false	1	true	0.0625,0.0,0.0625,0.9375,0.875,0.9375
+2|minecraft:chest|minecraft:chest|facing=north,type=single,waterlogged=false	1	true	0.0625,0.0,0.0625,0.9375,0.875,0.9375
+2|minecraft:chest|minecraft:chest|facing=south,type=single,waterlogged=false	1	true	0.0625,0.0,0.0625,0.9375,0.875,0.9375
+2|minecraft:chest|minecraft:chest|facing=west,type=single,waterlogged=false	1	true	0.0625,0.0,0.0625,0.9375,0.875,0.9375
+2|minecraft:chiseled_stone_bricks|minecraft:chiseled_stone_bricks|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:cobblestone_slab|minecraft:cobblestone_slab|type=top,waterlogged=false	1	true	0.0,0.5,0.0,1.0,1.0,1.0
+2|minecraft:cobblestone_stairs|minecraft:cobblestone_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|minecraft:cobblestone_stairs|minecraft:cobblestone_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|minecraft:cobblestone_stairs|minecraft:cobblestone_stairs|facing=south,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0
+2|minecraft:cobblestone_stairs|minecraft:cobblestone_stairs|facing=west,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:cobblestone_wall|minecraft:cobblestone_wall|east=low,north=none,south=none,up=false,waterlogged=false,west=low	1	true	0.0,0.0,0.3125,1.0,1.5,0.6875
+2|minecraft:cobblestone_wall|minecraft:cobblestone_wall|east=low,north=none,south=none,up=true,waterlogged=false,west=low	1	true	0.0,0.0,0.3125,1.0,1.5,0.6875;0.25,0.0,0.25,0.75,1.5,0.3125;0.25,0.0,0.6875,0.75,1.5,0.75
+2|minecraft:cobblestone_wall|minecraft:cobblestone_wall|east=low,north=none,south=none,up=true,waterlogged=false,west=none	1	true	0.25,0.0,0.25,0.75,1.5,0.75;0.75,0.0,0.3125,1.0,1.5,0.6875
+2|minecraft:cobblestone_wall|minecraft:cobblestone_wall|east=none,north=low,south=low,up=false,waterlogged=false,west=none	1	true	0.3125,0.0,0.0,0.6875,1.5,1.0
+2|minecraft:cobblestone_wall|minecraft:cobblestone_wall|east=none,north=low,south=low,up=true,waterlogged=false,west=none	1	true	0.25,0.0,0.25,0.75,1.5,0.75;0.3125,0.0,0.0,0.6875,1.5,0.25;0.3125,0.0,0.75,0.6875,1.5,1.0
+2|minecraft:cobblestone_wall|minecraft:cobblestone_wall|east=none,north=low,south=none,up=true,waterlogged=false,west=none	1	true	0.25,0.0,0.25,0.75,1.5,0.75;0.3125,0.0,0.0,0.6875,1.5,0.25
+2|minecraft:cobblestone_wall|minecraft:cobblestone_wall|east=none,north=none,south=low,up=true,waterlogged=false,west=none	1	true	0.25,0.0,0.25,0.75,1.5,0.75;0.3125,0.0,0.75,0.6875,1.5,1.0
+2|minecraft:cobblestone_wall|minecraft:cobblestone_wall|east=none,north=none,south=none,up=true,waterlogged=false,west=low	1	true	0.0,0.0,0.3125,0.75,1.5,0.6875;0.25,0.0,0.25,0.75,1.5,0.3125;0.25,0.0,0.6875,0.75,1.5,0.75
+2|minecraft:cobblestone|minecraft:cobblestone|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:cracked_stone_bricks|minecraft:cracked_stone_bricks|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:crafting_table|minecraft:crafting_table|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:dirt|minecraft:dirt|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:dried_kelp_block|minecraft:dried_kelp_block|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:fern|minecraft:fern|	1	true	
+2|minecraft:flower_pot|minecraft:flower_pot|	1	true	0.3125,0.0,0.3125,0.6875,0.375,0.6875
+2|minecraft:furnace|minecraft:furnace|facing=east,lit=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:furnace|minecraft:furnace|facing=north,lit=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:furnace|minecraft:furnace|facing=south,lit=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:furnace|minecraft:furnace|facing=west,lit=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:grass_block|minecraft:grass_block|snowy=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:gravel|minecraft:gravel|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:gray_bed|minecraft:gray_bed|facing=east,occupied=false,part=foot	1	true	0.0,0.0,0.0,0.1875,0.5625,0.1875;0.0,0.0,0.8125,0.1875,0.5625,1.0;0.0,0.1875,0.1875,1.0,0.5625,0.8125;0.1875,0.1875,0.0,1.0,0.5625,0.1875;0.1875,0.1875,0.8125,1.0,0.5625,1.0
+2|minecraft:gray_bed|minecraft:gray_bed|facing=east,occupied=false,part=head	1	true	0.8125,0.0,0.0,1.0,0.5625,0.1875;0.8125,0.0,0.8125,1.0,0.5625,1.0;0.0,0.1875,0.0,0.8125,0.5625,1.0;0.8125,0.1875,0.1875,1.0,0.5625,0.8125
+2|minecraft:gray_bed|minecraft:gray_bed|facing=north,occupied=false,part=foot	1	true	0.0,0.0,0.8125,0.1875,0.5625,1.0;0.8125,0.0,0.8125,1.0,0.5625,1.0;0.0,0.1875,0.0,1.0,0.5625,0.8125;0.1875,0.1875,0.8125,0.8125,0.5625,1.0
+2|minecraft:gray_bed|minecraft:gray_bed|facing=north,occupied=false,part=head	1	true	0.0,0.0,0.0,0.1875,0.5625,0.1875;0.8125,0.0,0.0,1.0,0.5625,0.1875;0.0,0.1875,0.1875,1.0,0.5625,1.0;0.1875,0.1875,0.0,0.8125,0.5625,0.1875
+2|minecraft:gray_bed|minecraft:gray_bed|facing=south,occupied=false,part=foot	1	true	0.0,0.0,0.0,0.1875,0.5625,0.1875;0.8125,0.0,0.0,1.0,0.5625,0.1875;0.0,0.1875,0.1875,1.0,0.5625,1.0;0.1875,0.1875,0.0,0.8125,0.5625,0.1875
+2|minecraft:gray_bed|minecraft:gray_bed|facing=south,occupied=false,part=head	1	true	0.0,0.0,0.8125,0.1875,0.5625,1.0;0.8125,0.0,0.8125,1.0,0.5625,1.0;0.0,0.1875,0.0,1.0,0.5625,0.8125;0.1875,0.1875,0.8125,0.8125,0.5625,1.0
+2|minecraft:gray_bed|minecraft:gray_bed|facing=west,occupied=false,part=foot	1	true	0.8125,0.0,0.0,1.0,0.5625,0.1875;0.8125,0.0,0.8125,1.0,0.5625,1.0;0.0,0.1875,0.0,0.8125,0.5625,1.0;0.8125,0.1875,0.1875,1.0,0.5625,0.8125
+2|minecraft:gray_bed|minecraft:gray_bed|facing=west,occupied=false,part=head	1	true	0.0,0.0,0.0,0.1875,0.5625,0.1875;0.0,0.0,0.8125,0.1875,0.5625,1.0;0.0,0.1875,0.1875,1.0,0.5625,0.8125;0.1875,0.1875,0.0,1.0,0.5625,0.1875;0.1875,0.1875,0.8125,1.0,0.5625,1.0
+2|minecraft:gray_carpet|minecraft:gray_carpet|	1	true	0.0,0.0,0.0,1.0,0.0625,1.0
+2|minecraft:gray_stained_glass_pane|minecraft:gray_stained_glass_pane|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.4375,0.0,0.0,0.5625,1.0,1.0
+2|minecraft:gray_stained_glass_pane|minecraft:gray_stained_glass_pane|east=false,north=true,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,0.5625,1.0,0.5625;0.4375,0.0,0.0,0.5625,1.0,0.4375;0.4375,0.0,0.5625,0.5625,1.0,1.0
+2|minecraft:gray_stained_glass_pane|minecraft:gray_stained_glass_pane|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625
+2|minecraft:gray_stained_glass_pane|minecraft:gray_stained_glass_pane|east=true,north=false,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625;0.4375,0.0,0.5625,0.5625,1.0,1.0
+2|minecraft:gray_stained_glass_pane|minecraft:gray_stained_glass_pane|east=true,north=true,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625;0.4375,0.0,0.0,0.5625,1.0,0.4375
+2|minecraft:gray_stained_glass_pane|minecraft:gray_stained_glass_pane|east=true,north=true,south=true,waterlogged=false,west=false	1	true	0.4375,0.0,0.0,0.5625,1.0,1.0;0.5625,0.0,0.4375,1.0,1.0,0.5625
+2|minecraft:hay_block|minecraft:hay_block|axis=x	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:hay_block|minecraft:hay_block|axis=y	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:hay_block|minecraft:hay_block|axis=z	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:iron_bars|minecraft:iron_bars|east=false,north=false,south=false,waterlogged=false,west=false	1	true	0.4375,0.0,0.4375,0.5625,1.0,0.5625
+2|minecraft:iron_bars|minecraft:iron_bars|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.4375,0.0,0.0,0.5625,1.0,1.0
+2|minecraft:iron_bars|minecraft:iron_bars|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625
+2|minecraft:lantern|minecraft:lantern|hanging=false,waterlogged=false	1	true	0.3125,0.0,0.3125,0.6875,0.4375,0.6875;0.375,0.4375,0.375,0.625,0.5625,0.625
+2|minecraft:lantern|minecraft:lantern|hanging=true,waterlogged=false	1	true	0.3125,0.0625,0.3125,0.6875,0.5,0.6875;0.375,0.5,0.375,0.625,0.625,0.625
+2|minecraft:large_fern|minecraft:large_fern|half=lower	1	true	
+2|minecraft:large_fern|minecraft:large_fern|half=upper	1	true	
+2|minecraft:light_gray_carpet|minecraft:light_gray_carpet|	1	true	0.0,0.0,0.0,1.0,0.0625,1.0
+2|minecraft:light_gray_stained_glass_pane|minecraft:light_gray_stained_glass_pane|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.4375,0.0,0.0,0.5625,1.0,1.0
+2|minecraft:light_gray_stained_glass_pane|minecraft:light_gray_stained_glass_pane|east=false,north=true,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,0.5625,1.0,0.5625;0.4375,0.0,0.0,0.5625,1.0,0.4375;0.4375,0.0,0.5625,0.5625,1.0,1.0
+2|minecraft:light_gray_stained_glass_pane|minecraft:light_gray_stained_glass_pane|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625
+2|minecraft:light_gray_stained_glass_pane|minecraft:light_gray_stained_glass_pane|east=true,north=false,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625;0.4375,0.0,0.5625,0.5625,1.0,1.0
+2|minecraft:light_gray_stained_glass_pane|minecraft:light_gray_stained_glass_pane|east=true,north=true,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625;0.4375,0.0,0.0,0.5625,1.0,0.4375
+2|minecraft:light_gray_stained_glass_pane|minecraft:light_gray_stained_glass_pane|east=true,north=true,south=true,waterlogged=false,west=false	1	true	0.4375,0.0,0.0,0.5625,1.0,1.0;0.5625,0.0,0.4375,1.0,1.0,0.5625
+2|minecraft:lilac|minecraft:lilac|half=lower	1	true	
+2|minecraft:lilac|minecraft:lilac|half=upper	1	true	
+2|minecraft:lily_of_the_valley|minecraft:lily_of_the_valley|	1	true	
+2|minecraft:mossy_cobblestone_wall|minecraft:mossy_cobblestone_wall|east=low,north=none,south=none,up=false,waterlogged=false,west=low	1	true	0.0,0.0,0.3125,1.0,1.5,0.6875
+2|minecraft:mossy_cobblestone_wall|minecraft:mossy_cobblestone_wall|east=none,north=low,south=low,up=false,waterlogged=false,west=none	1	true	0.3125,0.0,0.0,0.6875,1.5,1.0
+2|minecraft:mossy_cobblestone|minecraft:mossy_cobblestone|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:nether_brick_slab|minecraft:nether_brick_slab|type=top,waterlogged=false	1	true	0.0,0.5,0.0,1.0,1.0,1.0
+2|minecraft:nether_brick_stairs|minecraft:nether_brick_stairs|facing=east,half=top,shape=straight,waterlogged=false	1	true	0.5,0.0,0.0,1.0,1.0,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:nether_brick_stairs|minecraft:nether_brick_stairs|facing=north,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.5,1.0,1.0,1.0
+2|minecraft:nether_brick_stairs|minecraft:nether_brick_stairs|facing=south,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|minecraft:nether_brick_stairs|minecraft:nether_brick_stairs|facing=west,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=east,half=lower,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:oak_door|minecraft:oak_door|facing=east,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=east,half=upper,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:oak_door|minecraft:oak_door|facing=east,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=north,half=lower,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=north,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=north,half=upper,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=north,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=south,half=lower,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=south,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=south,half=upper,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=south,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=west,half=lower,hinge=left,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=west,half=lower,hinge=right,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:oak_door|minecraft:oak_door|facing=west,half=upper,hinge=left,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:oak_door|minecraft:oak_door|facing=west,half=upper,hinge=right,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:oak_slab|minecraft:oak_slab|type=top,waterlogged=false	1	true	0.0,0.5,0.0,1.0,1.0,1.0
+2|minecraft:polished_andesite_slab|minecraft:polished_andesite_slab|type=top,waterlogged=false	1	true	0.0,0.5,0.0,1.0,1.0,1.0
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=east,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.5,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.5,0.5,1.0,1.0
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=east,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.0,0.5,1.0,0.5
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=east,half=top,shape=straight,waterlogged=false	1	true	0.5,0.0,0.0,1.0,1.0,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=north,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=north,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.5,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.5,0.5,1.0,1.0
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=north,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.5,1.0,1.0,1.0
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=south,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.0,0.5,1.0,0.5
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=south,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=south,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=west,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=west,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:polished_andesite_stairs|minecraft:polished_andesite_stairs|facing=west,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|minecraft:polished_andesite|minecraft:polished_andesite|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:potted_fern|minecraft:flower_pot|	1	true	0.3125,0.0,0.3125,0.6875,0.375,0.6875
+2|minecraft:potted_spruce_sapling|minecraft:flower_pot|	1	true	0.3125,0.0,0.3125,0.6875,0.375,0.6875
+2|minecraft:purple_terracotta|minecraft:purple_terracotta|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:red_tulip|minecraft:red_tulip|	1	true	
+2|minecraft:short_grass|minecraft:short_grass|	1	true	
+2|minecraft:smooth_stone|minecraft:smooth_stone|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=lower,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=upper,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_door|minecraft:spruce_door|facing=east,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=lower,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=upper,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=north,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=lower,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=lower,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=upper,hinge=left,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=south,half=upper,hinge=right,open=false,powered=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875	manual:0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=lower,hinge=left,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=lower,hinge=right,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=left,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_door|minecraft:spruce_door|facing=west,half=upper,hinge=right,open=false,powered=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0	manual:0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=east,in_wall=true,open=false,powered=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0	manual:
+2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=north,in_wall=true,open=false,powered=false	1	true	0.0,0.0,0.375,1.0,1.5,0.625	manual:
+2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=south,in_wall=true,open=false,powered=false	1	true	0.0,0.0,0.375,1.0,1.5,0.625	manual:
+2|minecraft:spruce_fence_gate|minecraft:spruce_fence_gate|facing=west,in_wall=true,open=false,powered=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0	manual:
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=false,waterlogged=false,west=false	1	true	0.375,0.0,0.375,0.625,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.375,0.625,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=true,waterlogged=false,west=false	1	true	0.375,0.0,0.375,0.625,1.5,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=false,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.375,0.625,1.5,0.625;0.375,0.0,0.625,0.625,1.5,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=true,south=false,waterlogged=false,west=false	1	true	0.375,0.0,0.0,0.625,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=true,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.375,0.625,1.5,0.625;0.375,0.0,0.0,0.625,1.5,0.375
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=false,north=true,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.375,0.625,1.5,0.625;0.375,0.0,0.0,0.625,1.5,0.375;0.375,0.0,0.625,0.625,1.5,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=false	1	true	0.375,0.0,0.375,1.0,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.375,1.0,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=true,waterlogged=false,west=false	1	true	0.375,0.0,0.375,0.625,1.5,1.0;0.625,0.0,0.375,1.0,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=false,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.375,1.0,1.5,0.625;0.375,0.0,0.625,0.625,1.5,1.0
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=true,south=false,waterlogged=false,west=false	1	true	0.375,0.0,0.0,0.625,1.5,0.625;0.625,0.0,0.375,1.0,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=true,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.375,1.0,1.5,0.625;0.375,0.0,0.0,0.625,1.5,0.375
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=true,south=true,waterlogged=false,west=false	1	true	0.375,0.0,0.0,0.625,1.5,1.0;0.625,0.0,0.375,1.0,1.5,0.625
+2|minecraft:spruce_fence|minecraft:spruce_fence|east=true,north=true,south=true,waterlogged=false,west=true	1	true	0.0,0.0,0.375,1.0,1.5,0.625;0.375,0.0,0.0,0.625,1.5,0.375;0.375,0.0,0.625,0.625,1.5,1.0
+2|minecraft:spruce_leaves|minecraft:spruce_leaves|distance=7,persistent=true,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_log|minecraft:spruce_log|axis=x	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_log|minecraft:spruce_log|axis=y	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_log|minecraft:spruce_log|axis=z	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_planks|minecraft:spruce_planks|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_pressure_plate|minecraft:spruce_pressure_plate|powered=false	1	true	
+2|minecraft:spruce_slab|minecraft:spruce_slab|type=bottom,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0
+2|minecraft:spruce_slab|minecraft:spruce_slab|type=top,waterlogged=false	1	true	0.0,0.5,0.0,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.5,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.5,0.5,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.0,0.5,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=top,shape=outer_left,waterlogged=false	1	true	0.5,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=top,shape=outer_right,waterlogged=false	1	true	0.5,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=east,half=top,shape=straight,waterlogged=false	1	true	0.5,0.0,0.0,1.0,1.0,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.5,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.5,0.5,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=top,shape=outer_left,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,0.5;0.0,0.5,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=top,shape=outer_right,waterlogged=false	1	true	0.5,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=north,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.0,0.5,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=top,shape=outer_left,waterlogged=false	1	true	0.5,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=top,shape=outer_right,waterlogged=false	1	true	0.0,0.0,0.5,0.5,1.0,1.0;0.0,0.5,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=south,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=top,shape=outer_left,waterlogged=false	1	true	0.0,0.0,0.5,0.5,1.0,1.0;0.0,0.5,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=top,shape=outer_right,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,0.5;0.0,0.5,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:spruce_stairs|minecraft:spruce_stairs|facing=west,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|minecraft:spruce_trapdoor|minecraft:spruce_trapdoor|facing=east,half=bottom,open=true,powered=false,waterlogged=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_trapdoor|minecraft:spruce_trapdoor|facing=east,half=top,open=true,powered=false,waterlogged=false	1	true	0.0,0.0,0.0,0.1875,1.0,1.0
+2|minecraft:spruce_trapdoor|minecraft:spruce_trapdoor|facing=north,half=bottom,open=true,powered=false,waterlogged=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_trapdoor|minecraft:spruce_trapdoor|facing=north,half=top,open=true,powered=false,waterlogged=false	1	true	0.0,0.0,0.8125,1.0,1.0,1.0
+2|minecraft:spruce_trapdoor|minecraft:spruce_trapdoor|facing=south,half=bottom,open=true,powered=false,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_trapdoor|minecraft:spruce_trapdoor|facing=south,half=top,open=true,powered=false,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.1875
+2|minecraft:spruce_trapdoor|minecraft:spruce_trapdoor|facing=west,half=bottom,open=true,powered=false,waterlogged=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_trapdoor|minecraft:spruce_trapdoor|facing=west,half=top,open=true,powered=false,waterlogged=false	1	true	0.8125,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_wall_sign|minecraft:spruce_sign|facing=east,waterlogged=false	1	true	
+2|minecraft:spruce_wall_sign|minecraft:spruce_sign|facing=north,waterlogged=false	1	true	
+2|minecraft:spruce_wall_sign|minecraft:spruce_sign|facing=south,waterlogged=false	1	true	
+2|minecraft:spruce_wall_sign|minecraft:spruce_sign|facing=west,waterlogged=false	1	true	
+2|minecraft:spruce_wood|minecraft:spruce_wood|axis=x	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_wood|minecraft:spruce_wood|axis=y	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:spruce_wood|minecraft:spruce_wood|axis=z	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:stone_brick_slab|minecraft:stone_brick_slab|type=top,waterlogged=false	1	true	0.0,0.5,0.0,1.0,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=east,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=east,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.5,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.5,0.5,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=east,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.0,0.5,1.0,0.5
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=east,half=top,shape=outer_left,waterlogged=false	1	true	0.5,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=east,half=top,shape=straight,waterlogged=false	1	true	0.5,0.0,0.0,1.0,1.0,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=north,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=north,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=north,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.5,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.5,0.5,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=north,half=top,shape=outer_left,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,0.5;0.0,0.5,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=north,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.5,1.0,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=south,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.5,1.0,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=south,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.0,0.5,0.0,0.5,1.0,0.5
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=south,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=south,half=top,shape=outer_left,waterlogged=false	1	true	0.5,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=south,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.5,1.0,1.0,1.0;0.0,0.5,0.0,1.0,1.0,0.5
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=west,half=bottom,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,1.0,0.5,1.0;0.0,0.5,0.0,0.5,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=west,half=top,shape=inner_left,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.5,1.0,1.0,1.0;0.5,0.5,0.0,1.0,1.0,0.5
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=west,half=top,shape=inner_right,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.0,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=west,half=top,shape=outer_left,waterlogged=false	1	true	0.0,0.0,0.5,0.5,1.0,1.0;0.0,0.5,0.0,1.0,1.0,0.5;0.5,0.5,0.5,1.0,1.0,1.0
+2|minecraft:stone_brick_stairs|minecraft:stone_brick_stairs|facing=west,half=top,shape=straight,waterlogged=false	1	true	0.0,0.0,0.0,0.5,1.0,1.0;0.5,0.5,0.0,1.0,1.0,1.0
+2|minecraft:stone_bricks|minecraft:stone_bricks|	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:stripped_spruce_log|minecraft:stripped_spruce_log|axis=y	1	true	0.0,0.0,0.0,1.0,1.0,1.0
+2|minecraft:wall_torch|minecraft:torch|facing=east	1	true	
+2|minecraft:wall_torch|minecraft:torch|facing=north	1	true	
+2|minecraft:wall_torch|minecraft:torch|facing=south	1	true	
+2|minecraft:wall_torch|minecraft:torch|facing=west	1	true	
+2|minecraft:water_cauldron|minecraft:cauldron|level=3	1	true	0.0,0.0,0.0,0.125,1.0,0.25;0.0,0.0,0.75,0.125,1.0,1.0;0.125,0.0,0.0,0.25,1.0,0.125;0.125,0.0,0.875,0.25,1.0,1.0;0.75,0.0,0.0,1.0,1.0,0.125;0.75,0.0,0.875,1.0,1.0,1.0;0.875,0.0,0.125,1.0,1.0,0.25;0.875,0.0,0.75,1.0,1.0,0.875;0.0,0.1875,0.25,1.0,0.25,0.75;0.125,0.1875,0.125,0.875,0.25,0.25;0.125,0.1875,0.75,0.875,0.25,0.875;0.25,0.1875,0.0,0.75,1.0,0.125;0.25,0.1875,0.875,0.75,1.0,1.0;0.0,0.25,0.25,0.125,1.0,0.75;0.875,0.25,0.25,1.0,1.0,0.75
+2|minecraft:white_stained_glass_pane|minecraft:white_stained_glass_pane|east=false,north=true,south=true,waterlogged=false,west=false	1	true	0.4375,0.0,0.0,0.5625,1.0,1.0
+2|minecraft:white_stained_glass_pane|minecraft:white_stained_glass_pane|east=true,north=false,south=false,waterlogged=false,west=true	1	true	0.0,0.0,0.4375,1.0,1.0,0.5625
+2|minecraft:white_tulip|minecraft:white_tulip|	1	true	
+2|minecraft:white_wall_banner|minecraft:white_banner|facing=east	1	true	
+2|minecraft:white_wall_banner|minecraft:white_banner|facing=north	1	true	
+2|minecraft:white_wall_banner|minecraft:white_banner|facing=south	1	true	
+2|minecraft:white_wall_banner|minecraft:white_banner|facing=west	1	true	

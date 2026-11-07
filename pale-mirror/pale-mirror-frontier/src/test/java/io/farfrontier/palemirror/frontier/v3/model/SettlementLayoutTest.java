@@ -21,6 +21,24 @@ class SettlementLayoutTest {
                     FrontierRulesets.installed("frontier-v3-simulation-terrain-r31"));
 
     @Test
+    void northwatchSelectsTheActualMaximumLevelSetWithoutUpgradingOtherSettlements() {
+        var northwatch = BOOTSTRAP.settlements().getFirst();
+        assertEquals(new BuildingStyleId("pale_mirror:medieval_spruce_max"), northwatch.layout().style());
+        for (var building : northwatch.structures()) {
+            var template = building.building().template().value();
+            assertTrue(template.endsWith("_5") || template.endsWith("/hall"), template);
+            if (building.kind() == StructureKind.KITCHEN) {
+                assertTrue(building.definition().blocks().values().stream()
+                        .noneMatch(block -> block.state().kind().equals("minecraft:campfire")));
+                assertEquals(6, building.definition().blocks().values().stream()
+                        .filter(block -> block.state().kind().equals("handcrafted:spruce_chair")).count());
+            }
+        }
+        assertTrue(BOOTSTRAP.settlements().stream().skip(1)
+                .allMatch(home -> home.layout().style().equals(BuildingCatalog.defaultStyle())));
+    }
+
+    @Test
     void allSchemesUseAuthoredBuildingsAndConnectedFlushStreets() {
         assertEquals(
                 Set.of("crossroads", "spine", "courtyards"),

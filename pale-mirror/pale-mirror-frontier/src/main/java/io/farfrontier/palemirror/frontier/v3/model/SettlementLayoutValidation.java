@@ -90,7 +90,10 @@ public final class SettlementLayoutValidation {
             }
         }
         if (reached.size() != streets.size())
-            throw new IllegalArgumentException("disconnected paving components");
+            throw new IllegalArgumentException("disconnected paving components: reached="+reached.size()
+                    +" total="+streets.size()+" unreached="+streets.stream().filter(p -> !reached.contains(p))
+                        .sorted(Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::z))
+                        .limit(8).toList());
         for (var building : plan.buildings())
             for (var port : BuildingSpatialPlan.of(building).publicEntrances())
                 if (!reached.contains(port.exteriorApproach().getFirst().support()))

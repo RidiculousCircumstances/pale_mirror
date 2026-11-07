@@ -1,0 +1,16 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "craftsmanship/metallurgy/smeltery5.blueprint",
+  "sourceSha256": "f94e626d87ddf4c8d17c6cd28f670114651cab57f5349a057b9646922621b777",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "original native blocks, shapes and materials retained with pinned dependencies",
+    "terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities, inventories or foreign controllers; typed visual data retained"
+  ],
+  "replacements": [],
+  "blocks": 1287,
+  "beds": 0
+}

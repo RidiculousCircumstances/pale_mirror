@@ -14,6 +14,41 @@ import java.nio.file.*;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3BuildingAuthoringGameTests {
     @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void maximumKitchenFurnitureRetainsItsActualNeighbourShapeInAllRotations(GameTestHelper helper) {
+        var definition = BuildingCatalog.standard().require(new BuildingTemplateId("pale_mirror:medieval_spruce/kitchen_5"));
+        var furniture = definition.blocks().entrySet().stream()
+                .filter(e -> e.getValue().state().kind().startsWith("handcrafted:")).toList();
+        helper.assertTrue(furniture.size() == 11, "six seats and five table sections replace source mock furniture");
+        var level = helper.getLevel();
+        var origin = helper.absolutePos(new net.minecraft.core.BlockPos(12, 5, 12));
+        for (int turn = 0; turn < 4; turn++) {
+            var placement = new BuildingPlacement(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(origin.getX(),origin.getY(),origin.getZ()),
+                    new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(17,2,14),
+                    io.farfrontier.palemirror.frontier.v3.model.FacilityFacing.SOUTH,
+                    io.farfrontier.palemirror.frontier.v3.model.FacilityFacing.values()[turn]);
+            helper.runAfterDelay(turn * 4, () -> {
+                for (int x=-6;x<=6;x++) for (int z=-6;z<=6;z++) {
+                    level.setBlock(origin.offset(x,-1,z),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),3);
+                    level.setBlock(origin.offset(x,0,z),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),3);
+                }
+                for (var entry : furniture) {
+                    var p=placement.world(entry.getKey());
+                    level.setBlock(new net.minecraft.core.BlockPos(p.x(),p.y(),p.z()),FrontierV3BlockStates.resolve(placement.state(entry.getValue().state())),3);
+                }
+                helper.runAfterDelay(2, () -> {
+                    for (var entry : furniture) {
+                        var p=placement.world(entry.getKey());
+                        var actual=FrontierV3BlockStates.describe(level.getBlockState(new net.minecraft.core.BlockPos(p.x(),p.y(),p.z())));
+                        helper.assertTrue(placement.state(entry.getValue().state()).equals(actual),
+                                "maximum kitchen furniture settles to its declared native shape: "
+                                        +entry.getKey()+" expected="+placement.state(entry.getValue().state())+" actual="+actual);
+                    }
+                });
+            });
+        }
+        helper.runAfterDelay(16,helper::succeed);
+    }
+    @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
     public static void nativeStorageContactIsReachableThroughTheAuthoredEntrance(GameTestHelper helper) {
         var catalog=BuildingCatalog.standard();
         var definition=catalog.require(catalog.select(BuildingCatalog.MEDIEVAL_SPRUCE,

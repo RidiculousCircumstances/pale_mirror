@@ -116,7 +116,8 @@ public final class FrontierBootstrapper {
         BlockPosition horizontalAnchor = ruleset.worldLayout().settlements().get(index);
         int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
         var content=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog.standard();
-        var style=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingCatalog.defaultStyle();
+        var style=retained.map(value -> value.layout().style())
+                .orElseGet(() -> SettlementLayoutRules.standard().styleFor(settlementId));
         var requests=new ArrayList<SettlementLayoutPlanner.Request>();
         for(var kind:StructureKind.values()) {
             if(kind==StructureKind.HOUSING)continue;

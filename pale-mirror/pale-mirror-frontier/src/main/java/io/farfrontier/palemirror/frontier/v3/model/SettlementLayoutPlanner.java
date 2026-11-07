@@ -284,7 +284,9 @@ public final class SettlementLayoutPlanner {
                                                 .support()
                                                 .offset(0, h, 0)))
                     throw new IllegalArgumentException(
-                            "frontage is obstructed at " + p + " by " + building.id());
+                            "frontage is obstructed at " + p + " by " + building.id()
+                                    + " local " + building.placement().local(cell.position())
+                                    + " material " + cell.material());
             }
         }
         road.add(p);

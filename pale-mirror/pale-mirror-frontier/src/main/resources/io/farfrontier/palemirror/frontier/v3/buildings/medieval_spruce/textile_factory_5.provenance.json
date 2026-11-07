@@ -1,0 +1,16 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "craftsmanship/luxury/dyer5.blueprint",
+  "sourceSha256": "65c5db2e119bfbd1443e50296683cca02032e843959064f52d5d725e6380d721",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "original native blocks, shapes and materials retained with pinned dependencies",
+    "terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities, inventories or foreign controllers; typed visual data retained"
+  ],
+  "replacements": [],
+  "blocks": 1330,
+  "beds": 0
+}

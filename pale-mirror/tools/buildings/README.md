@@ -8,10 +8,14 @@ in the provenance files, `import_medieval_spruce.py` and `import_settlement_set.
 Native decorative blocks require the pinned Domum Ornamentum, MineColonies rack,
 Handcrafted furniture and support-mod dependencies. Colony controllers and their gameplay state are not imported.
 
-The town hall selects upstream **level 5** (`townhall5`), matching the gallery tower.
-Other service templates explicitly select **level 2** variants (`hospital2`,
-`warehouse2`, etc.; bakery uses `baker2`). Housing
-selects explicit level/bed variants. The Style Explorer gallery shows maximum-level
+Northwatch explicitly selects `pale_mirror:medieval_spruce_max`: original **level 5**
+service blueprints and level-5 houses, matching the gallery levels. The hashed
+`settlementStyles` policy selects that style for `settlement:1`; other settlements
+retain their existing selection. `maximum_level_sources.json` pins every new source
+and the exact reviewed furniture/firepit replacement preimages. The town hall and
+maximum housing reuse the existing `townhall5`/`altresidence5` assets. The default
+style still selects level-2 services (`hospital2`, `warehouse2`, `baker2`, etc.)
+and explicit housing variants. The Style Explorer gallery shows maximum-level
 buildings. The current lower-level selections therefore do not match that visual
 reference; equality to a level-2 source must not be used to accept the gallery's
 complete towers, materials or size. Choosing a different source level is a content/layout change,
@@ -162,3 +166,14 @@ headroom, replace steps or cut through railings. `entranceSupports` and optional
 the entrance independently of the outdoor ground datum. Native collision
 validation rejects inaccessible paths. Choose a real opening or a winding porch
 route instead of carving a straight connector through source blocks.
+
+## Maximum-level interior review
+
+`maximum-level/run-review.sh` consumes the existing disposable pilot and VibeCraft
+bridge with the same seven pinned native dependencies as the Northwatch access
+fixture. It exports the actual immutable layout, scans the naturally loaded kitchen
+and captures Minecraft images. Its optional scenario argument selects the focused
+`disposable-northwatch-kitchen-reload.json` save/restart check. Prior authoring drafts
+are preserved in the evidence directory because export deliberately refuses to
+overwrite them. A source/cached geometry pass is not visual or resident dining
+acceptance. NPC seat assignment and table meals are a separate implementation.

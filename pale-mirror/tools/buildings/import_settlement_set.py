@@ -35,9 +35,13 @@ def underground_voids(palette, ids, size, ground_y):
                   'max':[max(p[j] for p in component)+1 for j in range(3)]})
  return result,required
 
-def adapt(state):
+def adapt(state,omitted_controllers=()):
  name=state['Name']; props=dict(state.get('Properties',{}))
+ if not set(omitted_controllers)<={'minecolonies:blockstash'}:raise ValueError('undeclared controller omission')
+ if name in omitted_controllers:return None
  if name in {'minecraft:air','structurize:blocksubstitution','structurize:blocksolidsubstitution'} or name.startswith('minecolonies:blockhut'):return None
+ # Vanilla's 1.20.3 identifier rename; this is the same native grass model.
+ if name=='minecraft:grass':name='minecraft:short_grass'
  if not name.startswith(('minecraft:','domum_ornamentum:')) and name!='minecolonies:blockminecoloniesrack':
   raise ValueError('undeclared source dependency '+name)
  return name,props
@@ -64,7 +68,7 @@ def build(spec,source,out):
  for i,v in enumerate(ids[:sx*sy*sz]):
   x=i%sx;z=i//sx%sz;y=i//(sx*sz)
   if y<cut:continue
-  value=adapt(pal[v])
+  value=adapt(pal[v],spec.get('omittedControllers',()))
   if value:cells[x,y,z]=value
  for tile in n['tile_entities']:
   pos=tuple(int(tile[k]) for k in 'xyz'); value=visual_data(tile)
@@ -123,6 +127,18 @@ def build(spec,source,out):
    for z in range(lo[2],hi[2]):
     cells[x,lo[1]-1,z]=('minecraft:cobblestone',{})
     for y in range(lo[1],hi[1]):cells.pop((x,y,z),None)
+ # Reviewed content edits are exact source preimages, not a runtime decoration pass.
+ # Reject a changed upstream cell instead of silently discarding architecture/NBT.
+ for edit in spec.get('replacements',[]):
+  pos=tuple(edit['position']);before=cells.get(pos)
+  expected=edit['before']
+  if before != (expected['Name'],expected.get('Properties',{})) and not (before is None and expected=={'Name':'minecraft:air'}):
+   raise ValueError('replacement source mismatch at '+str(pos)+': '+str(before))
+  if pos in data:raise ValueError('replacement would discard visual payload at '+str(pos))
+  after=edit.get('after')
+  if after is None:cells.pop(pos,None)
+  else:cells[pos]=(after['Name'],after.get('Properties',{}))
+  data.pop(pos,None)
  # Preserve explicitly authored excavation below the entry floor. Placeholders retain
  # terrain; only actual source AIR is a void. Higher air is supplied by this flat
  # genesis provider, avoiding a voxel entry for every empty sky cell.
@@ -152,7 +168,7 @@ def build(spec,source,out):
   socket=point(socket);worker=point(worker);inp=point(inp);name=work.get('id','work');prop['workplaces']+=(',' if prop['workplaces'] else '')+name
   if not prop['primaryWorkplace']:prop['primaryWorkplace']=name
   p='workplace.'+name
-  for key,value in {'room':'main','socket':socket,'worker':worker,'input':inp,'equipmentType':work['type'],'facing':work['front'],'equipment.min':(socket[0],socket[1]+1,socket[2]),'equipment.max':(socket[0]+1,socket[1]+3,socket[2]+1),'maintenance.min':(worker[0],worker[1]+1,worker[2]),'maintenance.max':(worker[0]+1,worker[1]+3,worker[2]+1)}.items():prop[p+'.'+key]=value if isinstance(value,str) else ','.join(map(str,value))
+  for key,value in {'room':'main','socket':socket,'worker':worker,'input':inp,'equipmentType':work['type'],'facing':work['front'],'equipment.min':(socket[0],socket[1]+1,socket[2]),'equipment.max':(socket[0]+1,socket[1]+1+work.get('equipmentHeight',2),socket[2]+1),'maintenance.min':(worker[0],worker[1]+1,worker[2]),'maintenance.max':(worker[0]+1,worker[1]+3,worker[2]+1)}.items():prop[p+'.'+key]=value if isinstance(value,str) else ','.join(map(str,value))
  beds=[]
  for head,(name,props) in sorted(cells.items()):
   if not name.endswith('_bed') or props.get('part')!='head':continue
@@ -160,6 +176,9 @@ def build(spec,source,out):
   if cells.get(foot,('',''))[0]!=name:raise ValueError('incomplete source bed')
   bid='bed_'+str(len(beds)+1);beds.append(bid)
   for key,p in [('head',head),('foot',foot)]:prop['bed.'+bid+'.'+key]=','.join(map(str,p))
+  medical=spec['kind']=='INFIRMARY'
+  prop['bed.'+bid+'.purpose']='MEDICAL' if medical else 'RESIDENTIAL'
+  prop['bed.'+bid+'.recoveryPermille']='5000' if medical else '3000'
  prop['beds']=','.join(beds)
  for zone in spec.get('zones',[]):
   name=zone['id'];prop['zones']+=(',' if prop['zones'] else '')+name
@@ -173,7 +192,7 @@ def build(spec,source,out):
   if any(pos==point(w) for _,_,w,_ in mounts):part='WORKSHOP_PROCESS_STATION'
   if any(pos==point(i) for _,_,_,i in mounts):part='WORKSHOP_INPUT_STATION'
   repair_name=('minecraft:flower_pot' if name.startswith('minecraft:potted_') else name).replace('_wall_hanging_sign','_hanging_sign').replace('_wall_sign','_sign').replace('_wall_banner','_banner')
-  repair={'minecraft:dirt_path':'minecraft:dirt','minecraft:coarse_dirt':'minecraft:dirt','minecraft:wall_torch':'minecraft:torch','minecraft:water_cauldron':'minecraft:cauldron','minecraft:lava_cauldron':'minecraft:cauldron','minecraft:water':'minecraft:bucket','minecraft:tripwire':'minecraft:string'}.get(name,repair_name)
+  repair={'minecraft:dirt_path':'minecraft:dirt','minecraft:coarse_dirt':'minecraft:dirt','minecraft:wall_torch':'minecraft:torch','minecraft:water_cauldron':'minecraft:cauldron','minecraft:lava_cauldron':'minecraft:cauldron','minecraft:water':'minecraft:bucket','minecraft:lava':'minecraft:lava_bucket','minecraft:fire':'minecraft:flint_and_steel','minecraft:tripwire':'minecraft:string'}.get(name,repair_name)
   material='2|'+name+'|'+repair+'|'+','.join(k+'='+v for k,v in sorted(props.items()))
   if pos in data:
    _,kind,version,payload=data[pos]
@@ -186,12 +205,12 @@ def build(spec,source,out):
  # Certificates are produced by the registered Minecraft shape compiler, never fabricated.
  geometry=base.with_suffix('.geometry')
  if not geometry.exists():geometry.write_text('# Native collision certificate pending authoring compilation.\n')
- base.with_suffix('.provenance.json').write_text(json.dumps({'sourceRef':'a9b03edfbbd5359b148c85284ea038066d689866','source':spec['source'],'sourceSha256':spec['sha256'],'license':'private test derivative; upstream ARR','adaptations':['original native blocks, shapes and materials retained with pinned dependencies','terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air','supported open entrance','declared machine/operator aisle and service points','no entities, inventories or foreign controllers; typed visual data retained'],'blocks':len(cells),'beds':len(beds)},indent=2)+'\n')
+ base.with_suffix('.provenance.json').write_text(json.dumps({'sourceRef':'a9b03edfbbd5359b148c85284ea038066d689866','source':spec['source'],'sourceSha256':spec['sha256'],'license':'private test derivative; upstream ARR','adaptations':['original native blocks, shapes and materials retained with pinned dependencies','terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air','supported open entrance','declared machine/operator aisle and service points','no entities, inventories or foreign controllers; typed visual data retained']+spec.get('adaptations',[]),'replacements':spec.get('replacements',[]),'blocks':len(cells),'beds':len(beds)},indent=2)+'\n')
  print(spec['name'],len(cells),'beds',len(beds))
 
 def main():
- ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--sources',type=Path,required=True);ap.add_argument('--housing',type=Path,required=True);ap.add_argument('--output',type=Path,required=True);ap.add_argument('--name');a=ap.parse_args()
- for spec in json.loads(Path(__file__).with_name('settlement_sources.json').read_text()):
+ ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--sources',type=Path,required=True);ap.add_argument('--housing',type=Path,required=True);ap.add_argument('--output',type=Path,required=True);ap.add_argument('--name');ap.add_argument('--specs',type=Path,default=Path(__file__).with_name('settlement_sources.json'));a=ap.parse_args()
+ for spec in json.loads(a.specs.read_text()):
   if a.name and spec['name']!=a.name:continue
   source=(a.housing if spec['kind']=='HOUSING' else a.sources)/Path(spec['source']).name
   build(spec,source,a.output)

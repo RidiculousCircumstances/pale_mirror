@@ -144,7 +144,7 @@ final class FrontierDevelopmentScenarios {
             DeferredAftermathPrepared prepared = events.stream().map(ProposedEvent::payload).filter(DeferredAftermathPrepared.class::isInstance)
                     .map(DeferredAftermathPrepared.class::cast).findFirst().orElse(null);
             if (prepared != null) {
-                if (!prepared.aftermath().causeId().value().equals("cause:development-settlement-assault-epoch-4-attacker-bioform-west-19")) {
+                if (!prepared.aftermath().causeId().value().equals("cause:development-settlement-assault-epoch-2-attacker-bioform-west-7")) {
                     throw new IllegalStateException("cold bomber fixture selected a substituted bomber cause: " + prepared.aftermath().causeId());
                 }
                 return new SettlementAssaultFixture(state, new SimInstant(dueAt - 1L), List.of(combat), boundary.assaultId());

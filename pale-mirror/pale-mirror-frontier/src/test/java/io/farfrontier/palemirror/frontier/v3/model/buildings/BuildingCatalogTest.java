@@ -42,7 +42,8 @@ class BuildingCatalogTest {
     @Test
     void courtyardSeatContactCanDepartWithoutMakingFurnitureAPreferredStation() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:yard-contact"), 139));
-        var home = state.bootstrap().settlements().getFirst();
+        var home = state.bootstrap().settlements().stream()
+                .filter(s -> s.layout().style().equals(BuildingCatalog.defaultStyle())).findFirst().orElseThrow();
         var bakery = home.structures().stream().filter(s -> s.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
         var plan = BuildingSpatialPlan.of(bakery);
         var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, home.id(), List.of()).forProfile(UnitNavigationProfile.VILLAGER);
@@ -150,7 +151,8 @@ class BuildingCatalogTest {
                 FrontierWorldState.initial(
                         FrontierBootstrapper.create(
                                 new WorldId("frontier:authored-building"), 139));
-        var settlement = state.bootstrap().settlements().getFirst();
+        var settlement = state.bootstrap().settlements().stream()
+                .filter(s -> s.layout().style().equals(BuildingCatalog.defaultStyle())).findFirst().orElseThrow();
         var bakery =
                 settlement.structures().stream()
                         .filter(s -> s.kind() == StructureKind.WORKSHOP)
@@ -195,6 +197,26 @@ class BuildingCatalogTest {
                                         c.ownerId().equals(bakery.id())
                                                 && c.material()
                                                         instanceof StructureMaterial.Authored));
+    }
+
+    @Test
+    void maximumLevelWorkplacesAreReachableThroughTheirRealPlacedEntrances() {
+        var state=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:maximum-access"),139));
+        var home=state.bootstrap().settlements().getFirst();
+        for (var building:home.structures()) {
+            if (!ProductionFacilityLayout.supports(building.kind())) continue;
+            var knowledge=KnownPedestrianRouteKnowledge.forSettlement(state,home.id(),List.of(
+                    new KnownPedestrianRouteKnowledge.Passage(building,KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)))
+                    .forProfile(UnitNavigationProfile.VILLAGER);
+            var start=BuildingSpatialPlan.of(building).primaryEntrance().exteriorApproach().getFirst();
+            for (var workplace:building.definition().workplaces().values())
+                for (var local:List.of(workplace.input(),workplace.worker())) {
+                    var goal=building.placement().support(local);
+                    var route=knowledge.path(start,new MovementOrder(home.id(),home.id(),0,1,List.of(goal),
+                            TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION));
+                    assertEquals(goal,route.getLast(),building.id()+" "+workplace.id());
+                }
+        }
     }
 
     @Test

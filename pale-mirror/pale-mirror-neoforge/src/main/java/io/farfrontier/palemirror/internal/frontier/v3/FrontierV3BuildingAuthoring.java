@@ -47,10 +47,19 @@ final class FrontierV3BuildingAuthoring {
                                                             "invalid building rotation");
                                         };
                                 var rotated = placement.state(block.state());
+                                var nativeRotated = FrontierV3BlockStates.describe(
+                                        FrontierV3BlockStates.resolve(block.state()).rotate(nativeRotation));
+                                if (BuildingPlacement.neighbourOrientedTable(block.state())) {
+                                    // Handcrafted 4.0.3 does not override Block.rotate for tables.
+                                    // Their final shape comes from neighbouring blocks. The native
+                                    // four-rotation placement test proves this separate transform;
+                                    // every other native property still has to match here.
+                                    var properties = new TreeMap<>(nativeRotated.properties());
+                                    properties.put("shape", rotated.properties().get("shape"));
+                                    nativeRotated = new NavigationBlockState(nativeRotated.kind(), properties);
+                                }
                                 if (!rotated.equals(
-                                        FrontierV3BlockStates.describe(
-                                                FrontierV3BlockStates.resolve(block.state())
-                                                        .rotate(nativeRotation))))
+                                        nativeRotated))
                                     throw new IllegalArgumentException(
                                             "unsupported native orientation transform: "
                                                     + block.state());

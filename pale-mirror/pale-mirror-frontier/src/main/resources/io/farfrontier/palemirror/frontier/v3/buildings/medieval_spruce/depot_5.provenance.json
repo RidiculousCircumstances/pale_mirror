@@ -1,0 +1,16 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "craftsmanship/storage/warehouse5.blueprint",
+  "sourceSha256": "72dea47084f4cc411105520a17532380c33dcaf7ceaba2bec1a3640d2a185757",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "original native blocks, shapes and materials retained with pinned dependencies",
+    "terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities, inventories or foreign controllers; typed visual data retained"
+  ],
+  "replacements": [],
+  "blocks": 2740,
+  "beds": 0
+}

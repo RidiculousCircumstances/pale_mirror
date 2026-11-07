@@ -99,13 +99,32 @@ public record BuildingPlacement(
                                                                             Integer.parseInt(value)
                                                                                     + 4 * turns(),
                                                                             16))
-                                                            : key.equals("shape") ? rotatedShape(value) : value;
+                                                            : key.equals("shape") ? rotatedShape(local.kind(), value) : value;
                             result.put(rotatedKey, rotatedValue);
                         });
         return new NavigationBlockState(local.kind(), result);
     }
 
-    private String rotatedShape(String value) {
+    /** Handcrafted table orientation is derived by neighbour updates, not Block.rotate. */
+    public static boolean neighbourOrientedTable(NavigationBlockState state) {
+        return state.kind().startsWith("handcrafted:") && state.kind().endsWith("_table")
+                && state.properties().containsKey("shape");
+    }
+
+    private String rotatedShape(String kind, String value) {
+        if (kind.startsWith("handcrafted:") && kind.endsWith("_table")) {
+            for (int i=0;i<turns();i++) value=switch(value) {
+                case "north_side" -> "east_side"; case "east_side" -> "south_side";
+                case "south_side" -> "west_side"; case "west_side" -> "north_side";
+                case "north_center" -> "east_center"; case "east_center" -> "south_center";
+                case "south_center" -> "west_center"; case "west_center" -> "north_center";
+                case "north_south_center" -> "east_west_center"; case "east_west_center" -> "north_south_center";
+                case "north_east_corner" -> "south_east_corner"; case "south_east_corner" -> "south_west_corner";
+                case "south_west_corner" -> "north_west_corner"; case "north_west_corner" -> "north_east_corner";
+                default -> value;
+            };
+            return value;
+        }
         for(int i=0;i<turns();i++)value=switch(value) {
             case "north_south" -> "east_west"; case "east_west" -> "north_south";
             case "ascending_north" -> "ascending_east";case "ascending_east" -> "ascending_south";

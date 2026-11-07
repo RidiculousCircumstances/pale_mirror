@@ -1,0 +1,16 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "fundamentals/hospital5.blueprint",
+  "sourceSha256": "35d52217ee3f9af8fd20e674bba8416e7c84413f613524a6fac633bd3930877f",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "original native blocks, shapes and materials retained with pinned dependencies",
+    "terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities, inventories or foreign controllers; typed visual data retained"
+  ],
+  "replacements": [],
+  "blocks": 2414,
+  "beds": 5
+}

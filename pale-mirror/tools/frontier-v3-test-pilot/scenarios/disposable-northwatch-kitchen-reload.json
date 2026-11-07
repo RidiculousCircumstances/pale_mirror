@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "id": "disposable_northwatch_kitchen_reload",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 139
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25599,
+    "viewDistance": 6,
+    "profile": "northwatch-world"
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode spectator"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 300 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/execute in pale_mirror:frontier_graybox run pale_mirror v3 building layout export settlement:1 maximum_review"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.facadeView"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.entrance"
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 4000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "settlement",
+          "id": "settlement:1",
+          "field": "layout.facilities.KITCHEN.interior"
+        }
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait",
+      "ms": 45000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 6,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 3,
+      "name": "maximum-kitchen-before-restart"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 3,
+    "resumeSetup": []
+  }
+}

@@ -92,7 +92,7 @@ class FrontierV3FixtureCatalogTest {
         var due = configuration.initialSchedules().stream().filter(action -> action.kind().equals("frontier.settlement_assault.combat")).findFirst().orElseThrow();
         var aftermath = HiveSettlementAssaultProcess.planCombat(state, due).stream().map(ProposedEvent::payload)
                 .filter(DeferredAftermathPrepared.class::isInstance).map(DeferredAftermathPrepared.class::cast).findFirst().orElseThrow().aftermath();
-        assertEquals("cause:development-settlement-assault-epoch-4-attacker-bioform-west-19", aftermath.causeId().value());
+        assertEquals("cause:development-settlement-assault-epoch-2-attacker-bioform-west-7", aftermath.causeId().value());
         assertTrue(state.deferredAftermath().entries().isEmpty(), "the fixture retains only the ordinary due action, never an injected aftermath");
     }
     @Test void coldBomberDueActionCommitsItsSemanticLossWithTheExactCause() {

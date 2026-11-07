@@ -1,0 +1,1222 @@
+[
+  {
+    "name": "infirmary_5",
+    "kind": "INFIRMARY",
+    "source": "fundamentals/hospital5.blueprint",
+    "sha256": "35d52217ee3f9af8fd20e674bba8416e7c84413f613524a6fac633bd3930877f",
+    "floor": 7,
+    "door": [
+      4,
+      10
+    ],
+    "front": "WEST",
+    "anchors": {
+      "patient": [
+        8,
+        7,
+        10
+      ],
+      "medic_left": [
+        8,
+        7,
+        9
+      ],
+      "medic_right": [
+        8,
+        7,
+        11
+      ]
+    },
+    "groundY": 6,
+    "excavations": [],
+    "entranceSupports": [
+      [
+        1,
+        6,
+        10
+      ],
+      [
+        2,
+        6,
+        10
+      ],
+      [
+        3,
+        7,
+        10
+      ],
+      [
+        4,
+        7,
+        10
+      ],
+      [
+        5,
+        7,
+        10
+      ]
+    ],
+    "entranceThreshold": 3
+  },
+  {
+    "name": "depot_5",
+    "kind": "DEPOT",
+    "source": "craftsmanship/storage/warehouse5.blueprint",
+    "sha256": "72dea47084f4cc411105520a17532380c33dcaf7ceaba2bec1a3640d2a185757",
+    "floor": 2,
+    "door": [
+      16,
+      9
+    ],
+    "front": "EAST",
+    "anchors": {
+      "container": [
+        15,
+        2,
+        9
+      ],
+      "station_left": [
+        17,
+        2,
+        8
+      ],
+      "station_right": [
+        17,
+        2,
+        10
+      ],
+      "loading_left": [
+        18,
+        2,
+        8
+      ],
+      "loading_right": [
+        18,
+        2,
+        10
+      ]
+    },
+    "zones": [
+      {
+        "id": "storage",
+        "use": "STORAGE",
+        "min": [
+          2,
+          3,
+          2
+        ],
+        "max": [
+          16,
+          7,
+          13
+        ],
+        "priority": 80
+      }
+    ],
+    "groundY": 1,
+    "excavations": [],
+    "entranceSupports": [
+      [
+        20,
+        2,
+        9
+      ],
+      [
+        19,
+        2,
+        9
+      ],
+      [
+        18,
+        2,
+        9
+      ],
+      [
+        17,
+        2,
+        9
+      ],
+      [
+        16,
+        2,
+        9
+      ],
+      [
+        15,
+        2,
+        9
+      ]
+    ],
+    "entranceThreshold": 4
+  },
+  {
+    "name": "smeltery_5",
+    "kind": "SMELTERY",
+    "source": "craftsmanship/metallurgy/smeltery5.blueprint",
+    "sha256": "f94e626d87ddf4c8d17c6cd28f670114651cab57f5349a057b9646922621b777",
+    "floor": 2,
+    "door": [
+      3,
+      9
+    ],
+    "front": "SOUTH",
+    "work": {
+      "socket": [
+        11,
+        2,
+        4
+      ],
+      "front": "SOUTH",
+      "input": [
+        10,
+        2,
+        5
+      ],
+      "type": "pale_mirror:smelter"
+    },
+    "anchors": {
+      "metal_station": [
+        -2,
+        2,
+        10
+      ],
+      "metal_storage": [
+        -2,
+        2,
+        11
+      ]
+    },
+    "groundY": 2,
+    "excavations": [],
+    "entranceSupports": [
+      [
+        3,
+        2,
+        12
+      ],
+      [
+        3,
+        2,
+        11
+      ],
+      [
+        3,
+        2,
+        10
+      ],
+      [
+        3,
+        2,
+        9
+      ],
+      [
+        3,
+        2,
+        8
+      ]
+    ],
+    "entranceThreshold": 3,
+    "zones": [
+      {
+        "id": "metals",
+        "use": "STORAGE",
+        "min": [
+          10,
+          7,
+          8
+        ],
+        "max": [
+          11,
+          8,
+          9
+        ],
+        "priority": 100,
+        "categories": [
+          "pale_mirror:metals"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "forge_5",
+    "kind": "FORGE",
+    "source": "craftsmanship/metallurgy/blacksmith5.blueprint",
+    "sha256": "ce7984dd79c784f182c75a23726ae6c99e7af57bace8be3a3b04ff4dd5b655d0",
+    "floor": 1,
+    "door": [
+      10,
+      10
+    ],
+    "front": "SOUTH",
+    "work": {
+      "socket": [
+        7,
+        1,
+        4
+      ],
+      "front": "WEST",
+      "input": [
+        5,
+        1,
+        4
+      ],
+      "type": "pale_mirror:forge"
+    },
+    "groundY": 1,
+    "excavations": []
+  },
+  {
+    "name": "woodshop_5",
+    "kind": "WOODSHOP",
+    "source": "craftsmanship/carpentry/sawmill5.blueprint",
+    "sha256": "43e86ad5a1c2d1a3500f0d44ef8f1b3467a0561f0d813f35a15748386eadee5b",
+    "floor": 5,
+    "door": [
+      6,
+      15
+    ],
+    "front": "SOUTH",
+    "work": {
+      "socket": [
+        13,
+        5,
+        14
+      ],
+      "front": "WEST",
+      "input": [
+        11,
+        5,
+        14
+      ],
+      "type": "pale_mirror:woodworking_bench"
+    },
+    "groundY": 2,
+    "excavations": [],
+    "entranceSupports": [
+      [
+        6,
+        2,
+        20
+      ],
+      [
+        6,
+        2,
+        19
+      ],
+      [
+        6,
+        3,
+        18
+      ],
+      [
+        6,
+        4,
+        17
+      ],
+      [
+        6,
+        5,
+        16
+      ],
+      [
+        6,
+        5,
+        15
+      ],
+      [
+        6,
+        5,
+        14
+      ]
+    ],
+    "entranceThreshold": 5
+  },
+  {
+    "name": "farm_5",
+    "kind": "FARM",
+    "source": "agriculture/horticulture/farmer5.blueprint",
+    "sha256": "f1bdb840004b6679f310a06c6d64a4da198430e7f48aa68e7f3ba92c43da5538",
+    "floor": 2,
+    "door": [
+      14,
+      7
+    ],
+    "front": "SOUTH",
+    "groundY": 1,
+    "excavations": [],
+    "entranceSupports": [
+      [
+        11,
+        1,
+        23
+      ],
+      [
+        11,
+        1,
+        22
+      ],
+      [
+        11,
+        1,
+        21
+      ],
+      [
+        11,
+        1,
+        20
+      ],
+      [
+        11,
+        1,
+        19
+      ],
+      [
+        11,
+        1,
+        18
+      ],
+      [
+        11,
+        1,
+        17
+      ],
+      [
+        11,
+        1,
+        16
+      ],
+      [
+        11,
+        1,
+        15
+      ],
+      [
+        11,
+        1,
+        14
+      ],
+      [
+        11,
+        1,
+        13
+      ],
+      [
+        11,
+        1,
+        12
+      ],
+      [
+        11,
+        1,
+        11
+      ],
+      [
+        11,
+        1,
+        10
+      ],
+      [
+        11,
+        1,
+        9
+      ],
+      [
+        11,
+        1,
+        8
+      ],
+      [
+        12,
+        1,
+        8
+      ],
+      [
+        13,
+        2,
+        8
+      ],
+      [
+        14,
+        2,
+        8
+      ],
+      [
+        14,
+        2,
+        7
+      ],
+      [
+        14,
+        2,
+        6
+      ]
+    ],
+    "entranceThreshold": 19
+  },
+  {
+    "name": "kitchen_5",
+    "kind": "KITCHEN",
+    "source": "fundamentals/cook5.blueprint",
+    "sha256": "7bba96e2b6c85e4f7559eef0e00b03deb9e04674b9939aa96dc51821559dfc00",
+    "floor": 1,
+    "door": [
+      11,
+      13
+    ],
+    "secondaryDoor": [
+      12,
+      13
+    ],
+    "front": "SOUTH",
+    "anchors": {},
+    "zones": [
+      {
+        "id": "pantry",
+        "use": "STORAGE",
+        "min": [
+          4,
+          2,
+          4
+        ],
+        "max": [
+          5,
+          4,
+          7
+        ],
+        "priority": 100,
+        "categories": [
+          "pale_mirror:food"
+        ]
+      },
+      {
+        "id": "dining",
+        "use": "DINING",
+        "min": [
+          7,
+          2,
+          9
+        ],
+        "max": [
+          9,
+          4,
+          12
+        ]
+      }
+    ],
+    "groundY": 1,
+    "excavations": [],
+    "replacements": [
+      {
+        "position": [
+          13,
+          1,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "signal_fire": "false",
+            "lit": "true",
+            "facing": "east"
+          },
+          "Name": "minecraft:campfire"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          14,
+          1,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "signal_fire": "false",
+            "lit": "true",
+            "facing": "east"
+          },
+          "Name": "minecraft:campfire"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          5,
+          2,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "signal_fire": "true",
+            "lit": "true",
+            "facing": "west"
+          },
+          "Name": "minecraft:campfire"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          21,
+          6,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "signal_fire": "true",
+            "lit": "true",
+            "facing": "north"
+          },
+          "Name": "minecraft:campfire"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          12,
+          1,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "inner_left",
+            "facing": "north"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          12,
+          1,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "west"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          12,
+          1,
+          10
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "inner_left",
+            "facing": "west"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          13,
+          1,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          13,
+          1,
+          10
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          14,
+          1,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          14,
+          1,
+          10
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          15,
+          1,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "inner_right",
+            "facing": "north"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          15,
+          1,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          15,
+          1,
+          10
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "inner_left",
+            "facing": "south"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          19,
+          2,
+          12
+        ],
+        "before": {
+          "Properties": {
+            "east": "true",
+            "waterlogged": "false",
+            "south": "false",
+            "north": "false",
+            "west": "false"
+          },
+          "Name": "minecraft:spruce_fence"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "single"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          3,
+          12
+        ],
+        "before": {
+          "Properties": {
+            "powered": "false"
+          },
+          "Name": "minecraft:spruce_pressure_plate"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          19,
+          2,
+          11
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          2,
+          13
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "north"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          2,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "east": "true",
+            "waterlogged": "false",
+            "south": "false",
+            "north": "false",
+            "west": "false"
+          },
+          "Name": "minecraft:spruce_fence"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "single"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          3,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "powered": "false"
+          },
+          "Name": "minecraft:spruce_pressure_plate"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          19,
+          2,
+          15
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          2,
+          17
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "north"
+          }
+        }
+      },
+      {
+        "position": [
+          15,
+          2,
+          17
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "type": "top"
+          },
+          "Name": "minecraft:spruce_slab"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "east_side"
+          }
+        }
+      },
+      {
+        "position": [
+          16,
+          2,
+          17
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "type": "top"
+          },
+          "Name": "minecraft:spruce_slab"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "north_south_center"
+          }
+        }
+      },
+      {
+        "position": [
+          17,
+          2,
+          17
+        ],
+        "before": {
+          "Properties": {
+            "half": "top",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "west_side"
+          }
+        }
+      },
+      {
+        "position": [
+          15,
+          2,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      },
+      {
+        "position": [
+          17,
+          2,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      },
+      {
+        "position": [
+          15,
+          3,
+          17
+        ],
+        "before": {
+          "Name": "minecraft:flower_pot"
+        },
+        "after": null
+      }
+    ],
+    "adaptations": [
+      "level5 source selected for Northwatch maximum-level content",
+      "indoor campfires removed and recessed hearth restored to a continuous stone-brick floor at user request",
+      "six Handcrafted chairs and five table sections replace existing mock window/counter furniture; source walls and storage retained",
+      "foreign MineColonies colony-stash controller omitted; actual barrels retain common inventory providers"
+    ],
+    "omittedControllers": [
+      "minecolonies:blockstash"
+    ]
+  },
+  {
+    "name": "textile_factory_5",
+    "kind": "TEXTILE_WORKSHOP",
+    "source": "craftsmanship/luxury/dyer5.blueprint",
+    "sha256": "65c5db2e119bfbd1443e50296683cca02032e843959064f52d5d725e6380d721",
+    "floor": 2,
+    "door": [
+      2,
+      15
+    ],
+    "front": "SOUTH",
+    "works": [
+      {
+        "id": "spinning",
+        "socket": [
+          3,
+          2,
+          11
+        ],
+        "front": "SOUTH",
+        "input": [
+          2,
+          2,
+          12
+        ],
+        "type": "pale_mirror:spinning_bench"
+      },
+      {
+        "id": "weaving",
+        "socket": [
+          4,
+          2,
+          11
+        ],
+        "front": "SOUTH",
+        "input": [
+          3,
+          2,
+          12
+        ],
+        "type": "pale_mirror:weaving_loom"
+      }
+    ],
+    "groundY": 1,
+    "excavations": [],
+    "entranceSupports": [
+      [
+        2,
+        1,
+        18
+      ],
+      [
+        2,
+        1,
+        17
+      ],
+      [
+        2,
+        2,
+        16
+      ],
+      [
+        2,
+        2,
+        15
+      ],
+      [
+        2,
+        2,
+        14
+      ]
+    ],
+    "entranceThreshold": 3
+  },
+  {
+    "name": "bakery_5",
+    "kind": "WORKSHOP",
+    "source": "craftsmanship/luxury/baker5.blueprint",
+    "sha256": "03d2cf65e2b9c1f37096d509f75fd075c95a167b701e4f9f263949365095ea6c",
+    "floor": 6,
+    "groundY": 6,
+    "door": [
+      10,
+      10
+    ],
+    "front": "SOUTH",
+    "excavations": [],
+    "entranceSupports": [
+      [
+        10,
+        6,
+        14
+      ],
+      [
+        10,
+        6,
+        13
+      ],
+      [
+        10,
+        6,
+        12
+      ],
+      [
+        10,
+        6,
+        11
+      ],
+      [
+        10,
+        6,
+        10
+      ],
+      [
+        10,
+        6,
+        9
+      ]
+    ],
+    "entranceThreshold": 4,
+    "work": {
+      "socket": [
+        5,
+        6,
+        5
+      ],
+      "front": "SOUTH",
+      "input": [
+        4,
+        6,
+        5
+      ],
+      "type": "pale_mirror:production_bench",
+      "equipmentHeight": 1
+    },
+    "adaptations": [
+      "level5 architecture retained including original oven; common production bench occupies a declared clear ground-floor bay beside it"
+    ]
+  }
+]
