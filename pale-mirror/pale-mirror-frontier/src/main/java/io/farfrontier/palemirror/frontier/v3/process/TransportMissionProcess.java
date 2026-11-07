@@ -174,6 +174,18 @@ public final class TransportMissionProcess {
             var transfer = mission.replenishment().orElseThrow();
             if (!io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.current(state, transfer))
                 return List.of(new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), progress(mission.id(), now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
+            if (transfer.pending().isEmpty() && io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority
+                    .accessReadiness(state,mission,transfer,now)==io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.Readiness.UNAVAILABLE) {
+                events.add(new ProposedEvent(mission.id(),new ExpeditionReplenishmentCancelled(mission.id(),transfer.claimId())));
+                var obsolete=state.actorMovements().get(transfer.actorId());
+                if (obsolete!=null && obsolete.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ExpeditionReplenishment context
+                        && context.missionId().equals(mission.id()) && obsolete.executionId().equals(transfer.execution()))
+                    events.add(new ProposedEvent(transfer.actorId(),new ScheduleEffect.Cancelled(ActorMovementProcess.progress(obsolete,now+1).id())));
+                events.add(UnitGroupProcess.wake(group.id(),now));
+                events.add(ResidentActivityProcess.wakeAfterActivity(transfer.actorId(),now));
+                events.add(wake(mission.id(),now));
+                return List.copyOf(events);
+            }
             if (transfer.pending().isEmpty() && !state.actorMovements().containsKey(transfer.actorId())
                     && !state.actorLocations().get(transfer.actorId()).supportingSurface().equals(transfer.station())) {
                 var movement = new ActorMovement(transfer.order(mission.id(), mission.revision()).movementOrder(), now,

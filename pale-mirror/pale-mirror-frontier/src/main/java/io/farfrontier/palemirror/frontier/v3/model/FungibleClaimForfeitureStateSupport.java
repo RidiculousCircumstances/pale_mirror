@@ -30,6 +30,12 @@ public final class FungibleClaimForfeitureStateSupport {
         return observed;
     }
 
+    public static FrontierWorldState apply(FrontierWorldState state, FungibleResourceHandoffObserved observed, long atTick) {
+        var claims = plan(state, observed);
+        for (var claim : claims) state = owner(claim.purpose()).checkpoint(state, claim, atTick);
+        return apply(state, observed);
+    }
+    /** Stock-only disposition; an owner requiring a movement checkpoint rejects a missing clock. */
     public static FrontierWorldState apply(FrontierWorldState state, FungibleResourceHandoffObserved observed) {
         List<ClaimAllocation> claims = plan(state, observed);
         FungibleResourceLedger cleared = state.inventory().fungibleResources().releaseClaims(observed.forfeitedClaimIds());

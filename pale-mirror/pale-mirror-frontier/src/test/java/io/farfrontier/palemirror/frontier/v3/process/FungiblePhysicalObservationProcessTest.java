@@ -100,7 +100,7 @@ class FungiblePhysicalObservationProcessTest {
         var plan = assertInstanceOf(CommandPlan.Accepted.class,
                 FrontierWorldPhysicalObservationProcess.planFungibleStockDeparture(state, observed, 48_000L));
         assertEquals(4, plan.events().size());
-        FrontierWorldState reduced = FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, owner, observed);
+        FrontierWorldState reduced = FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, owner, observed, 48_000L);
         assertFalse(reduced.humanPopulation().meals().containsKey(resident));
         assertFalse(reduced.inventory().fungibleResources().claims().containsKey(meal.claimId()));
         assertEquals(0, reduced.inventory().fungibleResources().totalQuantity(owner, "minecraft:bread"));
@@ -189,7 +189,7 @@ class FungiblePhysicalObservationProcessTest {
         assertEquals(2, departurePlan.events().size());
         assertEquals(StrategicObjectiveProcess.playerStockReconsideration(owner, observed.interactionId(), 1L),
                 ((io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested) departurePlan.events().get(1).payload()).action());
-        FrontierWorldState reduced = FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, owner, observed);
+        FrontierWorldState reduced = FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, owner, observed, 0L);
         assertEquals(32, reduced.inventory().fungibleResources().totalQuantity(owner, "minecraft:wheat"));
         assertFalse(reduced.inventory().fungibleResources().accounts().values().stream()
                 .anyMatch(value -> value.custody() instanceof ResourceCustody.Player));
@@ -375,7 +375,7 @@ class FungiblePhysicalObservationProcessTest {
         assertEquals(theft, FrontierWorldRuntimeDefinition.payloadCodecs().decode(theft.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(theft)));
         assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(active, theft, 1L));
-        FrontierWorldState afterTheft = FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(active, hive, theft);
+        FrontierWorldState afterTheft = FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(active, hive, theft, 1L);
 
         assertFalse(afterTheft.hiveColony().growthJobs().containsKey(started.job().id()));
         assertEquals(StrategicTaskStatus.BLOCKED, afterTheft.strategicPlans().tasks().get(task.id()).status());

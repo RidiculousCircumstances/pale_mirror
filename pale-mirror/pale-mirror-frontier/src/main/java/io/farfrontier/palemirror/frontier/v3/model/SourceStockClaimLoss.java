@@ -53,6 +53,15 @@ public final class SourceStockClaimLoss {
         return Set.copyOf(result);
     }
 
+    public static FrontierWorldState settle(FrontierWorldState state, FungibleStockDepartureObserved loss, long atTick) {
+        for (var id : loss.forfeitedClaimIds().stream().sorted().toList()) {
+            var claim = state.inventory().fungibleResources().claims().get(id);
+            if (claim == null) throw new IllegalArgumentException("source loss checkpoint lacks its current claim");
+            var owner = require(claim); owner.validate(state, loss.sourceAccountId(), claim);
+            state = owner.checkpoint(state, claim, atTick);
+        }
+        return settle(state, loss);
+    }
     public static FrontierWorldState settle(FrontierWorldState state, FungibleStockDepartureObserved loss) {
         return settle(state, loss.sourceAccountId(), loss.authorityEpoch(), loss.departedLots(), loss.forfeitedClaimIds(), loss.remaining());
     }

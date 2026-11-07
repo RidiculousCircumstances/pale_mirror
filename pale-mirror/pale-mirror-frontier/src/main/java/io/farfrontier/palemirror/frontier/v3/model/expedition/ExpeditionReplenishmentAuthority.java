@@ -24,24 +24,24 @@ public final class ExpeditionReplenishmentAuthority {
         return travelDecision(state, mission, now) == TravelDecision.REST_FOR_LOCAL_SUPPLIES;
     }
     public static boolean requiresPersonalStock(FrontierWorldState state, TransportMission mission, long now) {
-        var life = state.bootstrap().ruleset().residentLife(); var resources = state.inventory().fungibleResources();
         var returnDemand = supplierVisit(state, mission) ? ExpeditionReturnProvisioning.missing(state, mission, now) : Map.<SubjectId, Integer>of();
-        return state.unitGroups().groups().get(mission.groupId()).members().stream().anyMatch(member -> {
-            var resident = state.humanPopulation().resident(member.actorId());
-            return resident != null && state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE
-                    && !state.humanPopulation().meals().containsKey(member.actorId())
-                    && UnitInventoryPresentation.freeSlot(state, member.actorId()).isPresent()
-                    && (returnDemand.getOrDefault(member.actorId(), 0) > 0
-                        || state.humanPopulation().nutrition(member.actorId()).accrueThrough(
-                            Math.max(now,state.humanPopulation().nutrition(member.actorId()).lastEvaluatedTick()),life,
-                            resident.characteristics().effectiveMetabolismPermille(now)).wantsFood(life)
-                            && life.foods().foods().keySet().stream().noneMatch(kind -> UnitInventory.available(resources,
-                                member.actorId(), mission.organization().sponsor().id(), kind) > 0));
-        });
+        return state.unitGroups().groups().get(mission.groupId()).members().stream()
+                .anyMatch(member -> needsStock(state,mission,member.actorId(),now,returnDemand));
+    }
+    private static boolean needsStock(FrontierWorldState state,TransportMission mission,SubjectId actor,long now,Map<SubjectId,Integer> returnDemand) {
+        var life=state.bootstrap().ruleset().residentLife();var resident=state.humanPopulation().resident(actor);
+        return resident!=null && state.actorLocations().get(actor).condition().status()==ActorLifeStatus.ALIVE
+                && !state.humanPopulation().meals().containsKey(actor) && UnitInventoryPresentation.freeSlot(state,actor).isPresent()
+                && (returnDemand.getOrDefault(actor,0)>0 || state.humanPopulation().nutrition(actor).accrueThrough(
+                    Math.max(now,state.humanPopulation().nutrition(actor).lastEvaluatedTick()),life,
+                    resident.characteristics().effectiveMetabolismPermille(now)).wantsFood(life)
+                    && life.foods().foods().keySet().stream().noneMatch(kind -> UnitInventory.available(
+                        state.inventory().fungibleResources(),actor,mission.organization().sponsor().id(),kind)>0));
     }
     private static boolean hasLocalStock(FrontierWorldState state, TransportMission mission, long now) {
         var group = state.unitGroups().groups().get(mission.groupId());
         var resources = state.inventory().fungibleResources();
+        var returnDemand=supplierVisit(state,mission)?ExpeditionReturnProvisioning.missing(state,mission,now):Map.<SubjectId,Integer>of();
         for (var source : sources(state, mission, group)) {
             if (ReferenceContainerCustody.blocksCanonicalUse(state, source.container())) continue;
             var account = FungibleResourceCustodySupport.accountAtContainer(state, source.container()).orElse(null);
@@ -49,7 +49,17 @@ public final class ExpeditionReplenishmentAuthority {
             for (var kind : state.bootstrap().ruleset().residentLife().foods().foods().keySet()) {
                 int quantity = source.mobile() ? resources.unclaimedQuantity(account.id(), source.owner(), kind)
                         : purchasable(state, mission, source, kind, now);
-                if (quantity > 0) return true;
+                if (quantity <= 0) continue;
+                for (var member : group.members()) {
+                    var actor = member.actorId();
+                    if (!needsStock(state,mission,actor,now,returnDemand)) continue;
+                    var readiness = source.mobile()
+                            ? io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.inspectAvailability(
+                                () -> station(state,mission,actor,source,Optional.empty()).isPresent())
+                            : ActorStorageApproach.readiness(state,GoodsParticipantStorage.endpoint(state,source.container()),actor,
+                                state.actorLocations().get(actor).supportingSurface(),TransportGroupMissionPort.knowledgeForEndpoints(state,mission.sender(),mission.receiver()));
+                    if (readiness != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.Readiness.UNAVAILABLE) return true;
+                }
             }
         }
         return false;
@@ -185,6 +195,35 @@ public final class ExpeditionReplenishmentAuthority {
         var current = state.actorExecutions().actors().get(transfer.actorId());
         return current != null && current.current().equals(Optional.of(transfer.execution())) ? state.withChanges(changes)
                 : ActorExecutionComposition.LIFECYCLE.prepareVacant(state, transfer.execution()).commit(state, changes);
+    }
+    /** Inspect only the retained exact instruction; the active movement owner alone acquires route work. */
+    public static io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.Readiness accessReadiness(
+            FrontierWorldState state,TransportMission mission,UnitResourceTransfer transfer,long now) {
+        var knowledge=TransportGroupMissionPort.knowledgeForEndpoints(state,mission.sender(),mission.receiver()).forActor(state,transfer.actorId());
+        if (!knowledge.geometry().clearanceKnown(transfer.station()))
+            return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.Readiness.UNRESOLVED;
+        if (!knowledge.clearStation(transfer.station()))
+            return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.Readiness.UNAVAILABLE;
+        var movement=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(
+                transfer.order(mission.id(),mission.revision()).movementOrder(),now,
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ExpeditionReplenishment(mission.id()),transfer.execution());
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.inspectAvailability(
+                () -> !io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement)
+                    .route(state,movement,state.actorLocations().get(transfer.actorId()).supportingSurface()).isEmpty());
+    }
+    /** Cancellation is an owner decision, not a receipt or a durable no-path claim.
+     * Reversal is legal only before a physical effect; the shared navigator checkpoints actual motion. */
+    public static FrontierWorldState cancel(FrontierWorldState state,SubjectId missionId,SubjectId claimId,long now) {
+        var mission=require(state,missionId);var transfer=retained(mission,claimId);
+        if (transfer.pending().isPresent()) throw new IllegalArgumentException("cannot cancel a prepared replenishment effect");
+        state.actorExecutions().requireRetained(transfer.execution());
+        var inventory=state.inventory().withFungibleResources(state.inventory().fungibleResources().releaseClaims(Set.of(claimId)));
+        if (mission.replenishmentPurchase().isPresent()) inventory=ExpeditionFundingAuthority.cancelPurchase(inventory,mission.replenishmentPurchase().orElseThrow());
+        var update=FrontierWorldStateUpdate.begin().inventory(inventory).shipments(state.shipments().replaceReplenishment(mission,Optional.empty()));
+        var movement=state.actorMovements().get(transfer.actorId());
+        boolean owned=movement!=null && movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ExpeditionReplenishment context
+                && context.missionId().equals(missionId) && movement.executionId().equals(transfer.execution());
+        return owned?io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.retireOwned(state,movement,now,update):state.withChanges(update);
     }
     public static FrontierWorldState cold(FrontierWorldState state, SubjectId missionId, SubjectId claimId, long now) {
         var mission = require(state, missionId); var transfer = retained(mission, claimId);

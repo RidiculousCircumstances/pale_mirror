@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 import java.util.*;
@@ -467,10 +469,27 @@ class ExpeditionSupplyFlowTest {
         var observation = FungiblePhysicalHandoff.departToNew(bound, allocation.sourceAccountId(), 7, binding, binding.quantity() - 1,
                 new SubjectId("custody:expedition-player-removal"), new ResourceCustody.Player(player), 1,
                 new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitAffectedClaims(bound);
+        long issued=engine.executionView().instant().ticks();
+        var route=mission.supplies().orElseThrow().journey().outward().surfaces();
+        state=state.withActorBody(allocation.actorId(),route.get(Math.min(16,route.size()-1)).standingBody());
+        var movement=new ActorMovement(mission.supplies().orElseThrow().order(mission.id(),allocation).movementOrder(),issued,
+                new ActorMovementContext.ExpeditionSupply(mission.id(),allocation.claimId()),
+                io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.execution(state,mission,allocation).orElseThrow());
+        state=ActorMovementProcess.reduceStarted(state,allocation.actorId(),new ActorMovementStarted(movement));
+        var moving=ActorMovementProcess.plan(state,ActorMovementProcess.progress(movement,issued+1),issued+1).stream().map(ProposedEvent::payload)
+                .filter(ActorMovementColdAdvanced.class::isInstance).map(ActorMovementColdAdvanced.class::cast).findFirst().orElseThrow();
+        state=ActorMovementProcess.reduceColdAdvanced(state,allocation.actorId(),moving);
+        var travel=state.actorMovements().get(allocation.actorId()).coldTravel().orElseThrow();
+        assertTrue(travel.route().size()>2);
+        long atTick=travel.departedAtTick()+travel.ticksPerEdge();
+        var actual=ActorMovementProcess.bodyAt(state,allocation.actorId(),atTick);
+        assertNotEquals(state.actorLocations().get(allocation.actorId()).body(),actual);
         var balances = state.inventory().economics().accounts(); int beforeBread = bread(state);
         assertTrue(FungibleClaimForfeitureStateSupport.supports(state, observation));
-        var after = FungibleClaimForfeitureStateSupport.apply(state, observation);
+        var after = FungibleClaimForfeitureStateSupport.apply(state, observation, atTick);
         FrontierReferenceClosure.validateTransition(state, after, List.of());
+        assertFalse(after.actorMovements().containsKey(allocation.actorId()));
+        assertEquals(actual,after.actorLocations().get(allocation.actorId()).body());
         assertEquals(beforeBread, bread(after));
         assertEquals(balances, after.inventory().economics().accounts());
         var load = after.shipments().missions().get(mission.id()).supplies().orElseThrow();
@@ -484,7 +503,7 @@ class ExpeditionSupplyFlowTest {
                 UUID.randomUUID(), List.of(), SourceStockClaimLoss.admissibleClaims(state, source)));
         assertTrue(SourceStockClaimLoss.canDepart(state, source, binding.itemKind(),
                 quantities.get(binding.itemKind())));
-        var removed = SourceStockClaimLoss.settle(state, exit);
+        var removed = SourceStockClaimLoss.settle(state, exit, atTick);
         FrontierReferenceClosure.validateTransition(state, removed, List.of());
         assertEquals(balances, removed.inventory().economics().accounts());
         assertFalse(removed.inventory().fungibleResources().accounts().containsKey(source));

@@ -120,11 +120,11 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
         return Collections.unmodifiableMap(result);
     }
     /** Preview only: all resource authority remains with the canonical ledger/reducer. */
-    FrontierWorldState projected(FrontierWorldState state) {
+    FrontierWorldState projected(FrontierWorldState state, long atTick) {
         for (var receipt : pending().values()) {
             var account = state.inventory().fungibleResources().accounts().get(receipt.destinationAccount().id());
             if (receipt.withoutForfeitedClaims().destinationAccount().equals(account)) continue;
-            state = FungibleResourceHandoffStateSupport.apply(state, receipt);
+            state = FungibleResourceHandoffStateSupport.apply(state, receipt, atTick);
         }
         return state;
     }

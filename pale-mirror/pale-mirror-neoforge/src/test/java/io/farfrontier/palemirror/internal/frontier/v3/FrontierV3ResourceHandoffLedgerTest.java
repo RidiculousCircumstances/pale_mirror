@@ -117,7 +117,7 @@ class FrontierV3ResourceHandoffLedgerTest {
         var journal = empty(); var ids = List.of(new UUID(0, 30), new UUID(0, 20), new UUID(0, 10));
         var sizes = List.of(17, 23, 24);
         for (int index = 0; index < ids.size(); index++) {
-            var projected = journal.projected(state).inventory().fungibleResources();
+            var projected = journal.projected(state, 0).inventory().fungibleResources();
             var binding = projected.bindings().values().stream().filter(b -> b.accountId().equals(accountId)).findFirst().orElseThrow();
             var id = ids.get(index);
             var receipt = FungiblePhysicalHandoff.departToNew(projected, accountId, 7, binding, binding.quantity() - sizes.get(index),
@@ -136,7 +136,7 @@ class FrontierV3ResourceHandoffLedgerTest {
             assertEquals(i < ids.size() - 1, indexed.blocksAccount(accountId),
                     "retiring one fragment cannot release the source still used by remaining fragments");
         }
-        var finalResources = journal.projected(state).inventory().fungibleResources();
+        var finalResources = journal.projected(state, 0).inventory().fungibleResources();
         assertFalse(finalResources.accounts().containsKey(accountId));
         assertEquals(64, finalResources.accounts().values().stream().filter(a -> a.custody() instanceof ResourceCustody.Ground)
                 .flatMap(a -> a.lotQuantities().values().stream()).mapToInt(Integer::intValue).sum());
@@ -149,7 +149,7 @@ class FrontierV3ResourceHandoffLedgerTest {
         var recovered = FrontierV3JournaledSavedData.readFile(path, world.value(), dimension.toString(),
                 FrontierV3ResourceHandoffLedgerTest::empty, FrontierV3ResourceHandoffLedger::load, null);
         assertEquals(ids, new ArrayList<>(recovered.pending().keySet()));
-        assertEquals(journal.projected(state), recovered.projected(state));
+        assertEquals(journal.projected(state, 0), recovered.projected(state, 0));
         var first = recovered.pending().get(ids.getFirst());
         var nativeJournal = empty();
         var nativePort = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITY_COLUMN, "0", 2);
@@ -171,11 +171,11 @@ class FrontierV3ResourceHandoffLedgerTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(malformedLink, null));
         nativeClosed.retire(ids.getFirst(), first); assertTrue(nativeClosed.handoffOperation(ids.getFirst()).isEmpty());
         var afterFirst = FungibleResourceHandoffStateSupport.apply(state, first);
-        assertEquals(journal.projected(state), recovered.projected(afterFirst), "canonical-first recovery must not replay the first physical effect");
+        assertEquals(journal.projected(state, 0), recovered.projected(afterFirst, 0), "canonical-first recovery must not replay the first physical effect");
         assertThrows(IllegalArgumentException.class, () -> recovered.prepare(ids.getFirst(), first));
         var invalid = journal.save(new CompoundTag(), null); invalid.getList("pending", 10).getCompound(1).putLong("sequence", 1);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(invalid, null));
-        var groundState = journal.projected(state);
+        var groundState = journal.projected(state, 0);
         var groundAccount = groundState.inventory().fungibleResources().accounts().values().stream()
                 .filter(value -> value.custody() instanceof ResourceCustody.Ground ground && ground.entityId().equals(ids.getFirst())).findFirst().orElseThrow();
         var pickup = GroundResourcePlayerWithdrawal.prepare(groundState, groundAccount.id(), UUID.randomUUID(), UUID.randomUUID(), 3);

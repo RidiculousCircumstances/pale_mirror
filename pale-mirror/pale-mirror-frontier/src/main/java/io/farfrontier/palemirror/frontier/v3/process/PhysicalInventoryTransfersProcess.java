@@ -21,7 +21,7 @@ final class PhysicalInventoryTransfersProcess {
             var plan = FrontierWorldPhysicalObservationProcess.planFungibleHandoff(next, transfer, command.submittedAt().ticks());
             if (!(plan instanceof CommandPlan.Accepted accepted)) throw new IllegalArgumentException("invalid physical handoff in batch: " + plan);
             consequences.addAll(accepted.events());
-            next = FungibleResourceHandoffStateSupport.apply(next, transfer);
+            next = FungibleResourceHandoffStateSupport.apply(next, transfer, command.submittedAt().ticks());
         }
         for (var transfer : batch.exactItems()) {
             var item = next.inventory().items().get(transfer.itemId());

@@ -10,6 +10,9 @@ record FungibleAllocationSourceStockLoss(ClaimPurpose purpose, FungibleClaimForf
     FungibleAllocationSourceStockLoss {
         Objects.requireNonNull(purpose); Objects.requireNonNull(owner);
     }
+    @Override public FrontierWorldState checkpoint(FrontierWorldState before, ClaimAllocation claim, long atTick) {
+        return owner.checkpoint(before, claim, atTick);
+    }
     @Override public void validate(FrontierWorldState state, SubjectId source, ClaimAllocation claim) {
         var account = state.inventory().fungibleResources().accounts().get(source);
         if (claim.purpose() != purpose || account == null || !account.claimQuantities().containsKey(claim.id()))

@@ -4,6 +4,30 @@ import java.util.List;
 
 /** Lost source food withdraws a promise, never fabricates a loaded or consumed ration. */
 final class ExpeditionSupplyForfeitureOwner implements FungibleClaimForfeitureOwner {
+    private static java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement> motion(
+            FrontierWorldState state, ClaimAllocation claim) {
+        var mission = state.shipments().missions().get(claim.claimantId());
+        if (mission == null) return java.util.Optional.empty();
+        var refill = mission.replenishment().filter(t -> t.claimId().equals(claim.id()));
+        var actor = refill.map(UnitResourceTransfer::actorId).orElseGet(() -> mission.supplies().orElseThrow().allocations().stream()
+                .filter(a -> a.claimId().equals(claim.id())).findFirst().orElseThrow().actorId());
+        return java.util.Optional.ofNullable(state.actorMovements().get(actor)).filter(m -> switch (m.context()) {
+            case io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ExpeditionReplenishment context ->
+                    refill.isPresent() && context.missionId().equals(mission.id());
+            case io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ExpeditionSupply context ->
+                    refill.isEmpty() && context.missionId().equals(mission.id()) && context.claimId().equals(claim.id());
+            default -> false;
+        });
+    }
+    @Override public FrontierWorldState checkpoint(FrontierWorldState before, ClaimAllocation claim, long atTick) {
+        return motion(before, claim).map(m -> io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.retireOwned(
+                before, m, atTick, FrontierWorldStateUpdate.begin())).orElse(before);
+    }
+    @Override public List<SourceStockClaimLossOwner.ReleasedActivity> released(FrontierWorldState before, ClaimAllocation claim) {
+        return motion(before, claim).map(m -> List.of(new SourceStockClaimLossOwner.ReleasedActivity(m.order().actorId(),
+                java.util.Optional.of(io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.progress(
+                    m, Math.addExact(m.issuedAtTick(), 1)).id()), java.util.OptionalLong.empty()))).orElse(List.of());
+    }
     @Override public void validate(FrontierWorldState before, ClaimAllocation claim,
                                    io.farfrontier.palemirror.frontier.v3.api.SubjectId sourceAccount) {
         var mission = before.shipments().missions().get(claim.claimantId());
@@ -27,6 +51,7 @@ final class ExpeditionSupplyForfeitureOwner implements FungibleClaimForfeitureOw
                                                         FungibleForfeitureSettlement transaction) {
         var shipments = transaction.shipments(); var inventory = transaction.inventory();
         for (var claim : claims) {
+            if (motion(before, claim).isPresent()) throw new IllegalArgumentException("supply source loss requires its exact movement checkpoint and clock");
             if (transaction.inventory().fungibleResources().claims().containsKey(claim.id()))
                 throw new IllegalArgumentException("supply withdrawal precedes its accounted physical release");
             var mission = shipments.missions().get(claim.claimantId());

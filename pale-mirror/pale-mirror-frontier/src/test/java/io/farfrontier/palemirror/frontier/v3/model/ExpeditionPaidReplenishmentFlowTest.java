@@ -15,16 +15,28 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Post-arrival unit fixture. Only the subsequent purchase, clearance and meal are registered outcomes;
  * the initial placement is not native evidence or a claim that the outward trip was exercised here. */
 class ExpeditionPaidReplenishmentFlowTest {
-    @Test void retainedPaidPurchaseSurvivesRecoveryAndClearsTheSupplierBeforePortableEating() {
-        purchaseFlow(false,false);
+    @Test void retainedPaidPurchaseSurvivesRecoveryAndClearsTheSupplierBeforePortableEating() throws Exception {
+        purchaseFlow(Scenario.REGULAR);
     }
-    @Test void pausedPaidPurchaseReleasesServiceAndResumesExactPromiseAfterRecovery() {
-        purchaseFlow(true,false);
+    @Test void pausedPaidPurchaseReleasesServiceAndResumesExactPromiseAfterRecovery() throws Exception {
+        purchaseFlow(Scenario.INTERRUPTED);
     }
-    @Test void reservedSupplyEnvelopePreservesUnusedFundsAcrossPurchaseCancellationAndActualReceipt() {
-        purchaseFlow(false,true);
+    @Test void reservedSupplyEnvelopePreservesUnusedFundsAcrossPurchaseCancellationAndActualReceipt() throws Exception {
+        purchaseFlow(Scenario.FUNDED);
     }
-    private void purchaseFlow(boolean interrupt,boolean preFunded) {
+    @Test void playerTakingFoodDuringPaidApproachCancelsTheExactMotionAndRefundsWithoutRewinding() throws Exception {
+        purchaseFlow(Scenario.WITHDRAWN);
+    }
+    @Test void unusableFoodAccessDoesNotHoldTheCaravanButUnknownAccessRemainsUnresolvedWithoutNewSearches() throws Exception {
+        purchaseFlow(Scenario.BLOCKED_ACCESS);
+    }
+    @Test void accessBlockedAfterPaidReservationCancelsOnlyTheUnappliedPurchaseAndReselectsUsableAccess() throws Exception {
+        purchaseFlow(Scenario.RETAINED_BLOCKED);
+    }
+    private enum Scenario { REGULAR, INTERRUPTED, FUNDED, WITHDRAWN, BLOCKED_ACCESS, RETAINED_BLOCKED }
+    private void purchaseFlow(Scenario scenario) throws Exception {
+        boolean interrupt=scenario==Scenario.INTERRUPTED;
+        boolean preFunded=scenario==Scenario.FUNDED || scenario==Scenario.WITHDRAWN || scenario==Scenario.RETAINED_BLOCKED;
         var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:paid-visited-supplies"), 41,
                 FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"));
         var engine = FrontierEngines.createCanonicalStateAccess(base);
@@ -92,6 +104,7 @@ class ExpeditionPaidReplenishmentFlowTest {
                     .inventory(precondition.inventory().withEconomics(precondition.inventory().economics().reserveBudget(envelope))));
             retainedMission=funded;
         } else assertTrue(retainedMission.financialBudgetId().isEmpty(), "provisioned departure must not hold unrelated cash");
+        if (scenario==Scenario.BLOCKED_ACCESS) { inaccessibleFood(precondition,retainedMission,tick); return; }
         var transfer = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.select(precondition, retainedMission, tick).orElseThrow();
         assertEquals(mission.receiver().containerId(), transfer.containerId());
         assertFalse(transfer.sourceEconomicOwnerId().equals(mission.sender().settlementId()));
@@ -112,6 +125,9 @@ class ExpeditionPaidReplenishmentFlowTest {
             assertEquals(precondition.inventory().economics().availableToReserve(purchase.payment().payerId()).minus(purchase.payment().amount()),held.inventory().economics().availableToReserve(purchase.payment().payerId()));
         }
         assertEquals(held, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(held)));
+        if (scenario==Scenario.WITHDRAWN || scenario==Scenario.RETAINED_BLOCKED) {
+            withdrawDuringApproach(held,heldMission,transfer,tick,scenario==Scenario.RETAINED_BLOCKED); return;
+        }
         if (interrupt) {
             held = pauseAndResume(held, mission.id(), transfer, tick);
             transfer = held.shipments().missions().get(mission.id()).replenishment().orElseThrow();
@@ -147,6 +163,121 @@ class ExpeditionPaidReplenishmentFlowTest {
         assertTrue(received); assertTrue(cleared, "the paid pickup must free the supplier without replacing GROUP/COURIER responsibility");
         assertTrue(ate, "foreign food must become ordinary portable nutrition");
     }
+    private static void inaccessibleFood(FrontierWorldState state,TransportMission mission,long now) throws Exception {
+        var actor=state.unitGroups().groups().get(mission.groupId()).members().getFirst().actorId();
+        var origin=mission.supplies().orElseThrow().journey().returning().surfaces().get(16);
+        state=state.withActorBody(actor,origin.standingBody());
+        var supplier=state.companies().goodsTrade().participants().participants().get(mission.receiver().settlementId());
+        var knowledge=TransportGroupMissionPort.knowledgeForEndpoints(state,mission.sender(),mission.receiver());
+        var stations=new HashSet<SurfaceAnchor>();
+        for(var id:GoodsParticipantStorage.containers(state,supplier,FoodCatalog.BREAD)) {
+            var endpoint=GoodsParticipantStorage.endpoint(state,id);stations.add(endpoint.station());
+            stations.addAll(ShipmentEndpointComposition.approachStations(state,endpoint,knowledge.forActor(state,actor)));
+        }
+        assertFalse(stations.contains(origin));
+        var known=new LinkedHashMap<BlockPosition,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation>();
+        var unknown=new LinkedHashMap<BlockPosition,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation>();
+        for(var station:stations)for(int height=1;height<=5;height++) {
+            var pos=station.support().offset(0,height,0);
+            known.put(pos,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                    io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
+            unknown.put(pos,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.unavailable(
+                    io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.Kind.NOT_OBSERVED));
+        }
+        var blocked=new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(state.navigationGeometry().revision(),known)
+                .apply(state,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
+        var unresolved=new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(state.navigationGeometry().revision(),unknown)
+                .apply(state,io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
+        var api=io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.TravelDecision.CONTINUE_ITINERARY;
+        try(var ignored=PedestrianRoutePlanning.bind((geometry,from,to)->{throw new AssertionError("movement permission started a route search");})) {
+            assertEquals(api,io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.travelDecision(blocked,mission,now),
+                    "stock with no usable access must not hold a caravan forever");
+            assertEquals(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.TravelDecision.REST_FOR_LOCAL_SUPPLIES,
+                    io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.travelDecision(unresolved,mission,now),
+                    "unobserved geometry remains a real wait, not a false no-path result");
+        }
+        assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.select(blocked,mission,now).isEmpty());
+    }
+
+    /** Isolated ordinary movement and physical source-loss witness, not a native player action. */
+    private static void withdrawDuringApproach(FrontierWorldState state,TransportMission mission,UnitResourceTransfer transfer,long now,boolean blocked) {
+        var actor=transfer.actorId();var accepted=mission.supplies().orElseThrow().journey().returning().surfaces();
+        var origin=accepted.get(Math.min(16,accepted.size()-1));
+        state=state.withActorBody(actor,origin.standingBody());
+        var movement=new ActorMovement(transfer.order(mission.id(),mission.revision()).movementOrder(),now,
+                new ActorMovementContext.ExpeditionReplenishment(mission.id()),transfer.execution());
+        state=ActorMovementProcess.reduceStarted(state,actor,new ActorMovementStarted(movement));
+        var step=ActorMovementProcess.plan(state,ActorMovementProcess.progress(movement,now+1),now+1).stream()
+                .map(ProposedEvent::payload).filter(ActorMovementColdAdvanced.class::isInstance).map(ActorMovementColdAdvanced.class::cast).findFirst().orElseThrow();
+        state=ActorMovementProcess.reduceColdAdvanced(state,actor,step);
+        var travel=state.actorMovements().get(actor).coldTravel().orElseThrow();
+        assertTrue(travel.route().size()>2,"the cancellation fixture needs a real interval between departure and arrival");
+        long atTick=travel.departedAtTick()+travel.ticksPerEdge();
+        var actual=ActorMovementProcess.bodyAt(state,actor,atTick);assertNotEquals(origin.standingBody(),actual);
+        var resources=state.inventory().fungibleResources();var quantities=new TreeMap<String,Integer>();
+        resources.accounts().get(transfer.sourceAccountId()).lotQuantities().forEach((lot,q)->quantities.merge(resources.lots().get(lot).itemKind(),q,Integer::sum));
+        var layout=new ArrayList<FungiblePhysicalObservation.Stack>();int slot=0;
+        for(var entry:quantities.entrySet())for(int q=entry.getValue();q>0;q-=Math.min(64,q))
+            layout.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(
+                    transfer.containerId(),state.inventory().availableSlots(transfer.containerId()).get(slot++))),entry.getKey(),Math.min(64,q)));
+        var bound=resources.rebind(transfer.sourceAccountId(),7,FungiblePhysicalObservation.bind(resources,transfer.sourceAccountId(),7,layout));
+        state=state.withInventory(state.inventory().withFungibleResources(bound));
+        var binding=bound.bindings().values().stream().filter(b->b.accountId().equals(transfer.sourceAccountId())&&b.claimQuantities().containsKey(transfer.claimId())).findFirst().orElseThrow();
+        if (blocked) {
+            var fact=io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                    io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID);
+            state=new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(state.navigationGeometry().revision(),
+                    Map.of(transfer.station().support().offset(0,1,0),fact)).apply(state,
+                    io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
+            var events=TransportMissionProcess.plan(state,TransportMissionProcess.progress(mission.id(),atTick),atTick);
+            var cancelled=events.stream().map(ProposedEvent::payload).filter(ExpeditionReplenishmentCancelled.class::isInstance)
+                    .map(ExpeditionReplenishmentCancelled.class::cast).findFirst().orElseThrow();
+            var codecs=FrontierWorldRuntimeDefinition.payloadCodecs();
+            assertEquals(cancelled,codecs.decode(cancelled.type(),codecs.encode(cancelled)));
+            var after=FrontierWorldRuntimeDefinition.reduce(state,new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                    new EventId("event:blocked-refill"),new TransactionId("transaction:blocked-refill"),state.bootstrap().worldId(),new Revision(1),
+                    new SimInstant(atTick),mission.id(),CauseChain.root(new CommandId("command:blocked-refill")),cancelled));
+            FrontierReferenceClosure.validateTransition(state,after,List.of());
+            assertFalse(after.actorMovements().containsKey(actor));assertEquals(actual,after.actorLocations().get(actor).body());
+            assertTrue(after.shipments().missions().get(mission.id()).replenishment().isEmpty());
+            assertEquals(state.inventory().fungibleResources().lots(),after.inventory().fungibleResources().lots(),"cancellation creates or consumes no food");
+            assertEquals(state.inventory().economics().accounts(),after.inventory().economics().accounts());
+            assertEquals(FixedScalar.whole(20),after.inventory().economics().budgets().get(mission.financialBudgetId().orElseThrow()).remaining());
+            assertEquals(after,new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
+            var resumed=TransportMissionProcess.plan(after,TransportMissionProcess.progress(mission.id(),atTick+1),atTick+1);
+            var replacement=resumed.stream().map(ProposedEvent::payload).filter(ExpeditionReplenishmentStarted.class::isInstance)
+                    .map(ExpeditionReplenishmentStarted.class::cast).findFirst().orElseThrow();
+            assertNotEquals(transfer.station(),replacement.transfer().station(),"an alternate service approach is preferable to abandoning usable food");
+            var reselected=io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.start(
+                    after,mission.id(),replacement.transfer(),atTick+1);
+            assertEquals(state.inventory().economics().accounts(),reselected.inventory().economics().accounts());
+            FrontierReferenceClosure.validateTransition(after,reselected,List.of());
+            assertEquals(reselected,new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(reselected)));
+            return;
+        }
+        var player=UUID.fromString("00000000-0000-0000-0000-000000000248");
+        var observed=FungiblePhysicalHandoff.departToNew(bound,transfer.sourceAccountId(),7,binding,0,new SubjectId("custody:withdrawn-refill"),
+                new ResourceCustody.Player(player),1,new PhysicalStackAddress.PlayerSlot(player,0)).forfeitAffectedClaims(bound);
+        var after=FungibleResourceHandoffStateSupport.apply(state,observed,atTick);
+        FrontierReferenceClosure.validateTransition(state,after,List.of());
+        assertFalse(after.actorMovements().containsKey(actor));assertEquals(actual,after.actorLocations().get(actor).body());
+        assertTrue(after.shipments().missions().get(mission.id()).replenishment().isEmpty());
+        var budget=mission.financialBudgetId().orElseThrow();
+        assertEquals(FixedScalar.whole(20),after.inventory().economics().budgets().get(budget).remaining());
+        assertEquals(state.inventory().economics().accounts(),after.inventory().economics().accounts());
+        assertFalse(after.inventory().economics().reservations().containsKey(mission.replenishmentPurchase().orElseThrow().payment().id()));
+        assertEquals(after,new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
+        var released=FungibleClaimForfeitureStateSupport.released(state,observed);
+        assertTrue(released.stream().anyMatch(r->r.actor().equals(actor)&&r.cancelledProgress().equals(Optional.of(ActorMovementProcess.progress(movement,now+1).id()))));
+        var departure=assertInstanceOf(FungibleStockDepartureObserved.class,FungibleContainerPlayerEdit.classify(bound,
+                transfer.sourceAccountId(),transfer.containerId(),transfer.sourceEconomicOwnerId(),7,player,UUID.randomUUID(),List.of(),
+                SourceStockClaimLoss.admissibleClaims(state,transfer.sourceAccountId())));
+        var removed=SourceStockClaimLoss.settle(state,departure,atTick);
+        FrontierReferenceClosure.validateTransition(state,removed,List.of());
+        assertFalse(removed.actorMovements().containsKey(actor));assertEquals(actual,removed.actorLocations().get(actor).body());
+        assertEquals(FixedScalar.whole(20),removed.inventory().economics().budgets().get(budget).remaining());
+    }
+
     private static FrontierWorldState pauseAndResume(FrontierWorldState held, SubjectId mission,
             UnitResourceTransfer transfer, long tick) {
         var passive = held.actorExecutions().next(transfer.actorId(),

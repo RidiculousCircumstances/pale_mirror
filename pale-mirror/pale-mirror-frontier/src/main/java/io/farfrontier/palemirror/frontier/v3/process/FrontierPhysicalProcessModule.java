@@ -154,8 +154,8 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
             case ContainerPlayerEditObserved observed -> ContainerPlayerEditProcess.reduce(state, event.subject(), observed, event.instant().ticks());
             case FungibleStackLayoutObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleLayout(state, event.subject(), observed);
-            case FungibleResourceHandoffObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(state, event.subject(), observed);
-            case FungibleStockDepartureObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, event.subject(), observed);
+            case FungibleResourceHandoffObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(state, event.subject(), observed, event.instant().ticks());
+            case FungibleStockDepartureObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, event.subject(), observed, event.instant().ticks());
             case FungibleStockContributionObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleStockContribution(state, event.subject(), observed);
             case FungibleStackBindingsReleased released -> FrontierWorldPhysicalObservationProcess.reduceFungibleBindingRelease(state, event.subject(), released);
             case ExactItemCustodyChanged changed -> reduceCustodyChanged(state, event.subject(), changed, event.instant().ticks());

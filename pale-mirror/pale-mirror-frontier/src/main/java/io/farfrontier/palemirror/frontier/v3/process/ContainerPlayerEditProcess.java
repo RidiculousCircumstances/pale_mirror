@@ -65,7 +65,7 @@ final class ContainerPlayerEditProcess {
             if (move.isEmpty()) continue;
             var planned = FrontierWorldPhysicalObservationProcess.planFungibleHandoff(next, move.orElseThrow(), now);
             if (!(planned instanceof CommandPlan.Accepted accepted)) throw new IllegalArgumentException("internal compartment transfer rejected: " + planned);
-            next = FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(next, accepted.events().getFirst().subject(), move.orElseThrow());
+            next = FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(next, accepted.events().getFirst().subject(), move.orElseThrow(), now);
             if (consequences != null) consequences.addAll(accepted.events().subList(1, accepted.events().size()));
             internallyMoved.add(move.orElseThrow().sourceAccountId());
             internallyMoved.add(move.orElseThrow().destinationAccount().id());
@@ -110,9 +110,9 @@ final class ContainerPlayerEditProcess {
             var first = accepted.events().getFirst();
             next = switch (fact) {
                 case FungibleStackLayoutObserved value -> FrontierWorldPhysicalObservationProcess.reduceFungibleLayout(next, first.subject(), value);
-                case FungibleStockDepartureObserved value -> FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(next, first.subject(), value);
+                case FungibleStockDepartureObserved value -> FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(next, first.subject(), value, now);
                 case FungibleStockContributionObserved value -> FrontierWorldPhysicalObservationProcess.reduceFungibleStockContribution(next, first.subject(), value);
-                case FungibleResourceHandoffObserved value -> FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(next, first.subject(), value);
+                case FungibleResourceHandoffObserved value -> FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(next, first.subject(), value, now);
                 default -> throw new IllegalArgumentException("unsupported composed accounting fact");
             };
             if (consequences != null) consequences.addAll(accepted.events().subList(1, accepted.events().size()));

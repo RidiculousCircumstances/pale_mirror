@@ -136,7 +136,7 @@ public final class DiagnosticProducerContract {
         "frontier.expedition_supply_hot_loaded",
         "frontier.expedition_transfer_death_observed",
         "frontier.expedition_supply_replanned",
-        "frontier.expedition_replenishment_started",
+        "frontier.expedition_replenishment_started", "frontier.expedition_replenishment_cancelled",
         "frontier.expedition_replenishment_cold_loaded",
         "frontier.expedition_replenishment_hot_prepared",
         "frontier.expedition_replenishment_hot_loaded",

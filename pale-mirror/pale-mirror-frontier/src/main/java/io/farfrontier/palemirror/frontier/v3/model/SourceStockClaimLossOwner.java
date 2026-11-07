@@ -10,6 +10,7 @@ import java.util.OptionalLong;
 interface SourceStockClaimLossOwner {
     record ReleasedActivity(SubjectId actor, Optional<ScheduleId> cancelledProgress, OptionalLong retargetAtTick) { }
     record Settlement(FungibleForfeitureSettlement resources, HumanPopulation population) { }
+    default FrontierWorldState checkpoint(FrontierWorldState before, ClaimAllocation claim, long atTick) { return before; }
     ClaimPurpose purpose();
     void validate(FrontierWorldState state, SubjectId sourceAccount, ClaimAllocation claim);
     Settlement settle(FrontierWorldState before, List<ClaimAllocation> claims, Settlement transaction);

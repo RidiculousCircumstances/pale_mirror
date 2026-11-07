@@ -12,7 +12,8 @@ import java.util.*;
 final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule {
     static final Set<String> TYPES = Set.of("frontier.expedition_transfer_death_observed", "frontier.expedition_supply_cold_loaded",
             "frontier.expedition_supply_hot_prepared", "frontier.expedition_supply_hot_loaded", "frontier.expedition_supply_replanned",
-            "frontier.expedition_replenishment_started", "frontier.expedition_replenishment_cold_loaded", "frontier.expedition_replenishment_hot_prepared", "frontier.expedition_replenishment_hot_loaded");
+            "frontier.expedition_replenishment_started", "frontier.expedition_replenishment_cancelled",
+            "frontier.expedition_replenishment_cold_loaded", "frontier.expedition_replenishment_hot_prepared", "frontier.expedition_replenishment_hot_loaded");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("expedition-supplies",
             Set.of("frontier.expedition_transfer_death_observed", "frontier.expedition_supply_hot_prepared", "frontier.expedition_supply_hot_loaded",
                     "frontier.expedition_replenishment_hot_prepared", "frontier.expedition_replenishment_hot_loaded"), Set.of(), TYPES,
@@ -81,6 +82,10 @@ final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule 
                 .orElse(List.of());
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
+        if (event.payload() instanceof ExpeditionReplenishmentCancelled value) {
+            if (!event.subject().equals(value.missionId())) throw new IllegalArgumentException("foreign refill cancellation subject");
+            return ExpeditionReplenishmentAuthority.cancel(state,value.missionId(),value.claimId(),event.instant().ticks());
+        }
         if (event.payload() instanceof ExpeditionReplenishmentStarted value) {
             if (!event.subject().equals(value.missionId())) throw new IllegalArgumentException("foreign replenishment subject");
             return ExpeditionReplenishmentAuthority.start(state, value.missionId(), value.transfer(), event.instant().ticks());

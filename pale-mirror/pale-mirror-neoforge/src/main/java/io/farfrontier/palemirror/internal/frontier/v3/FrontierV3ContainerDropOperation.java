@@ -20,13 +20,14 @@ final class FrontierV3ContainerDropOperation {
         final ServerLevel level;
         final SubjectId container;
         final int slot;
+        final long atTick;
         final List<ItemEntity> spawned = new ArrayList<>();
         final Map<UUID, ItemStack> expected = new HashMap<>();
         final List<FungibleResourceHandoffObserved> resources = new ArrayList<>();
         final List<ExactItemCustodyChanged> exactItems = new ArrayList<>();
         FrontierWorldState projected;
-        Context(ServerLevel level, FrontierWorldState state, SubjectId container, int slot) {
-            this.level = level; projected = state; this.container = container; this.slot = slot;
+        Context(ServerLevel level, FrontierWorldState state, SubjectId container, int slot, long atTick) {
+            this.level = level; projected = state; this.container = container; this.slot = slot; this.atTick = atTick;
         }
     }
     private FrontierV3ContainerDropOperation() { }
@@ -42,7 +43,7 @@ final class FrontierV3ContainerDropOperation {
             throw new IllegalStateException("native container drop owner cannot admit the exact source");
         if (binding != null && journal.blocksAccount(binding.accountId()))
             throw new IllegalStateException("native container drop has an unresolved earlier resource operation");
-        var context = new Context(level, state, physical.containerId(), slot);
+        var context = new Context(level, state, physical.containerId(), slot, runtime.calendarInstant().orElseThrow());
         var previous = ACTIVE.get(); ACTIVE.set(context);
         try { Containers.dropItemStack(level, x, y, z, stack.copy()); }
         finally { if (previous == null) ACTIVE.remove(); else ACTIVE.set(previous); }
@@ -96,7 +97,7 @@ final class FrontierV3ContainerDropOperation {
                     binding.quantity() - actual.getCount(), new SubjectId("custody:ground-" + drop.getUUID()),
                     new ResourceCustody.Ground(drop.getUUID(), new BlockPosition(p.getX(), p.getY(), p.getZ())), 1,
                     new PhysicalStackAddress.WorldEntity(drop.getUUID())).forfeitAffectedClaims(ledger);
-            context.resources.add(receipt); context.projected = FungibleResourceHandoffStateSupport.apply(state, receipt);
+            context.resources.add(receipt); context.projected = FungibleResourceHandoffStateSupport.apply(state, receipt, context.atTick);
             drop.getPersistentData().putBoolean(FrontierV3GroundItemPosition.MARKER, true);
         } else {
             var exact = state.inventory().itemAt(context.container, context.slot).orElseThrow();

@@ -6,6 +6,14 @@ import java.util.LinkedHashMap;
 public final class FungibleResourceHandoffStateSupport {
     private FungibleResourceHandoffStateSupport() { }
 
+    public static FrontierWorldState apply(FrontierWorldState state, FungibleResourceHandoffObserved observed, long atTick) {
+        var source = state.inventory().fungibleResources().accounts().get(observed.sourceAccountId());
+        if (source == null || source.custody() instanceof ResourceCustody.Actor
+                || observed.destinationAccount().custody() instanceof ResourceCustody.Actor)
+            throw new IllegalArgumentException("physical handoff requires a current non-actor source");
+        return observed.forfeitedClaimIds().isEmpty() ? apply(state, observed)
+                : FungibleClaimForfeitureStateSupport.apply(state, observed, atTick);
+    }
     public static FrontierWorldState apply(FrontierWorldState state, FungibleResourceHandoffObserved observed) {
         var ledger = state.inventory().fungibleResources();
         var source = ledger.accounts().get(observed.sourceAccountId());

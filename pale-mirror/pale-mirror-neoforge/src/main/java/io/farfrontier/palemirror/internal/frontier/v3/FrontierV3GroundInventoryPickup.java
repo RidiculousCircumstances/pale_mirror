@@ -50,7 +50,7 @@ public final class FrontierV3GroundInventoryPickup {
             outcome = FungibleClaimForfeitureStateSupport.stampOwnerDiagnostic(state, outcome);
             if (!FungibleClaimForfeitureStateSupport.supports(state, outcome)) return false;
         }
-        FungibleResourceHandoffStateSupport.apply(state, outcome); // Validate the whole result before native mutation.
+        FungibleResourceHandoffStateSupport.apply(state, outcome, runtime.calendarInstant().orElseThrow()); // Validate the whole result before native mutation.
         var sourcePort = layout.remaining() == 0 ? FrontierV3OperationEntityColumns.current(level, source.chunkPosition()).orElse(null)
                 : FrontierV3OperationEntityParticipant.nativeObject(source);
         if (sourcePort == null) return false;

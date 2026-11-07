@@ -8,6 +8,19 @@ import java.util.Optional;
 /** Read-only service-station selection using the actual actor envelope and the facility's declared candidates. */
 public final class ActorStorageApproach {
     private ActorStorageApproach() { }
+    public static io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.Readiness readiness(
+            FrontierWorldState state, ShipmentEndpoint endpoint, SubjectId actorId, SurfaceAnchor origin,
+            KnownPedestrianRouteKnowledge declaredJourney) {
+        var readiness = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.inspectAvailability(
+                () -> select(state, endpoint, actorId, origin, declaredJourney).isPresent());
+        if (readiness != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.Readiness.UNAVAILABLE) return readiness;
+        var knowledge = declaredJourney.forActor(state, actorId);
+        boolean unknown = !knowledge.geometry().clearanceKnown(origin)
+                || java.util.stream.Stream.concat(java.util.stream.Stream.of(endpoint.station()),
+                    ShipmentEndpointComposition.approachStations(state,endpoint,knowledge).stream())
+                    .anyMatch(station -> !knowledge.geometry().clearanceKnown(station));
+        return unknown ? io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.Readiness.UNRESOLVED : readiness;
+    }
     public static Optional<ShipmentEndpoint> select(FrontierWorldState state, ShipmentEndpoint endpoint,
                                                    SubjectId actorId, SurfaceAnchor origin) {
         return select(state, endpoint, actorId, origin, ShipmentEndpointComposition.knowledge(state, java.util.List.of(endpoint)));

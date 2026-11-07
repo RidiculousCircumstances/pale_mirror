@@ -206,7 +206,7 @@ public final class FrontierWorldPhysicalObservationProcess {
         if (source == null) return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY,
                 "fungible handoff has an unknown source account"));
         SubjectId owner = owner(state, source);
-        try { reduceFungibleHandoff(state, owner, observed); }
+        try { reduceFungibleHandoff(state, owner, observed, now); }
         catch (IllegalArgumentException invalid) { return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage())); }
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(new ProposedEvent(owner, observed));
@@ -223,7 +223,7 @@ public final class FrontierWorldPhysicalObservationProcess {
     static CommandPlan planFungibleStockDeparture(FrontierWorldState state, FungibleStockDepartureObserved observed,
                                                   long now) {
         try {
-            reduceFungibleStockDeparture(state, observed.economicOwnerId(), observed);
+            reduceFungibleStockDeparture(state, observed.economicOwnerId(), observed, now);
         } catch (IllegalArgumentException invalid) {
             return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage()));
         }
@@ -239,7 +239,7 @@ public final class FrontierWorldPhysicalObservationProcess {
     }
 
     static FrontierWorldState reduceFungibleStockDeparture(FrontierWorldState state, SubjectId subject,
-                                                          FungibleStockDepartureObserved observed) {
+                                                          FungibleStockDepartureObserved observed, long now) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources();
         CustodyAccount source = ledger.accounts().get(observed.sourceAccountId());
         ContainerRecord container = state.inventory().containers().get(observed.containerId());
@@ -269,7 +269,7 @@ public final class FrontierWorldPhysicalObservationProcess {
                 observed.playerId(), observed.interactionId(), observed.remaining(),
                 SourceStockClaimLoss.admissibleClaims(state, observed.sourceAccountId()))))
             throw new IllegalArgumentException("stock departure differs from its exact witnessed edit classification");
-        FrontierWorldState next = SourceStockClaimLoss.settle(state, observed);
+        FrontierWorldState next = SourceStockClaimLoss.settle(state, observed, now);
         for (var activity : SourceStockClaimLoss.released(state, observed)) {
             if (activity.retargetAtTick().isPresent()) next = ResidentActivityProcess.retargetHotResident(
                     next, activity.actor(), activity.retargetAtTick().getAsLong());
@@ -320,10 +320,10 @@ public final class FrontierWorldPhysicalObservationProcess {
         return state.withInventory(state.inventory().withFungibleResources(contributed));
     }
 
-    static FrontierWorldState reduceFungibleHandoff(FrontierWorldState state, SubjectId subject, FungibleResourceHandoffObserved observed) {
+    static FrontierWorldState reduceFungibleHandoff(FrontierWorldState state, SubjectId subject, FungibleResourceHandoffObserved observed, long now) {
         FungibleResourceLedger ledger = state.inventory().fungibleResources(); CustodyAccount source = ledger.accounts().get(observed.sourceAccountId());
         if (source == null || !subject.equals(owner(state, source))) throw new IllegalArgumentException("fungible handoff has no owning subject");
-        return FungibleResourceHandoffStateSupport.apply(state, observed);
+        return FungibleResourceHandoffStateSupport.apply(state, observed, now);
     }
 
     static CommandPlan planFungibleBindingRelease(FrontierWorldState state, FungibleStackBindingsReleased released, long now) {

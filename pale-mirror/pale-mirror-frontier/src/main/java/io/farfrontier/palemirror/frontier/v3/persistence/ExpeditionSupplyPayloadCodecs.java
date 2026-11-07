@@ -25,6 +25,9 @@ final class ExpeditionSupplyPayloadCodecs {
         codec("frontier.expedition_replenishment_started", (out, p) -> {
             var v = (ExpeditionReplenishmentStarted)p; UnitGroupStateCodec.id(out, v.missionId()); UnitResourceTransferCodec.write(out, v.transfer());
         }, in -> new ExpeditionReplenishmentStarted(UnitGroupStateCodec.id(in), UnitResourceTransferCodec.read(in))),
+        codec("frontier.expedition_replenishment_cancelled", (out,p) -> {
+            var v=(ExpeditionReplenishmentCancelled)p;UnitGroupStateCodec.id(out,v.missionId());UnitGroupStateCodec.id(out,v.claimId());
+        }, in -> new ExpeditionReplenishmentCancelled(UnitGroupStateCodec.id(in),UnitGroupStateCodec.id(in))),
         codec("frontier.expedition_replenishment_cold_loaded", (out, p) -> {
             var v = (ExpeditionReplenishmentColdLoaded)p; UnitGroupStateCodec.id(out, v.missionId()); UnitGroupStateCodec.id(out, v.claimId());
         }, in -> new ExpeditionReplenishmentColdLoaded(UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in))),

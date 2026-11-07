@@ -33,7 +33,7 @@ final class FrontierV3NativeInventoryTransfer {
             if (!FungibleClaimForfeitureStateSupport.supports(state, outcome)) return false;
         }
         // Reject invalid accounting before consuming the native attempt.
-        FungibleResourceHandoffStateSupport.apply(state, outcome);
+        FungibleResourceHandoffStateSupport.apply(state, outcome, runtime.calendarInstant().orElseThrow());
         var beforeSource = source.stack().copy(); var beforeDestination = destination.stack().copy();
         var afterSource = beforeSource.copy(); afterSource.shrink(amount);
         var afterDestination = beforeSource.copyWithCount(beforeDestination.getCount() + amount);
