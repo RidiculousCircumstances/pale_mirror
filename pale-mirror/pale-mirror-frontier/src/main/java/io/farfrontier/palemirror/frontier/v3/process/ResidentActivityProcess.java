@@ -132,10 +132,9 @@ public final class ResidentActivityProcess {
             return result;
         }
         catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
-            if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
-                throw unavailable;
-            // Admission may only request the real owner plan. That plan records any
-            // cooperative wait under its exact continuation; queue polling cannot park it as absence.
+            // A known obstruction is also an owner-local navigation refusal, not a
+            // canonical invariant failure. The plan retains its exact continuation;
+            // neither absence nor unknown geometry can authorize an activity transition.
             return new ResidentActivityAdmission.Ready();
         }
     }
@@ -295,9 +294,8 @@ public final class ResidentActivityProcess {
                                    ActivityInterruptionPlanner interruptions) {
         try { return planReady(state, action, currentTick, interruptions); }
         catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
-            if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
-                throw unavailable;
-            // Cooperative calculation does not authorize a work/food/ownership transition.
+            // A changed or temporarily inaccessible passage does not corrupt the
+            // world. Retain the purpose and retry without committing a partial handoff.
             long now = Math.max(Math.max(action.dueAt().ticks(), currentTick),
                     state.humanPopulation().nutrition(action.subject()).lastEvaluatedTick());
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),

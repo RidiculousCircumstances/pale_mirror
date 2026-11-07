@@ -176,6 +176,17 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         else if (ordinal == 2) return mission.homeRendezvous();
         else throw new IllegalArgumentException("transport has no declared journey ordinal");
     }
+    @Override public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathProof> itinerary(
+            FrontierWorldState state, UnitGroup group, long ordinal) {
+        var mission = mission(state, group);
+        var destination = destination(state, group, ordinal);
+        return mission.supplies().map(load -> ordinal == 1 ? load.journey().outward() : load.journey().returning())
+                .map(path -> {
+                    if (!path.destination().equals(destination))
+                        throw new IllegalArgumentException("transport itinerary changed its declared destination");
+                    return path;
+                });
+    }
     public static SurfaceAnchor rendezvous(FrontierWorldState state, ShipmentEndpoint endpoint, int members) {
         return io.farfrontier.palemirror.frontier.v3.model.group.GroupRendezvous.select(
                 ShipmentEndpointComposition.knowledge(state, List.of(endpoint)), ShipmentEndpointComposition.exteriorApproach(state, endpoint),

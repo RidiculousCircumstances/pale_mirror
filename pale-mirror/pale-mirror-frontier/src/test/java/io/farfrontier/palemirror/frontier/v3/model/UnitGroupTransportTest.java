@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Actual registered policy, queue, movement and custody; no fabricated arrival or delivery. */
 class UnitGroupTransportTest {
-    @Test void confirmedLoadingAndCooperativeCompletionWakeTheRegisteredMissionWithoutPeriodicDelay() throws Exception {
+    @Test void confirmedLoadingReusesAcceptedItineraryWithoutAnotherGlobalSearch() throws Exception {
         var configuration = completeNeedClocks(FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:group-readiness"), 41));
         var engine = FrontierEngines.createCanonicalStateAccess(configuration);
         UnitGroup ready = null;
@@ -87,15 +87,9 @@ class UnitGroupTransportTest {
             }
         });
                 var waitBinding = PedestrianPlanningContinuations.bind(waits)) {
-            // Binding an empty asynchronous planner invalidates the synchronous fixture's
-            // route cache. The current provisioning contract requires both trip estimates
-            // before departure; this test then checks the separate group-route ready wake.
-            for (int slice = 0; slice < 4000; slice++) {
-                if (io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(
-                        engine.canonicalState().state(), engine.canonicalState().state().shipments().missions().get(missionId), loadedAt + 1)) break;
-                assertTrue(planner.pendingCount() > 0, "provisioning must have requested its missing route estimate");
-                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
-            }
+            // Empty runtime caches cannot invalidate the accepted current-geometry proof.
+            assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(
+                    engine.canonicalState().state(), engine.canonicalState().state().shipments().missions().get(missionId), loadedAt + 1));
             var departure = TransportMissionProcess.plan(engine.canonicalState().state(),
                     TransportMissionProcess.progress(missionId, loadedAt + 1), loadedAt + 1);
             assertTrue(departure.stream().anyMatch(event -> event.payload() instanceof TransportMissionAdvanced advanced
@@ -113,46 +107,16 @@ class UnitGroupTransportTest {
             assertEquals(TransportMission.Stage.OUTBOUND, state.shipments().missions().get(missionId).stage(),
                     () -> "actual departure: deferred=" + result.deferredAction() + " lag=" + result.simulationLagTicks()
                             + " movements=" + state.actorMovements().keySet() + " meals=" + state.humanPopulation().meals().keySet());
-            assertEquals(UnitGroup.Phase.READY, group.phase());
+            assertEquals(UnitGroup.Phase.TRAVELLING, group.phase(), "accepted itinerary starts the group without another global search");
             for (var id : state.shipments().missions().get(missionId).shipmentIds()) {
                 var outbound = state.shipments().shipments().get(id);
                 assertTrue(new ShipmentServiceAccess().demands(state, outbound.receiver().containerId()).stream()
                         .noneMatch(demand -> demand.identity().ownerId().equals(outbound.id())),
                         "a loaded outbound group cannot reserve the remote receiver's service turn");
             }
-            assertEquals("PLANNING", UnitGroupProcess.navigationReadiness(state, group).status());
             long work = planner.workUnits();
-            for (int read = 0; read < 20; read++) assertEquals("PLANNING", UnitGroupProcess.navigationReadiness(state, group).status());
+            for (int read = 0; read < 20; read++) assertEquals("TRAVELLING", UnitGroupProcess.navigationReadiness(state, group).status());
             assertEquals(work, planner.workUnits(), "diagnostics cannot advance or enqueue planning");
-            long signal = planner.progressRevision();
-            for (int slice = 0; slice < 2000 && planner.pendingCount() > 0; slice++)
-                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
-            assertEquals(0, planner.pendingCount()); assertTrue(planner.progressRevision() > signal);
-            assertEquals("FOUND", UnitGroupProcess.navigationReadiness(state, group).status());
-            waits.changed(planner.drainChanges());
-            var readyActions = waits.ready(engine.executionView());
-            assertFalse(readyActions.isEmpty(), "only actual waiting continuations should wake");
-            var expected = readyActions.getFirst();
-            var notification = new PedestrianPlanningReady(expected);
-            var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
-            assertEquals(notification, codecs.decode(notification.type(), codecs.encode(notification)));
-            var checkpoint = engine.checkpoint();
-            var unboundId = new CommandId("test:planning-ready-unbound");
-            assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(FrontierCommand.LEGACY_SCHEMA_VERSION,
-                    unboundId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
-                    CauseChain.root(unboundId), notification)));
-            assertEquals(checkpoint, engine.checkpoint(), "unbound readiness cannot change state, schedules or receipt retention");
-            for (var action : readyActions) {
-                var view = engine.executionView(); var commandId = new CommandId("test:planning-ready-" + view.revision().value());
-                assertInstanceOf(CommandResult.Accepted.class, engine.submit(new FrontierCommand(FrontierCommand.SCHEMA_VERSION,
-                        commandId, view.worldId(), view.revision(), view.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
-                        CauseChain.root(commandId), new PedestrianPlanningReady(action),
-                        Optional.of(new EngineScheduleBinding(view.revision(), action)))));
-                waits.remove(action.id());
-            }
-            var advanced = engine.advanceTo(new SimInstant(checkpoint.instant().ticks() + 3), new WorkBudget(128, 1024));
-            assertEquals(EngineStatus.Kind.ACTIVE, advanced.status().kind(), advanced.status().failureDetail().orElse("active"));
-            assertEquals(UnitGroup.Phase.TRAVELLING, engine.canonicalState().state().unitGroups().groups().get(groupId).phase());
             var travelling = engine.canonicalState().state();
             var journey = travelling.unitGroups().groups().get(groupId);
             var starts = UnitGroupProcess.plan(travelling, UnitGroupProcess.progress(groupId,
@@ -178,12 +142,7 @@ class UnitGroupTransportTest {
             int pendingBefore = planner.pendingCount();
             new GroupMovementProvider().route(travelling, movement, origin);
             assertEquals(pendingBefore, planner.pendingCount(), "a retained group route cannot restart regional search per COLD slice");
-            var after = engine.checkpoint(); var staleId = new CommandId("test:group-navigation-stale");
-            assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(FrontierCommand.SCHEMA_VERSION,
-                    staleId, after.worldId(), after.revision(), after.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
-                    CauseChain.root(staleId), notification, Optional.of(new EngineScheduleBinding(after.revision(), expected)))));
-            // Hydration deliberately starts a fresh geometry epoch. Check replay after
-            // the queue-wake exercise, without invalidating its currently warmed search.
+            // Hydration must validate accepted departure geometry without any planner cache.
             var recovered = image.decode(beforeDeparture);
             replaying[0] = true;
             var admitted = TransportMissionProcess.advance(recovered, missionId, decoded, loadedAt + 1);

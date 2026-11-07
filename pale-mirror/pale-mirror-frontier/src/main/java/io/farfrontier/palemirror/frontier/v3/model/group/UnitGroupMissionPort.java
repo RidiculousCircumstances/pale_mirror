@@ -21,6 +21,9 @@ public interface UnitGroupMissionPort {
     KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, UnitGroup group);
     GroupTravelPolicy travelPolicy(FrontierWorldState state, UnitGroup group);
     SurfaceAnchor destination(FrontierWorldState state, UnitGroup group, long ordinal);
+    /** Advisory accepted geometry; the navigator revalidates each executed segment. */
+    Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathProof> itinerary(
+            FrontierWorldState state, UnitGroup group, long ordinal);
     Optional<ActorExecutionId> execution(FrontierWorldState state, UnitGroup group, UnitGroup.Member member);
     boolean mayTravel(FrontierWorldState state, UnitGroup group, long ordinal);
     io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission movementPermission(FrontierWorldState state, UnitGroup group, long atTick);

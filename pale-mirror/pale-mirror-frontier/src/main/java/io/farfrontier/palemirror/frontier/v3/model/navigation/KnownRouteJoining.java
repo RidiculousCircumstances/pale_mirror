@@ -8,6 +8,32 @@ import java.util.*;
 public final class KnownRouteJoining {
     private KnownRouteJoining() { }
 
+    /** Refine a bounded window of a retained whole journey, including an off-route
+     * departure after loading. The window is calculation advice, never a replacement
+     * semantic goal or an arrival receipt. Geometry validation remains segment-bounded. */
+    public static List<SurfaceAnchor> segment(KnownPedestrianRouteKnowledge knowledge, SurfaceAnchor start,
+            MovementOrder order, PedestrianPathProof itinerary) {
+        if (!order.legalStations().equals(List.of(itinerary.destination())))
+            throw new IllegalArgumentException("shared itinerary has a foreign final destination");
+        var surfaces = itinerary.surfaces();
+        int nearest = 0;
+        long distance = Long.MAX_VALUE;
+        for (int index = 0; index < surfaces.size(); index++) {
+            long candidate = distanceSquared(start, surfaces.get(index));
+            if (candidate < distance) { distance = candidate; nearest = index; }
+        }
+        var window = surfaces.subList(nearest, Math.min(surfaces.size(), nearest + TimedKnownRoute.MAX_SURFACES));
+        var calculation = new MovementOrder(order.ownerId(), order.actorId(), order.goalOrdinal(), order.goalRevision(),
+                List.of(window.getLast()), order.capability(), MovementOrder.ArrivalPolicy.EXACT_STATION);
+        try { return path(knowledge, start, calculation, window, true); }
+        catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH
+                    && unavailable.status() != PedestrianRouteResult.Status.SAFETY_LIMIT) throw unavailable;
+            // A damaged advisory window cannot turn into a negative proof for the actual goal.
+            return knowledge.plannedSegment(start, order);
+        }
+    }
+
     public static List<SurfaceAnchor> path(KnownPedestrianRouteKnowledge knowledge, SurfaceAnchor start,
                                            MovementOrder order, List<SurfaceAnchor> itinerary, boolean segment) {
         if (order.legalStations().size() != 1)

@@ -44,7 +44,7 @@ class ExpeditionServiceWaitTest {
         assertTrue(boundary.cleared(exit.standingBody()));
         var movement = new ActorMovement(new MovementOrder(blocker, blocker, 0, 1, List.of(exit),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION), now,
-                new ActorMovementContext.ServiceExit(mission.sender().settlementId(), mission.sender().containerId()), execution);
+                new ActorMovementContext.ServiceExit(ServiceBoundaryComposition.declaration(state, mission.sender().containerId()).identity()), execution);
         state = ActorMovementProcess.reduceStarted(state, blocker, new ActorMovementStarted(movement));
         var assemblyReady = ActorMovementProcess.reduceStarted(
                 loadedPart.withActorBody(blocker, mission.sender().station().standingBody()), blocker, new ActorMovementStarted(movement));

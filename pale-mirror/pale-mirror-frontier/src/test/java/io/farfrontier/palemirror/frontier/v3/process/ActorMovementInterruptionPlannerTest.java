@@ -13,6 +13,36 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorMovementInterruptionPlannerTest {
+    @Test void unavailableInterruptionRouteRetainsTheWholeTaskWithoutQuarantiningTheWorld() {
+        var state = fixture(false);
+        var actor = new SubjectId("resident:1-1");
+        var action = ResidentActivityProcess.review(actor, 24_000L);
+        for (var status : List.of(PedestrianRouteResult.Status.NO_PATH, PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                PedestrianRouteResult.Status.PLANNING)) {
+            var interruption = new ActivityInterruptionPlanner() {
+                @Override public boolean mayAttempt(FrontierWorldState current, SubjectId resident, long atTick) { return true; }
+                @Override public Assessment assess(FrontierWorldState current, SubjectId resident, long atTick) {
+                    throw new KnownPedestrianNavigation.RouteUnavailable(status, "test:changed-exit");
+                }
+            };
+            var events = ResidentActivityProcess.plan(state, action, 24_000L, interruption);
+            assertEquals(1, events.size());
+            var retry = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                    events.getFirst().payload());
+            assertEquals(action.id(), retry.scheduleId());
+            assertTrue(retry.replacement().dueAt().ticks() > 24_000L);
+            assertTrue(state.actorMovements().containsKey(actor));
+            assertFalse(state.humanPopulation().meals().containsKey(actor));
+        }
+        var invalid = new ActivityInterruptionPlanner() {
+            @Override public boolean mayAttempt(FrontierWorldState current, SubjectId resident, long atTick) { return true; }
+            @Override public Assessment assess(FrontierWorldState current, SubjectId resident, long atTick) {
+                throw new IllegalArgumentException("test:foreign-authority");
+            }
+        };
+        assertThrows(IllegalArgumentException.class, () -> ResidentActivityProcess.plan(state, action, 24_000L, invalid),
+                "authority errors remain errors; only navigation refusals are retryable");
+    }
     @Test void queueInterruptionEligibilityDoesNotSearchOrAuthorizeFoodWhileMovementIsRetained() throws Exception {
         var state = fixture(false);
         var actor = new SubjectId("resident:1-1");
@@ -131,15 +161,14 @@ class ActorMovementInterruptionPlannerTest {
                 new WorldId("frontier:activity-interruption"), 421L));
         Settlement settlement = initial.bootstrap().settlements().getFirst();
         SubjectId actor = settlement.residents().getFirst().id();
-        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
-                .findFirst().orElseThrow();
-        var port = SettlementDepotServicePort.forDepot(depot);
+        var point = ServiceBoundaryComposition.declaration(initial, FrontierWorldState.depotId(settlement.id()));
+        var port = ServiceBoundaryComposition.geometry(initial, point.identity());
         var home = initial.actorLocations().get(actor).supportingSurface();
-        var body = atService ? port.serviceSurface() : SurfaceAnchor.at(home.x(), home.y(), home.z() + 1);
+        var body = atService ? port.station() : SurfaceAnchor.at(home.x(), home.y(), home.z() + 1);
         var order = new MovementOrder(actor, actor, 0L, 10L, List.of(home), TraversalCapability.PEDESTRIAN,
                 MovementOrder.ArrivalPolicy.EXACT_STATION);
         var movement = new ActorMovement(order, 23_900L,
-                new ActorMovementContext.ServiceExit(settlement.id(), FrontierWorldState.depotId(settlement.id())),
+                new ActorMovementContext.ServiceExit(point.identity()),
                 initial.actorExecutions().next(actor, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.SERVICE_EXIT, actor));
         SubjectId account = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(settlement.id()));
         var resources = initial.inventory().fungibleResources().transformCold(account,

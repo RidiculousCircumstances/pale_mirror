@@ -4,7 +4,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public final class ResourceStorageNavigation {
     private ResourceStorageNavigation() { }
     public static java.util.List<SurfaceAnchor> plannedPath(FrontierWorldState state, SurfaceAnchor origin, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile, ShipmentEndpoint target) {
-        return forEndpoint(state, target).forProfile(profile).plannedBetween(origin, target.station());
+        return forDeparture(state, origin, target).forProfile(profile).plannedBetween(origin, target.station());
     }
     public static void requireAcceptedDestination(FrontierWorldState state, SurfaceAnchor origin, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile, ShipmentEndpoint target,
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> receipt) {
@@ -12,7 +12,15 @@ public final class ResourceStorageNavigation {
                 .orElseGet(() -> java.util.List.of(origin));
         if (!route.getFirst().equals(origin) || !route.getLast().equals(target.station()))
             throw new IllegalArgumentException("storage admission route has foreign endpoints");
-        forEndpoint(state, target).forProfile(profile).requireRoute(route);
+        forDeparture(state, origin, target).forProfile(profile).requireRoute(route);
+    }
+    private static KnownPedestrianRouteKnowledge forDeparture(FrontierWorldState state, SurfaceAnchor origin, ShipmentEndpoint target) {
+        var passages = new java.util.ArrayList<>(ShipmentEndpointComposition.passages(state, target));
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), target.settlementId());
+        settlement.structures().forEach(facility -> passages.add(new KnownPedestrianRouteKnowledge.SettlementPassage(
+                settlement.id(), new KnownPedestrianRouteKnowledge.Passage(facility,
+                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))));
+        return PedestrianLocalDeparture.departure(state, origin, passages);
     }
     /** Common public/declared-port geometry, also used for departure from this storage. */
     public static KnownPedestrianRouteKnowledge forEndpoint(FrontierWorldState state, ShipmentEndpoint target) {

@@ -47,7 +47,10 @@ public final class UnitGroupProcess {
         var order = new MovementOrder(group.id(), departure.actorId(), ordinal, group.revision() + 1, List.of(target),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         try {
-            var route = port.knowledge(state, group).plannedSegment(origin, order);
+            var knowledge = port.knowledge(state, group);
+            var route = port.itinerary(state, group, ordinal)
+                    .map(itinerary -> KnownRouteJoining.segment(knowledge, origin, order, itinerary))
+                    .orElseGet(() -> knowledge.plannedSegment(origin, order));
             return Optional.of(new UnitGroupAdvanced(group.id(), group.revision(), UnitGroupAdvanced.Change.START, ordinal,
                     Optional.of(GroupFormation.first(living(state, group), target, route, port.knowledge(state, group), port.travelPolicy(state, group).spacing())), Optional.of(departure.actorId())));
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }

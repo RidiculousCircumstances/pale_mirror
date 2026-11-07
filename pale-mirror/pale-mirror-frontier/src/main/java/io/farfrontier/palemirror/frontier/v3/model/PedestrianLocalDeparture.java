@@ -37,9 +37,9 @@ public final class PedestrianLocalDeparture {
     private static List<KnownPedestrianRouteKnowledge.SettlementPassage> exits(FrontierWorldState state, SurfaceAnchor start) {
         return state.bootstrap().settlements().stream()
                 .flatMap(settlement -> settlement.structures().stream()
-                    .filter(facility -> FrontierTraversalPlan.facilityPort(facility).filter(port ->
+                    .filter(facility -> FrontierTraversalPlan.facilityPorts(facility).stream().anyMatch(port ->
                             port.ingressSurfaces().contains(start) || port.stations().contains(start)
-                            || FrontierGrayboxPlan.publicAccessSurfaces(facility).contains(start)).isPresent())
+                            || FrontierGrayboxPlan.publicAccessSurfaces(facility).contains(start)))
                     .map(facility -> new KnownPedestrianRouteKnowledge.SettlementPassage(settlement.id(),
                             new KnownPedestrianRouteKnowledge.Passage(facility,
                                     KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)))).toList();

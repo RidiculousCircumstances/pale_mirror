@@ -16,6 +16,39 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void interruptedWorkerCanLeaveASecondaryPrivateEntranceForFoodAndStorage() throws Exception {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:secondary-exit"),
+                139L, FrontierRulesets.installed("frontier-v3-ranged-guards-r33")));
+        var home = initial.bootstrap().settlements().get(1);
+        var actor = home.residents().getFirst().id();
+        var workshop = home.structures().stream().filter(f -> f.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
+        var secondary = FrontierTraversalPlan.facilityPorts(workshop).get(1);
+        var start = secondary.thresholdSurface();
+        assertFalse(FrontierTraversalPlan.facilityPort(workshop).orElseThrow().ingressSurfaces().contains(start));
+        assertFalse(KnownPedestrianRouteKnowledge.forFrontier(initial).traversable(List.of(start)),
+                "a private entrance stays unavailable to unrelated through traffic");
+        var pantry = CommunalDiningPlan.initialFoodStorage(initial.bootstrap(), home.id());
+        var meal = testMeal(initial, home, actor, pantry, start);
+        var state = withMeal(initial.withActorBody(actor, start.standingBody()), meal);
+        var route = ResidentMealKnownNavigation.pathFrom(state, meal, start);
+        assertEquals(start, route.getFirst());
+        ResidentMealKnownNavigation.requireMovementRoute(state, meal, route);
+        var endpoint = ResourceStorageAccess.at(state, pantry).endpoint();
+        var storageRoute = ResourceStorageNavigation.plannedPath(state, start, UnitNavigationProfile.VILLAGER, endpoint);
+        try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
+             var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
+            ResourceStorageNavigation.requireAcceptedDestination(state, start, UnitNavigationProfile.VILLAGER, endpoint,
+                    Optional.of(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(storageRoute)));
+            assertEquals(0, planner.pendingCount(), "acceptance uses exact geometry, not another route search");
+        }
+        var damaged = state.recordPhysicalDelta(new PhysicalDelta(start.support(), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:secondary-exit-floor-loss"));
+        assertThrows(IllegalArgumentException.class,
+                () -> ResidentMealKnownNavigation.requireMovementRoute(damaged, meal, route));
+        assertThrows(IllegalArgumentException.class, () -> ResourceStorageNavigation.requireAcceptedDestination(damaged,
+                start, UnitNavigationProfile.VILLAGER, endpoint,
+                Optional.of(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(storageRoute))));
+    }
     @Test void admittedVisitorInsideTheActualFacilityDoesNotReturnToExteriorWaiting() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:indoor-meal-approach"), 41L,
