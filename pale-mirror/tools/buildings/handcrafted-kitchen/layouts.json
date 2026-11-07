@@ -1,0 +1,267 @@
+{
+  "source": "medieval_spruce/kitchen",
+  "base": [
+    0,
+    100,
+    0
+  ],
+  "variants": [
+    {
+      "id": "window-two",
+      "tables": [
+        {
+          "position": [
+            17,
+            2,
+            10
+          ],
+          "shape": "single"
+        }
+      ],
+      "chairs": [
+        {
+          "position": [
+            17,
+            2,
+            9
+          ],
+          "facing": "south",
+          "approach": [
+            16,
+            2,
+            9
+          ]
+        },
+        {
+          "position": [
+            17,
+            2,
+            11
+          ],
+          "facing": "north",
+          "approach": [
+            16,
+            2,
+            11
+          ]
+        }
+      ],
+      "remove": [
+        [
+          17,
+          3,
+          10
+        ]
+      ],
+      "diningBounds": {
+        "min": [
+          16,
+          2,
+          9
+        ],
+        "max": [
+          18,
+          4,
+          12
+        ]
+      }
+    },
+    {
+      "id": "window-six",
+      "tables": [
+        {
+          "position": [
+            17,
+            2,
+            10
+          ],
+          "shape": "single"
+        },
+        {
+          "position": [
+            13,
+            2,
+            14
+          ],
+          "shape": "east_side"
+        },
+        {
+          "position": [
+            14,
+            2,
+            14
+          ],
+          "shape": "west_side"
+        },
+        {
+          "position": [
+            17,
+            2,
+            14
+          ],
+          "shape": "single"
+        }
+      ],
+      "chairs": [
+        {
+          "position": [
+            17,
+            2,
+            9
+          ],
+          "facing": "south",
+          "approach": [
+            16,
+            2,
+            9
+          ]
+        },
+        {
+          "position": [
+            17,
+            2,
+            11
+          ],
+          "facing": "north",
+          "approach": [
+            16,
+            2,
+            11
+          ]
+        },
+        {
+          "position": [
+            13,
+            2,
+            13
+          ],
+          "facing": "south",
+          "approach": [
+            14,
+            2,
+            13
+          ]
+        },
+        {
+          "position": [
+            15,
+            2,
+            14
+          ],
+          "facing": "west",
+          "approach": [
+            15,
+            2,
+            13
+          ]
+        },
+        {
+          "position": [
+            16,
+            2,
+            14
+          ],
+          "facing": "east",
+          "approach": [
+            16,
+            2,
+            13
+          ]
+        },
+        {
+          "position": [
+            17,
+            2,
+            13
+          ],
+          "facing": "south",
+          "approach": [
+            16,
+            2,
+            13
+          ]
+        }
+      ],
+      "remove": [
+        [
+          17,
+          3,
+          10
+        ],
+        [
+          13,
+          3,
+          14
+        ],
+        [
+          17,
+          3,
+          14
+        ]
+      ],
+      "diningBounds": {
+        "min": [
+          12,
+          2,
+          8
+        ],
+        "max": [
+          18,
+          4,
+          15
+        ]
+      }
+    }
+  ],
+  "cameras": [
+    {
+      "id": "window-eye",
+      "feet": [
+        15.2,
+        2,
+        10.2
+      ],
+      "target": [
+        17.2,
+        2.6,
+        10.0
+      ]
+    },
+    {
+      "id": "rear-left-eye",
+      "feet": [
+        14.1,
+        2,
+        11.7
+      ],
+      "target": [
+        13.7,
+        2.6,
+        14.3
+      ]
+    },
+    {
+      "id": "rear-right-eye",
+      "feet": [
+        16.2,
+        2,
+        11.5
+      ],
+      "target": [
+        17.2,
+        2.6,
+        14
+      ]
+    }
+  ],
+  "viewCopyOffset": [
+    40,
+    0,
+    0
+  ],
+  "notes": [
+    "User screenshots identify existing window seating, outside current DINING bounds.",
+    "Replace existing mock furniture; do not occupy the cooking aisle.",
+    "Dining bounds here are proposals, not production annotations or NPC seating authority."
+  ]
+}

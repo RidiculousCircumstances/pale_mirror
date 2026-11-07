@@ -1,0 +1,34 @@
+// A consumer of the existing disposable pilot, with no production content changes.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject.findProject(':pale-mirror-neoforge')
+    if (project == null) return
+    def root = gradle.rootProject.projectDir
+    def dependencies = new groovy.json.JsonSlurper().parse(new File(root, 'tools/buildings/handcrafted-kitchen/dependencies.json'))
+    def input = new File(root, 'build/handcrafted-kitchen/dependencies')
+    def template = new File(root, 'pale-mirror-frontier/src/main/resources/io/farfrontier/palemirror/frontier/v3/buildings/medieval_spruce/kitchen.nbt')
+    def clientRun = new File(project.buildDir, 'runs/frontier-v3-pilot-client')
+    def serverRun = new File(project.buildDir, 'runs/frontier-v3-pilot-server')
+    def worldName = project.providers.gradleProperty('frontierV3PilotWorld').orElse('frontier-v3-pilot-world').get()
+    ['prepareFrontierV3PilotClientRun': clientRun, 'prepareFrontierV3PilotServerWorld': serverRun].each { taskName, run ->
+        project.tasks.named(taskName) {
+            doLast {
+                def mods = new File(run, 'mods')
+                mods.mkdirs()
+                dependencies.each { dependency ->
+                    def source = new File(input, dependency.filename)
+                    if (!source.isFile() || java.security.MessageDigest.getInstance('SHA-512').digest(source.bytes).encodeHex().toString() != dependency.sha512) {
+                        throw new GradleException('Missing or changed trial dependency: ' + dependency.name)
+                    }
+                    java.nio.file.Files.copy(source.toPath(), new File(mods, dependency.filename).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                }
+                if (taskName == 'prepareFrontierV3PilotServerWorld') {
+                    def pack = new File(serverRun, worldName + '/datapacks/handcrafted-kitchen-trial')
+                    def structures = new File(pack, 'data/pm_trial/structure')
+                    structures.mkdirs()
+                    new File(pack, 'pack.mcmeta').text = '{"pack":{"pack_format":48,"description":"Private isolated kitchen furniture trial"}}'
+                    java.nio.file.Files.copy(template.toPath(), new File(structures, 'kitchen.nbt').toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+        }
+    }
+}
