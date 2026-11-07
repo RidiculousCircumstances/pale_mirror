@@ -341,7 +341,8 @@ tasks.register('verifyWorkspaceHygiene') {
             path == '.env' || path.startsWith('.env.') || path.startsWith('.gradle/') ||
                     path.startsWith('run/') || path.contains('/runs/') || path.startsWith('build/') ||
                     path.contains('/build/') || path.startsWith('.idea/') ||
-                    (path.endsWith('.jar') && path != 'gradle/wrapper/gradle-wrapper.jar')
+                    (path.endsWith('.jar') && !(path in ['gradle/wrapper/gradle-wrapper.jar',
+                            'tools/vibecraft/client-mod/gradle/wrapper/gradle-wrapper.jar']))
         }
         if (!forbidden.isEmpty()) {
             throw new GradleException("Generated/local workspace state must not be tracked: ${forbidden.join(', ')}")
