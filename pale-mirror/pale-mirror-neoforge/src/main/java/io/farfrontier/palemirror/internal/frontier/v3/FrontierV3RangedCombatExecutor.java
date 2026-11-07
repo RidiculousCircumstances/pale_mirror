@@ -140,7 +140,7 @@ final class FrontierV3RangedCombatExecutor {
         // real weapon can escape through a save/drop and strand strict unload recovery.
         // Keep the ordinary using-item pose; only emit spends the actual pocket arrow.
         if(!actor.isUsingItem())actor.startUsingItem(InteractionHand.MAIN_HAND);
-        return elapsed<RangedMechanics.reloadTicks(shot.actorProfile(),rules)+rules.aimTicks()?FrontierV3NativeEffect.Admission.waiting("crossbow-aim"):FrontierV3NativeEffect.Admission.READY;
+        return elapsed<RangedMechanics.reloadTicks(shot.actorProfile(),rules)+RangedMechanics.aimTicks(shot.actorProfile(),rules)?FrontierV3NativeEffect.Admission.waiting("crossbow-aim"):FrontierV3NativeEffect.Admission.READY;
     }
     private static boolean ammunitionBefore(Mob actor,RangedShot shot){
         var actual=FrontierV3ActorResourceSlots.get(actor,slot(shot.binding().address()));

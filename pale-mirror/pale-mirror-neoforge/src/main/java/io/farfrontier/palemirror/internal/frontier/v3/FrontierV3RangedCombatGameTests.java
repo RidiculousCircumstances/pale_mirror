@@ -58,6 +58,13 @@ public final class FrontierV3RangedCombatGameTests {
     }
     @GameTest(batch="pm-frontier-v3-scene-local-navigation",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
     public static void crossbowEmissionConsumesOneActualPocketArrowAndHitsWithVanillaCollision(GameTestHelper h){
+        preparedEmission(h,100);
+    }
+    @GameTest(batch="pm-frontier-v3-scene-local-navigation",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void untrainedCrossbowKeepsLongerAimBeforeSpendingOneActualArrow(GameTestHelper h){
+        preparedEmission(h,0);
+    }
+    private static void preparedEmission(GameTestHelper h,int crossbowSkill){
         var a=actors(h);var actor=new SubjectId("resident:crossbow-native");var owner=new SubjectId("guard-duty:crossbow-native");
         var execution=new ActorExecutionId(actor,ActorActivityKind.GUARD,owner,1);var permission=new ActorActuationId(new ActorBodyId(actor,1),execution);
         FrontierV3ActorCarrierComposition.stamp(a.shooter(),new FrontierV3ActorCarrierComposition.Declaration(actor,
@@ -68,7 +75,7 @@ public final class FrontierV3RangedCombatGameTests {
         var binding=new PhysicalStackBinding(new SubjectId("binding:crossbow-native"),account,new PhysicalStackAddress.ActorPocket(actor,a.shooter().getUUID(),2),1,"minecraft:arrow",Map.of(lot,2),Map.of());
         var target=new CombatTarget(CombatTarget.Kind.HOSTILE_MOB,a.target().getUUID(),h.getLevel().dimension().location().toString());
         var shot=new RangedShot(permission,CombatMethod.CROSSBOW,1,new SubjectId("item:crossbow-native"),new ItemCondition(465,0),target,1,account,lot,"minecraft:arrow",binding,1,0,new CombatProfile(new CombatAttributes(50,50,50,
-                50,50),Map.of(CombatSkillId.CROSSBOW,50,CombatSkillId.EVASION,0,CombatSkillId.WEAPON_DEFENCE,0)));
+                50,50),Map.of(CombatSkillId.CROSSBOW,crossbowSkill,CombatSkillId.EVASION,0,CombatSkillId.WEAPON_DEFENCE,0)));
         h.assertTrue(a.shooter().getMainHandItem().getMaxDamage()==FrontierRulesets.installed("frontier-v3-ranged-guards-r33").tools().definitions().get("minecraft:crossbow").durability(),
                 "manufactured crossbow profile matches actual native registry durability");
         var rules=new RangedRules(32,64,5,11,22,25,8,12,5,450000,3150000,0,500);
@@ -80,6 +87,8 @@ public final class FrontierV3RangedCombatGameTests {
         h.assertTrue(!FrontierV3RangedCombatExecutor.prepare(h.getLevel(),a.shooter(),a.target(),shot,rules).ready(),"reload begins without spending ammunition");
         assertFacing(h,a.shooter(),a.target().getEyePosition());
         int reload=RangedMechanics.reloadTicks(shot.actorProfile(),rules);
+        int aim=RangedMechanics.aimTicks(shot.actorProfile(),rules);
+        h.assertTrue(crossbowSkill==100?aim<rules.aimTicks():aim>rules.aimTicks(),"fixture exercises skill-adjusted aim on both sides of the baseline");
         h.runAfterDelay(reload+1,()->{
             a.target().setPos(a.target().getX(),a.target().getY(),a.target().getZ()+1);
             var aiming=FrontierV3RangedCombatExecutor.prepare(h.getLevel(),a.shooter(),a.target(),shot,rules);
@@ -93,7 +102,13 @@ public final class FrontierV3RangedCombatGameTests {
             var aimingBody=new net.minecraft.nbt.CompoundTag();a.shooter().saveWithoutId(aimingBody);a.shooter().load(aimingBody);
             h.assertTrue(a.shooter().getInventory().getItem(2).getCount()==2,"native reload during aim preserves the actual pocket arrows");
         });
-        h.runAfterDelay(reload+rules.aimTicks()+2,()->{
+        h.runAfterDelay(reload+aim-2,()->{
+            h.assertTrue(!FrontierV3RangedCombatExecutor.prepare(h.getLevel(),a.shooter(),a.target(),shot,rules).ready(),
+                    "the actor must finish its own skill-adjusted aim before firing");
+            h.assertTrue(a.shooter().getInventory().getItem(2).getCount()==2 && a.shooter().getMainHandItem().getDamageValue()==0,
+                    "unfinished aiming preserves actual ammunition and weapon wear");
+        });
+        h.runAfterDelay(reload+aim+2,()->{
             h.assertTrue(FrontierV3RangedCombatExecutor.prepare(h.getLevel(),a.shooter(),a.target(),shot,rules).ready(),"native actor reload retains the preparation clock and reaches ready");
             h.assertTrue(FrontierV3RangedCombatExecutor.emit(h.getLevel(),a.shooter(),a.target(),shot,rules,pocket)==FrontierV3NativeEffect.Outcome.APPLIED,
                     "launch applies one declared native emission");
