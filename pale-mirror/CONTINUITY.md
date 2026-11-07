@@ -1,8 +1,10 @@
 # Active continuity — 2026-11-07
 
 ## Assignment and authority
-Main alone; no subagents or automatic push. User accepted crossbow repertoire
-progression and ranged tendencies. Implemented, committed and deployed below.
+Main alone; no subagents or automatic push. User requests a knockback kick against enemies closing on the crossbow
+combatant. Implemented, committedb7ae41ae7 and same-world deployed. Uses
+existing KICK at skill20, common contact intent/native journal/cue/receipt;
+no private physical executor, schema change, new skill or COLD fight.
 Skill opens techniques; permanent attributes govern execution; existing personal
 style governs choice. No XP/learning or temporary hunger/injury combat penalties.
 Standing commit/deploy applies. No new goal requested. Canonical AGENTS,
@@ -12,15 +14,41 @@ graphical player-combat, balance, HUMAN_CANDIDATE or M3 claim.
 ## Repositories and ownership
 IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Git root parent,
 branch feat/baker-carry-orders-20260926, source
-6717178bdbb0e690945cf6ad77a95ac2a4068b05. Tracked clean; local untracked
+b7ae41ae7c72a0906b528de6bff1f3c23a861e4d. Tracked clean; local untracked
 `.serena/` retained. RELEASE `/home/rd/proj/pm-r242-economic-release/pale-mirror`
 clean detached same commit. PACK `/home/rd/proj/minecraft` HEAD98a6701 tracked
 clean; unrelated `.f0v-baseline/` retained. Ignored hosted artifacts published;
 no tracked pack edit. Preserve independent histories.
 GOV `/home/rd/proj/pm-governance/pale-mirror` has extensive unrelated WIP.
-This cut owns ONLY CONTINUITY.md, its new progression receipt and the new
-`frontier-v3-ranged-techniques` architecture invariant. Stage that invariant
-against HEAD separately, preserving all other architecture/doc/skill edits.
+This cut owns ONLY CONTINUITY.md, the new crossbow contact-defence receipt and
+the new `frontier-v3-crossbow-contact-defence` architecture invariant. Stage that
+invariant against HEAD separately, preserving all unrelated WIP.
+
+## Contact-defence cut
+Receipt: docs/frontier-v3-crossbow-contact-defence-20261107.md.
+Sourceb7ae41ae7:11files,136add/18remove. Crossbow permission grants only KICK,
+using existing shared skill20 threshold; no sword formation/pursuit/techniques.
+Native adapter emits ordinary weapon/stance facts then common MeleeStrike;
+same durable operation, finite presentation/contact/arc, hurt/knockback and
+no-ammo/no-wear receipt. Arrow preparation/recovery blocks kick; contact
+pending/recovery blocks shooting. Budget counts actual native fighters, not
+COLD ranged orders. Same schema346/r34world can continue; no fresh reset.
+
+54JVM checks PASS (11ranged guard,4tactics,29common combat,10architecture).
+/tmp/pm-crossbow-kick-strikes.log contains that JVM/guardrails/package result;
+its initial unsupported slice name `strikes` failed native startup, so it is
+NOT native evidence despite Gradle0. Corrected `scene-strikes` run:
+/tmp/pm-crossbow-kick-native.log27required native PASS, including actual held
+crossbow,7real pocket arrows, positive native kick knockback, target retreat
+miss, zeroammo/wear, journal one-effect/no-replay. Final bounded-pass accounting
+adjustment followed by /tmp/pm-crossbow-kick-final.log64required local-navigation
+native PASS plus guardrails/JAR/package. It changes only visit accounting;
+prior27contact-effects evidence retained. Clean RELEASE /tmp/pm-crossbow-kick-release.log guardrails/JAR/package PASS. No
+player fight, graphical/movement balance or whole-suite claim.
+Predeployworldtick59590green/331residents, incidentIndex1 already present;
+no required/scene/inventory conflicts. Evidence lives IMPL
+build/crossbow-contact-defence-20261107. Latest same-world deployment identity is below. GOV cut owns new contact-defence invariant/receipt
+and ledger, preserving unrelated WIP and the prior progression invariant.
 
 ## Ranged progression delivery
 Receipt: docs/frontier-v3-ranged-progression-20261107.md.
@@ -50,7 +78,7 @@ second shot with another full reload. No homing, virtual charged arrow,
 projectile recreation or guaranteed hit. Combat trace records pending/last
 technique, attempt and timing; read-only profile inspection lists learned moves.
 
-## Verification and limits
+## Prior progression verification and limits
 IMPL /tmp/pm-ranged-progression-gate.log PASS:31JVM checks (9ranged guard,
 3manufacture,3tactics,6existing style,10architecture),64required native
 local-navigation GameTests, guardrails/style/architecture/debt, JAR/package.
@@ -63,28 +91,29 @@ A read-only learned-move JSON list was added afterward; unchanged native/model
 evidence retained. /tmp/pm-ranged-progression-final.log PASS guardrails/JAR/package.
 Committed identity rebuilt in clean RELEASE: /tmp/pm-ranged-progression-release.log
 PASS guardrails/JAR/package;19guardrails selftests. Native64 not redundantly rerun
-for that independent projection edit. GOV /tmp/pm-ranged-progression-governance.log guardrails PASS.
+for that independent projection edit. Prior GOV /tmp/pm-ranged-progression-governance.log guardrails PASS.
+Contact cut GOV /tmp/pm-crossbow-kick-governance.log guardrails PASS.
 Bounded build/log/pre/post evidence: IMPL build/ranged-progression-20261107.
 No task-owned client/pilot/Xvfb launched; actual player combat and readability
 of each technique still require playtesting. No claim that all old tests pass.
 
 ## Live deployment
 LIVE `/home/rd/far-frontier-server`; servicefar-frontier-v3-live.service ACTIVE,
-wrapperPID2685238, invocationa7184166b1204b2888b63f5bddea178e,
-notBefore1794049502. NEW worldranged-techniques-seed139-20261107, seed139,
+wrapperPID2895085, invocation30f9c1ecceef4a74b58cb43f4971570f,
+notBefore1794052572. SAME worldranged-techniques-seed139-20261107, seed139,
 rulesetr34/schema346. Old funded-caravans-seed139-20261107 preserved on disk.
-RCON stop saved all dimensions16:04:28.661; JVM/service and25565 exited before
-new exact world/config/artifact installation. Fresh datapack copied before
-startup. Clean-source preflight and postverify PASS:
-/tmp/pm-ranged-progression-{preflight,verify}.log. Pack170checksums published.
+RCON stop saved all dimensions16:55:59.464; JVM/service and25565 exited before
+artifact installation. Existing world/datapack/config preserved. Clean-source preflight and postverify PASS:
+/tmp/pm-crossbow-kick-{preflight,verify}.log. Pack170checksums published.
 Core SHA512
-d59a88ee79ee6448b1c3fdd4f7211e6653b80fd8ad075b255cbfa21e4621e1b04f30e6c1737d0cfefa314262d28954b6c3f43ef1c4efa1d7057859911ab9c5ca.
+51e9c1e2e3f2bc1117eb36882e42ed3012a40c67c5c9b37d5b210180d05a698fb31b0a391ba4ff48496c134b4cfa114c4ea7535a54db44a6c8434b5c186d8132.
 Visuals unchanged SHA512
 2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601.
-New-world352and2029summaries green:319residents/12settlements,
-0required/scene/inventory conflicts, incidentIndex0; no new ERROR/quarantine.
-This is startup health, not prolonged economy/armed-guard acceptance. Prior
-world predeploy123935green,336residents, incidentIndex2 retained in evidence.
+Same-world predeploy59590and post-start60967summaries green:331residents,
+12settlements,0required/scene/inventory conflicts. IncidentIndex1 already present
+before restart. No new ERROR/quarantine. This is restart health, not a player
+fight or prolonged economy/balance acceptance. Prior progression world352/2029
+startup and old-world123935 evidence remain under their original build receipts.
 JDK21build `/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2`;
 liveJava22 `/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java`.
 
