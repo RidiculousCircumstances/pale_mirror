@@ -127,8 +127,8 @@
         "status": "ok",
         "incident": {
           "firstRevision": 111289,
-          "lastRevision": 111289,
-          "occurrences": 1,
+          "lastRevision": 136283,
+          "occurrences": 2,
           "diagnostic": {
             "reason": "FRONTIER_KERNEL_DUE_FAILURE",
             "ownerKind": "FRONTIER_INSTANCE",

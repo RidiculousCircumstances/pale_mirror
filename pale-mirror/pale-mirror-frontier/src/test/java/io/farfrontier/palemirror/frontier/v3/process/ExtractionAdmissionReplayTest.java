@@ -13,6 +13,46 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Real opportunity producer, accepted durable proof and the closed runtime's restart wait. */
 class ExtractionAdmissionReplayTest {
+    @Test void toolContactChosenByDiscoverySurvivesBothFollowingLegAndOfferRecovery() {
+        var f=fixture();var state=f.state();var actor=f.start().work().execution().actorId();
+        var resident=state.humanPopulation().resident(actor);
+        var container=CommunalDiningPlan.initialFoodStorage(state.bootstrap(),resident.settlementId());
+        // Existing equipment in an ordinary multi-contact store, like a workshop
+        // output delivered to a pantry; this is only the unit's initial precondition.
+        var reserved=WorkEquipmentClaimComposition.reserved(state);
+        for(var tool:List.copyOf(state.inventory().items().values()))
+            if(tool.economicOwnerId().equals(resident.settlementId())&&tool.itemKind().endsWith("_pickaxe")
+                    &&tool.custody() instanceof InventoryCustody.ContainerSlot&&!reserved.contains(tool.id()))
+                state=state.withInventory(state.inventory().moveObservedItem(tool.id(),tool.custody(),
+                        new InventoryCustody.ContainerSlot(container,state.inventory().firstFreeSlot(container).orElseThrow())));
+        var record=state.inventory().containers().get(container);var policy=record.storage().orElseThrow();
+        var endpoint=policy.endpoint();
+        var knowledge=ResourceStorageNavigation.forEndpoint(state,endpoint).forActor(state,actor);
+        var contacts=ShipmentEndpointComposition.approachStations(state,endpoint,knowledge).stream()
+                .filter(knowledge::clearStation).toList();
+        assertTrue(contacts.size()>1,"the real tool chest has multiple legal floor contacts");
+        var origin=contacts.getFirst();var preferred=contacts.getLast();assertNotEquals(origin,preferred);
+        var inventory=state.inventory();
+        state=state.withInventory(new ExactInventory(ImmutableLookupMap.withEntry(inventory.containers(),container,
+                record.withStorage(new ResourceStoragePolicy(endpoint.withStation(preferred),policy.filter(),policy.priority(),policy.role()))),
+                inventory.items(),inventory.cargo(),inventory.playerItems(),inventory.worldCarrierItems(),inventory.conflicts(),
+                inventory.surfaces(),inventory.economics(),inventory.fungibleResources()));
+        state=state.withActorBody(actor,origin.standingBody());
+        state=state.recordPhysicalDelta(new PhysicalDelta(preferred.support().offset(0,1,0),PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(),Optional.empty(),"test:obstructed-preferred-tool-contact"));
+        var site=f.start().work().siteId();
+        var selected=ExtractionWorkAdmission.opportunity(state,resident,site,f.tick()).orElseThrow();
+        assertEquals(container,selected.tool().source().containerId(),selected.toString());
+        assertNotEquals(preferred,selected.tool().source().station());
+        assertEquals(selected.tool().source().station(),selected.sourceRoute().orElseThrow().route().getFirst());
+        var offered=ExtractionWorkAdmission.offer(state,resident,site,selected).execution();
+        assertEquals(selected.tool().source(),offered.work().toolSource());
+        assertEquals(selected.tool().source().station(),offered.toolRoute().map(receipt->receipt.route().getLast()).orElse(origin));
+        var admitted=ExtractionWorkAdmission.start(state,offered,f.tick());
+        var codec=new FrontierWorldStateCodec();var recovered=codec.decode(codec.encode(admitted));
+        assertEquals(offered.work(),recovered.extractionSites().work().get(offered.work().id()));
+        assertEquals(state.inventory(),recovered.inventory());
+    }
     @Test void suspendedMinerCanEatThenResumeTheSameWorkAndRejectForeignCheckpointEvidence() throws Exception {
         var f = fixture();
         var state = ExtractionWorkAdmission.start(f.state(), f.start(), f.tick());

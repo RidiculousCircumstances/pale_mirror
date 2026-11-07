@@ -34,8 +34,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
                 .map(cell -> cell.definition().toolRequirement()).collect(java.util.stream.Collectors.toSet()));
         if (selectedTool.isEmpty()) return Optional.empty();
         var tool = selectedTool.orElseThrow();
-        var slot = (InventoryCustody.ContainerSlot) tool.item().custody();
-        var source = state.inventory().containers().get(slot.containerId()).storage().orElseThrow().endpoint();
+        var source = tool.source();
         var knowledge = sourceKnowledge(state, source, resident.id());
         while (!cells.isEmpty()) {
             var candidate = ExtractionWorkTargets.spatialSelection(state, deposit, resident.id(), cells,
@@ -75,7 +74,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         long ordinal = state.extractionSites().nextWorkOrdinal();
         var id = new SubjectId("work:extraction-" + ordinal);
         var toolSlot = (InventoryCustody.ContainerSlot) item.custody();
-        var source = state.inventory().containers().get(toolSlot.containerId()).storage().orElseThrow().endpoint();
+        var source = selected.tool().source();
         var deposit = state.extractionSites().deposits().get(siteId);
         var output = selected.cell().definition().coldOutput().getFirst();
         var job = new ExtractionWork(id, siteId, new ActorExecutionId(resident.id(), ActorActivityKind.EXTRACTION, id,
