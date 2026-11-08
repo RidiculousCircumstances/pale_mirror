@@ -1,0 +1,154 @@
+{
+  "schema": 1,
+  "date": "2026-11-08",
+  "status": "implemented_verified_and_deployed",
+  "source": {
+    "releaseCommit": "9dc85ab78cba226442202ec90e8eaddcdd593a71",
+    "privateMaximumLevelCheckpoint": "744e21ed4c79ba1937e7b07704850d10083d2ad9",
+    "preflightOnlyFollowupCommit": "90eb443cc4865ea9eb197f1bedcafd26798d18dc",
+    "implementation": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror",
+    "cleanDetachedRelease": "/home/rd/proj/pm-northwatch-living-release-20261108/pale-mirror",
+    "sourceTree": "6949819cd55f08b629b7ef2456c94b997cbd0716",
+    "gameplayJarEquivalence": "all classes/gameplay resources identical to verified implementation JAR; clean provenance entry alone differs"
+  },
+  "changes": {
+    "buildings": "Northwatch uses pinned MineColonies MedievalSpruce actual maximum level5 assets. Kitchen source audit separates original furnishing from PM additions. Removed own clutter and indoor campfires/pit; retained original structural/storage declarations and reviewed Handcrafted furniture. No carving or weakened compiler constraints.",
+    "meals": "Six explicit exclusive seats, ordinary food pickup, common entrance/navigation, real native passenger seating, finite eating interval, visible actual food, joint exit/once-only portion consumption, exact applied-operation recovery and unused-seat reselection.",
+    "routines": "Optional stroll/look-around/greet/stretch for idle nourished unassigned residents. Existing shared execution/body/navigation owners. Work/food/safety/care take priority; no invented conversation outcome. Per-person bounded row; active limit12, admission every20 native ticks, max16 candidate visits and one proposal per cadence.",
+    "connectedRepairs": [
+      "Clinical treatment may use legal adjacent ground beside either retained bed half, excluding both bed columns; actual range/LOS and bandage preimages remain mandatory.",
+      "Fresh cultivation re-evaluation uses current market instant, retaining the cached domestic forecast date/expiry and strict nutrition monotonicity. Old deployed crash reproduced before repair."
+    ]
+  },
+  "verification": {
+    "connectedGate": {
+      "log": "/tmp/pm-northwatch-connected-final-gate.log",
+      "status": "PASS",
+      "focusedJvm": 58,
+      "nativeRequiredPassed": 479,
+      "nativeRequiredFailed": 0,
+      "includes": "guardrails, architecture debt checks, packaged JAR; actual sleeping-bed foot contact and LOS wall refusal"
+    },
+    "economicRepair": {
+      "log": "/tmp/pm-northwatch-economic-clock-final.log",
+      "status": "PASS",
+      "focusedJvm": 39,
+      "redReproducer": "/tmp/pm-northwatch-economic-clock-regression-red-2.log",
+      "scope": "current cultivation instant, retained domestic identity/expiry, stale time refusal, consent/input/expiry/publication guards"
+    },
+    "nativeDining": {
+      "fullPack": "build/northwatch-seated-dining/pilot-7d-fullpack.json",
+      "removedChairAndGracefulMidSeatRestart": "build/northwatch-seated-dining/pilot-9-removed-chair.json",
+      "scope": "actual approach/passenger/table facing/visible food/terminal nutrition, exact portion debits and exclusive claims; deleted reserved chair reselects, graceful persistent-client restart"
+    },
+    "nativeRoutines": {
+      "fullPack": "build/northwatch-living-routines/pilot-7-fullpack-human.json",
+      "ordinaryAndRestart": "build/northwatch-living-routines/pilot-3.json",
+      "scope": "actual common stroll arrival/pause/closure, HumanEra gesture motion/frame, priority transition to real food, persistent-client graceful restart, terminal meals"
+    },
+    "nativeAfternath": {
+      "manifest": "build/northwatch-living-routines/pilot-aftermath-final-2.json",
+      "status": "PASS",
+      "runId": "e5f8f490-64e4-4e36-9303-739f37bd0119",
+      "scope": "exact source/cell pending -> graceful persistent-client restart -> retained pending -> first physical visit and REALIZED/AIR terminal"
+    },
+    "performance": {
+      "jfr": "build/profiles/northwatch-routines-fullpack-6.jfr",
+      "rollup": "build/northwatch-living-routines/fullpack6-performance-rollup.json",
+      "seconds": 139.4,
+      "minecraftOneSecondAverageSamples": 138,
+      "medianOfAveragesMs": 2.771971,
+      "p95OfAveragesMs": 6.80189,
+      "maximumOneSecondAverageMs": 32.395866,
+      "serverExecutionSamples": 2013,
+      "inclusiveRoutineSamples": 1,
+      "limits": "These are percentiles of one-second tick averages, not individual-tick percentiles or measured incremental overhead. One bounded observed cohort; no multiplayer/100-city/zero-lag claim."
+    },
+    "knownBaseline": {
+      "comparison": "build/northwatch-living-routines/integration-baseline-comparison.json",
+      "wholeCheckStatus": "FAILED, not relabelled green",
+      "classifiedOldJvmFailures": 26,
+      "cleanBaselineCommit": "1a23b162951cde3a60315c8c69692b7819fb8710",
+      "finalNode": {
+        "tests": 374,
+        "passed": 370,
+        "failed": 4,
+        "failures": "all four reproduced on clean baseline; three new exact aftermath-pin failures repaired with 7/7 targeted PASS"
+      },
+      "limits": "No whole-suite green, blanket M3, co-op or long-term balance claim."
+    },
+    "detachedRelease": {
+      "log": "/tmp/pm-northwatch-living-detached-release.log",
+      "status": "PASS",
+      "scope": "guardrails/build/package, exact clean detached source and explicit companion pack catalog; unchanged authentic-reference mechanism/input evidence retained"
+    }
+  },
+  "deployment": {
+    "runtime": "/home/rd/far-frontier-server",
+    "world": "northwatch-max-living-seed139-20261108",
+    "seed": 139,
+    "ruleset": "frontier-v3-living-residents-r36",
+    "stateSchema": 350,
+    "networkProtocol": 9,
+    "oldWorldPreserved": "handcrafted-kitchen-seed139-20261108",
+    "service": "far-frontier-v3-live.service",
+    "wrapperPid": 725201,
+    "javaPid": 725226,
+    "invocation": "29fa292e46634d93a9b180a5be248be5",
+    "notBefore": 1794113558,
+    "java": "/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java",
+    "port": 25565,
+    "coreSha512": "4e1ecde0a17661fd6b3aea350c0e399bcfaf0a0a996ba81f864ae1e975040529c160d4e11ca8da0d750b5152ec542d70a534d8cdd04060e13f84d9d3c423df30",
+    "visualsSha512": "2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601",
+    "rootGates": "172 index checksums, manifest validation, clean detached preflight, root publisher, HTTP checksum, checksum-pinned scoped installer, final post-start verifier PASS",
+    "finalVerifier": "/tmp/pm-northwatch-living-deploy-verify-final.log",
+    "summary": {
+      "instant": 8376,
+      "revision": 9764,
+      "diagnosticVerdict": "green",
+      "requiredConflicts": 0,
+      "sceneConflicts": 0,
+      "inventoryConflicts": 0,
+      "incidentIndexSize": 0,
+      "preparingReplicaScopes": 0
+    },
+    "actualSeedQuery": "Seed: [139]",
+    "clientAction": "Run the ordinary client updater before connecting; network protocol changed. User profile/process left unchanged."
+  },
+  "liveGraphicalPreflight": {
+    "manifest": "build/northwatch-living-routines/live-fullpack-ordinary-final.json",
+    "log": "/tmp/pm-northwatch-living-live-fullpack-ordinary.log",
+    "runId": "8a965244-c15b-4790-9fcf-03213243823d",
+    "status": "PASS",
+    "scope": "ordinary creative full-pack client PMAudit; actual loader inventory and managed human resident resources; active/acquired pantry with eligible observer; actual compiled chair/table section and two inspected real client images; final summary green",
+    "limits": "Live preflight establishes scoped furniture/rendering/operational compatibility. Complete meal/routine/restart stories are the dependency-valid native receipts above, not a fabricated live banquet or blanket human M3.",
+    "mcpScan": {
+      "status": "PASS",
+      "source": "actual connected VibeCraft MCP scan_region",
+      "chairs": 6,
+      "tables": 5,
+      "campfires": 0,
+      "bounds": {
+        "from": [
+          -1457,
+          63,
+          -1432
+        ],
+        "to": [
+          -1429,
+          83,
+          -1401
+        ]
+      }
+    },
+    "initialVisualAttempt": "Spectator snapshot was rejected after manual review: it did not activate resident scene, images incomplete. Corrected to ordinary creative visitor and actual custody/rendering readiness; no production change or false visual acceptance.",
+    "cleanup": "Task-owned client/private display/bridge closed; 18766 and25599 closed. Live25565 remains active."
+  },
+  "repositoryState": {
+    "implementation": "tracked clean after source and preflight-only followup; unrelated .serena retained",
+    "release": "clean detached at exact deployed source",
+    "pack": "909c26c tracked clean, unrelated .f0v-baseline retained; hosted artifacts are ignored installer-owned outputs",
+    "governance": "own boundary declarations commit8ae4e9abd; existing unrelated governance WIP preserved; sole active ledger updated",
+    "push": false
+  }
+}
