@@ -160,7 +160,12 @@ def build(spec,source,out):
   expected=edit['before']
   if before != (expected['Name'],expected.get('Properties',{})) and not (before is None and expected=={'Name':'minecraft:air'}):
    raise ValueError('replacement source mismatch at '+str(pos)+': '+str(before))
-  if pos in data:raise ValueError('replacement would discard visual payload at '+str(pos))
+  visual_hash=edit.get('beforeVisualSha256')
+  if pos in data:
+   _,kind,_,payload=data[pos]
+   if kind!=2 or edit.get('after') is not None or visual_hash!=hashlib.sha256(payload.snbt().encode()).hexdigest():
+    raise ValueError('replacement would discard unreviewed visual payload at '+str(pos))
+  elif visual_hash is not None:raise ValueError('missing pinned visual payload at '+str(pos))
   after=edit.get('after')
   if after is None:cells.pop(pos,None)
   else:cells[pos]=(after['Name'],after.get('Properties',{}))
@@ -207,7 +212,7 @@ def build(spec,source,out):
   prop['bed.'+bid+'.recoveryPermille']='5000' if medical else '3000'
  prop['beds']=','.join(beds)
  if spec.get('seats'):
-  prop['format']='5';prop['seats']=','.join(seat['id'] for seat in spec['seats'])
+  prop['format']='6' if any(seat.get('table')=='none' for seat in spec['seats']) else '5';prop['seats']=','.join(seat['id'] for seat in spec['seats'])
   for seat in spec['seats']:
    for key,value in seat.items():
     if key!='id':prop['seat.'+seat['id']+'.'+key]=','.join(map(str,point(value))) if isinstance(value,list) else value

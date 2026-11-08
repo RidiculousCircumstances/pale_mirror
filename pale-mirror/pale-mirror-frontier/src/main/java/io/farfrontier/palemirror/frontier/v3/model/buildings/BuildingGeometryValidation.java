@@ -37,6 +37,16 @@ public final class BuildingGeometryValidation {
             if (zone.use() == BuildingDefinition.ZoneUse.EQUIPMENT)
                 requireClearVolume(fabricCollision, zone.volume(), "equipment zone:" + zone.id());
         var start = new SurfaceAnchor(definition.primaryEntranceDefinition().supports().getFirst());
+        for (var seat : definition.seats().values()) {
+            for (var point : List.of(seat.approach(), seat.egress())) {
+                var goal = new SurfaceAnchor(point);
+                if (!geometry.clearStation(goal))
+                    throw new IllegalArgumentException("blocked seat contact " + seat.id() + " at " + point);
+                KnownPedestrianNavigation.route(geometry, start,
+                        new MovementOrder(identity, identity, 0, 1, List.of(goal),
+                                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION));
+            }
+        }
         for (var work : definition.workplaces().values())
             for (var point : List.of(work.input(), work.worker())) {
                 var goal = new SurfaceAnchor(point);

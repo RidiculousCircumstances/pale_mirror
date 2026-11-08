@@ -64,7 +64,7 @@ public final class BuildingDefinitionFormat {
             String sha256) {
         var r = new Reader(source);
         int format = r.integer("format");
-        if (format != 4 && format != 5)
+        if (format != 4 && format != 5 && format != 6)
             throw new IllegalArgumentException("unsupported building markup format");
         var id = new BuildingTemplateId(r.take("id"));
         int version = r.integer("version");
@@ -142,11 +142,15 @@ public final class BuildingDefinitionFormat {
             beds.put(name,new BuildingDefinition.Bed(name,point(r.take(key+".head")),point(r.take(key+".foot")),profile));
         }
         var seats = new LinkedHashMap<String, BuildingSeat>();
-        if (format == 5) for (var name : r.names("seats")) {
+        if (format >= 5) for (var name : r.names("seats")) {
             var key = "seat." + name;
-            seats.put(name, new BuildingSeat(name, r.take(key + ".zone"),
-                    BuildingSeat.Kind.valueOf(r.take(key + ".kind")), r.take(key + ".chairBlock"), r.take(key + ".tableBlock"),
-                    point(r.take(key + ".chair")), point(r.take(key + ".table")),
+            var zone = r.take(key + ".zone"); var kind = BuildingSeat.Kind.valueOf(r.take(key + ".kind"));
+            var chairBlock = r.take(key + ".chairBlock"); var chair = point(r.take(key + ".chair"));
+            var tableBlock = r.take(key + ".tableBlock"); var tablePoint = r.take(key + ".table");
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.seating.SeatTable> table;
+            if (format == 6 && tablePoint.equals("none") && tableBlock.equals("none")) table = java.util.Optional.empty();
+            else table = java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.seating.SeatTable(tableBlock, point(tablePoint)));
+            seats.put(name, new BuildingSeat(name, zone, kind, chairBlock, chair, table,
                     point(r.take(key + ".approach")), point(r.take(key + ".egress")),
                     FacilityFacing.valueOf(r.take(key + ".facing"))));
         }

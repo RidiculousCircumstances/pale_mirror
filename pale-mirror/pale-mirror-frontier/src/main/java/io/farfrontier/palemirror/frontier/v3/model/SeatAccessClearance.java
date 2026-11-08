@@ -17,7 +17,8 @@ public final class SeatAccessClearance {
                 for (var declaration : building.definition().seats().values()) {
                     var place = SeatPlace.authored(home.id(), building, declaration);
                     contacts.add(place.approach()); contacts.add(place.egress());
-                    contacts.add(new SurfaceAnchor(place.chair())); contacts.add(new SurfaceAnchor(place.table()));
+                    contacts.add(new SurfaceAnchor(place.chair()));
+                    place.table().ifPresent(table -> contacts.add(new SurfaceAnchor(table.position())));
                 }
             return Set.copyOf(contacts);
         }).contains(surface);

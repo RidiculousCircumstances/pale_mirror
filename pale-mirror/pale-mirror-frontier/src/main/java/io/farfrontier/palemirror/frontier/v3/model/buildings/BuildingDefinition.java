@@ -194,15 +194,17 @@ public record BuildingDefinition(
         seats = ordered(seats, 64);
         blocks = Map.copyOf(blocks);
         var seatCells = new HashSet<BlockPosition>();
+        var seatBlocks = blocks;
         for (var entry : seats.entrySet()) {
             var seat = entry.getValue();
             var chair = blocks.get(seat.chair());
-            var table = blocks.get(seat.table());
             var zone = zones.get(seat.zoneId());
             if (!entry.getKey().equals(seat.id()) || !seatCells.add(seat.chair())
                     || chair == null || !chair.state().kind().equals(seat.chairBlock())
                     || !seat.facing().name().toLowerCase(Locale.ROOT).equals(chair.state().properties().get("facing"))
-                    || table == null || !table.state().kind().equals(seat.tableBlock())
+                    || seat.table().filter(table -> !seatBlocks.containsKey(table.position())
+                            || !seatBlocks.get(table.position()).state().kind().equals(table.block())).isPresent()
+                    || zone != null && zone.use() == ZoneUse.DINING && seat.table().isEmpty()
                     || zone == null || (zone.use() != ZoneUse.DINING && zone.use() != ZoneUse.REST) || !zone.volume().contains(seat.chair())
                     || !parcel.contains(seat.approach()) || !parcel.contains(seat.egress()))
                 throw new IllegalArgumentException("invalid authored seating declaration " + entry.getKey());

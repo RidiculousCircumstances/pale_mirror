@@ -51,15 +51,16 @@ final class FrontierV3HandcraftedSeating implements FrontierV3SeatProvider {
                 && FrontierV3SupportedBodyCapture.observe((ServerLevel) actor.level(), actor).filter(use.place().contact().standingBody()::equals).isPresent();
     }
     public Optional<Boolean> available(ServerLevel level, SeatPlace place, Mob actor) {
-        if (!FrontierV3LoadedWorld.ready(level, pos(place.chair())) || !FrontierV3LoadedWorld.ready(level, pos(place.table()))) return Optional.empty();
+        if (!FrontierV3LoadedWorld.ready(level, pos(place.chair())) || place.table().filter(table -> !FrontierV3LoadedWorld.ready(level, pos(table.position()))).isPresent()) return Optional.empty();
         return Optional.of(furniturePresent(level, place) && level.getEntitiesOfClass(earth.terrarium.handcrafted.common.entities.Seat.class,
                 new AABB(pos(place.chair())), other -> !other.hasPassenger(actor) && !other.getPassengers().isEmpty()).isEmpty());
     }
     public boolean furniturePresent(ServerLevel level, SeatPlace place) {
-        var chair = pos(place.chair()); var table = pos(place.table());
-        return FrontierV3LoadedWorld.ready(level, chair) && FrontierV3LoadedWorld.ready(level, table)
+        var chair = pos(place.chair());
+        return FrontierV3LoadedWorld.ready(level, chair)
+                && place.table().map(table -> FrontierV3LoadedWorld.ready(level, pos(table.position()))
+                        && BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos(table.position())).getBlock()).toString().equals(table.block())).orElse(true)
                 && BuiltInRegistries.BLOCK.getKey(level.getBlockState(chair).getBlock()).toString().equals(place.chairBlock())
-                && BuiltInRegistries.BLOCK.getKey(level.getBlockState(table).getBlock()).toString().equals(place.tableBlock())
                 && level.getBlockState(chair).hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING)
                 && level.getBlockState(chair).getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING)
                         .getName().equals(place.facing().name().toLowerCase(java.util.Locale.ROOT));

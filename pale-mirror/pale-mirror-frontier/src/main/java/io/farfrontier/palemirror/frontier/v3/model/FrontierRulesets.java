@@ -69,6 +69,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset CLINICAL_CARE = GrayboxClinicalContent.extend(RANGED_GUARDS);
     private static final FrontierRuleset LIVING_RESIDENTS = livingResidents(CLINICAL_CARE, false);
     private static final FrontierRuleset LEISURE_SEATS = livingResidents(CLINICAL_CARE, true);
+    private static final FrontierRuleset FURNISHED_RESTAURANT = furnishedRestaurant(LEISURE_SEATS);
     private static final FrontierRuleset SIMULATION_SCALE = GrayboxSimulationProfiles.scale(DEMAND_DRIVEN_WOOD_GRAYBOX);
     private static final FrontierRuleset SIMULATION_SCALE_FIFTY = GrayboxSimulationProfiles.scaleFifty(DEMAND_DRIVEN_WOOD_GRAYBOX);
     /** New-world startup references match current recipes; historical profiles stay immutable. */
@@ -82,6 +83,14 @@ public final class FrontierRulesets {
                 base.combat(),base.hiveCommand(),base.residentLife().withRoutines(routines),
                 base.resourceHarvestColdTravelTicksPerEdge(),base.workCatalog(),base.goodsTrade(),base.initialSettlementStocks(),base.labour(),base.expedition(),base.extraction(),
                 base.execution(),base.production(),base.fields(),base.tools(),layout,base.forestry(),base.security(),base.ranged(),base.clinical());
+    }
+    private static FrontierRuleset furnishedRestaurant(FrontierRuleset base) {
+        var layout = base.worldLayout().withSettlementStyle(
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("settlement:1"),
+                new io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingStyleId("pale_mirror:medieval_spruce_furnished"));
+        return new FrontierRuleset("frontier-v3-furnished-restaurant-r38", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(), base.facilityCapacity(),
+                base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(), base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(), base.extraction(),
+                base.execution(), base.production(), base.fields(), base.tools(), layout, base.forestry(), base.security(), base.ranged(), base.clinical());
     }
     private static FrontierRuleset operatingPrices(FrontierRuleset base) {
         var trade = base.goodsTrade().withPriceSeeds(GoodsPolicyKind.PUBLIC_SETTLEMENT,
@@ -119,6 +128,7 @@ public final class FrontierRulesets {
             Map.entry(CLINICAL_CARE.id(), CLINICAL_CARE),
             Map.entry(LIVING_RESIDENTS.id(), LIVING_RESIDENTS),
             Map.entry(LEISURE_SEATS.id(), LEISURE_SEATS),
+            Map.entry(FURNISHED_RESTAURANT.id(), FURNISHED_RESTAURANT),
             Map.entry(SIMULATION_BASELINE.id(), SIMULATION_BASELINE),
             Map.entry(SIMULATION_TERRAIN.id(), SIMULATION_TERRAIN),
             Map.entry(SIMULATION_SCALE.id(), SIMULATION_SCALE),

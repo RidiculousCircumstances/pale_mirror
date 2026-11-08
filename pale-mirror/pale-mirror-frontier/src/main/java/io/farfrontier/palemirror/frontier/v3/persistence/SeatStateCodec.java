@@ -12,14 +12,22 @@ import static io.farfrontier.palemirror.frontier.v3.persistence.CombatWire.*;
 final class SeatStateCodec {
     static void place(DataOutputStream out, SeatPlace value) throws IOException {
         id(out, value.id().buildingId()); out.writeUTF(value.id().localId()); id(out, value.home());
-        out.writeByte(value.kind().wireTag()); out.writeUTF(value.chairBlock()); out.writeUTF(value.tableBlock());
-        FrontierWorldStateCodec.writePosition(out, value.chair()); FrontierWorldStateCodec.writePosition(out, value.table());
+        out.writeByte(value.kind().wireTag()); out.writeUTF(value.chairBlock());
+        FrontierWorldStateCodec.writePosition(out, value.chair()); out.writeBoolean(value.table().isPresent());
+        if (value.table().isPresent()) {
+            out.writeUTF(value.table().orElseThrow().block());
+            FrontierWorldStateCodec.writePosition(out, value.table().orElseThrow().position());
+        }
         FrontierWorldStateCodec.writePosition(out, value.approach().support()); FrontierWorldStateCodec.writePosition(out, value.egress().support());
         out.writeUTF(value.facing().name());
     }
     static SeatPlace place(DataInputStream in) throws IOException {
-        return new SeatPlace(new SeatPlace.Id(id(in), in.readUTF()), id(in), BuildingSeat.Kind.fromWireTag(in.readUnsignedByte()),
-                in.readUTF(), in.readUTF(), FrontierWorldStateCodec.readPosition(in), FrontierWorldStateCodec.readPosition(in),
+        var id = new SeatPlace.Id(id(in), in.readUTF()); var home = id(in);
+        var kind = BuildingSeat.Kind.fromWireTag(in.readUnsignedByte()); var chairBlock = in.readUTF();
+        var chair = FrontierWorldStateCodec.readPosition(in);
+        var table = in.readBoolean() ? Optional.of(new SeatTable(in.readUTF(), FrontierWorldStateCodec.readPosition(in)))
+                : Optional.<SeatTable>empty();
+        return new SeatPlace(id, home, kind, chairBlock, chair, table,
                 new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
                 FacilityFacing.valueOf(in.readUTF()));
     }

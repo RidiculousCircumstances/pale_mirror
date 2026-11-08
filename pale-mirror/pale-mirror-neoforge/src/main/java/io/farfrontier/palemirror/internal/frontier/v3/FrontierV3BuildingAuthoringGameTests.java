@@ -14,6 +14,37 @@ import java.nio.file.*;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3BuildingAuthoringGameTests {
     @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
+    public static void furnishedRestaurantFurnitureSettlesInAllRotations(GameTestHelper helper) {
+        var definition=BuildingCatalog.standard().require(new BuildingTemplateId("pale_mirror:medieval_spruce/kitchen_furnished_5"));
+        var furniture=definition.blocks().entrySet().stream().filter(e->e.getValue().state().kind().startsWith("handcrafted:")).toList();
+        helper.assertTrue(furniture.size()==44,"28 seats and 16 table sections are explicit authored furniture");
+        var level=helper.getLevel();var origin=helper.absolutePos(new net.minecraft.core.BlockPos(16,5,16));
+        for(int turn=0;turn<4;turn++) {
+            var placement=new BuildingPlacement(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(origin.getX(),origin.getY(),origin.getZ()),
+                    new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(12,2,13),
+                    io.farfrontier.palemirror.frontier.v3.model.FacilityFacing.SOUTH,
+                    io.farfrontier.palemirror.frontier.v3.model.FacilityFacing.values()[turn]);
+            helper.runAfterDelay(turn*4,()-> {
+                for(int x=-12;x<=12;x++)for(int z=-12;z<=12;z++)for(int y=-1;y<=5;y++)
+                    level.setBlock(origin.offset(x,y,z),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),3);
+                for(var entry:furniture) {
+                    var p=placement.world(entry.getKey());var at=new net.minecraft.core.BlockPos(p.x(),p.y(),p.z());
+                    level.setBlock(at.below(),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),3);
+                    level.setBlock(at,FrontierV3BlockStates.resolve(placement.state(entry.getValue().state())),3);
+                }
+                helper.runAfterDelay(2,()-> {
+                    for(var entry:furniture) {
+                        var p=placement.world(entry.getKey());
+                        var actual=FrontierV3BlockStates.describe(level.getBlockState(new net.minecraft.core.BlockPos(p.x(),p.y(),p.z())));
+                        helper.assertTrue(placement.state(entry.getValue().state()).equals(actual),
+                                "restaurant furniture neighbour shape "+entry.getKey()+" expected="+placement.state(entry.getValue().state())+" actual="+actual);
+                    }
+                });
+            });
+        }
+        helper.runAfterDelay(16,helper::succeed);
+    }
+    @GameTest(batch="pm-frontier-v3-building-authoring",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=100)
     public static void maximumKitchenFurnitureRetainsItsActualNeighbourShapeInAllRotations(GameTestHelper helper) {
         var definition = BuildingCatalog.standard().require(new BuildingTemplateId("pale_mirror:medieval_spruce/kitchen_leisure_5"));
         var furniture = definition.blocks().entrySet().stream()

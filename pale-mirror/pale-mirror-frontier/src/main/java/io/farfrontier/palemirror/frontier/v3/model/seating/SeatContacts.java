@@ -59,7 +59,8 @@ public final class SeatContacts {
     public enum FurnitureKnowledge { PRESENT, MISSING, UNKNOWN }
     public static FurnitureKnowledge furnitureKnowledge(FrontierWorldState state, SeatPlace place) {
         var chair = furnitureCell(state, place.chair(), place.chairBlock(), Optional.of(place.facing()));
-        var table = furnitureCell(state, place.table(), place.tableBlock(), Optional.empty());
+        var table = place.table().map(contact -> furnitureCell(state, contact.position(), contact.block(), Optional.empty()))
+                .orElse(FurnitureKnowledge.PRESENT);
         if (chair == FurnitureKnowledge.MISSING || table == FurnitureKnowledge.MISSING) return FurnitureKnowledge.MISSING;
         return chair == FurnitureKnowledge.UNKNOWN || table == FurnitureKnowledge.UNKNOWN ? FurnitureKnowledge.UNKNOWN : FurnitureKnowledge.PRESENT;
     }

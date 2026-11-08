@@ -177,3 +177,16 @@ and captures Minecraft images. Its optional scenario argument selects the focuse
 are preserved in the evidence directory because export deliberately refuses to
 overwrite them. A source/cached geometry pass is not visual or resident dining
 acceptance. NPC seat assignment and table meals are a separate implementation.
+
+## Functional restaurant furniture
+
+`restaurant_sources.json` pins the independent `kitchen_furnished_5` derivative.
+The r38 Northwatch style selects it without changing r37 assets. Its 28 seats
+comprise 16 dining chairs and 12 rest places (chairs and bench sections). Real
+staircases remain source stairs. Markup6 requires an explicit `table=none` and
+`tableBlock=none` for tableless REST seats; DINING seats require a declared table.
+Native geometry validation checks connected clear approaches and egresses.
+Reviewed removal of an armrest sign requires its exact source block and SHA256
+of the typed visual SNBT payload; an absent or changed payload fails import.
+Schema352 persists table presence explicitly; schema351 saves require a fresh
+world, with no inferred or heuristic conversion.

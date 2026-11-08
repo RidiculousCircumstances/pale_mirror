@@ -1,0 +1,2394 @@
+[
+  {
+    "name": "kitchen_furnished_5",
+    "kind": "KITCHEN",
+    "source": "fundamentals/cook5.blueprint",
+    "sha256": "7bba96e2b6c85e4f7559eef0e00b03deb9e04674b9939aa96dc51821559dfc00",
+    "floor": 1,
+    "door": [
+      11,
+      13
+    ],
+    "secondaryDoor": [
+      12,
+      13
+    ],
+    "front": "SOUTH",
+    "anchors": {},
+    "zones": [
+      {
+        "id": "pantry",
+        "use": "STORAGE",
+        "min": [
+          4,
+          2,
+          4
+        ],
+        "max": [
+          5,
+          4,
+          7
+        ],
+        "priority": 100,
+        "categories": [
+          "pale_mirror:food"
+        ]
+      },
+      {
+        "id": "dining",
+        "use": "DINING",
+        "min": [
+          14,
+          2,
+          10
+        ],
+        "max": [
+          21,
+          4,
+          19
+        ]
+      },
+      {
+        "id": "rest",
+        "use": "REST",
+        "min": [
+          7,
+          2,
+          9
+        ],
+        "max": [
+          9,
+          4,
+          11
+        ]
+      },
+      {
+        "id": "lounge",
+        "use": "REST",
+        "min": [
+          10,
+          2,
+          6
+        ],
+        "max": [
+          18,
+          4,
+          12
+        ]
+      },
+      {
+        "id": "terrace",
+        "use": "DINING",
+        "min": [
+          14,
+          2,
+          18
+        ],
+        "max": [
+          19,
+          4,
+          22
+        ]
+      },
+      {
+        "id": "upper_dining",
+        "use": "DINING",
+        "min": [
+          2,
+          6,
+          6
+        ],
+        "max": [
+          11,
+          8,
+          22
+        ]
+      },
+      {
+        "id": "upper_rest",
+        "use": "REST",
+        "min": [
+          2,
+          6,
+          2
+        ],
+        "max": [
+          24,
+          8,
+          23
+        ]
+      }
+    ],
+    "groundY": 1,
+    "excavations": [],
+    "replacements": [
+      {
+        "position": [
+          13,
+          1,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "signal_fire": "false",
+            "lit": "true",
+            "facing": "east"
+          },
+          "Name": "minecraft:campfire"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          14,
+          1,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "signal_fire": "false",
+            "lit": "true",
+            "facing": "east"
+          },
+          "Name": "minecraft:campfire"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          5,
+          2,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "signal_fire": "true",
+            "lit": "true",
+            "facing": "west"
+          },
+          "Name": "minecraft:campfire"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          21,
+          6,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "signal_fire": "true",
+            "lit": "true",
+            "facing": "north"
+          },
+          "Name": "minecraft:campfire"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          12,
+          1,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "inner_left",
+            "facing": "north"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          12,
+          1,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "west"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          12,
+          1,
+          10
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "inner_left",
+            "facing": "west"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          13,
+          1,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          13,
+          1,
+          10
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          14,
+          1,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          14,
+          1,
+          10
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          15,
+          1,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "inner_right",
+            "facing": "north"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          15,
+          1,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          15,
+          1,
+          10
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "inner_left",
+            "facing": "south"
+          },
+          "Name": "minecraft:stone_brick_stairs"
+        },
+        "after": {
+          "Name": "minecraft:stone_bricks"
+        }
+      },
+      {
+        "position": [
+          19,
+          2,
+          12
+        ],
+        "before": {
+          "Properties": {
+            "east": "true",
+            "waterlogged": "false",
+            "south": "false",
+            "north": "false",
+            "west": "false"
+          },
+          "Name": "minecraft:spruce_fence"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "single"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          3,
+          12
+        ],
+        "before": {
+          "Properties": {
+            "powered": "false"
+          },
+          "Name": "minecraft:spruce_pressure_plate"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          19,
+          2,
+          11
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          2,
+          13
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "north"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          2,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "east": "true",
+            "waterlogged": "false",
+            "south": "false",
+            "north": "false",
+            "west": "false"
+          },
+          "Name": "minecraft:spruce_fence"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "single"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          3,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "powered": "false"
+          },
+          "Name": "minecraft:spruce_pressure_plate"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          19,
+          2,
+          15
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          2,
+          17
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "north"
+          }
+        }
+      },
+      {
+        "position": [
+          15,
+          2,
+          17
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "type": "top"
+          },
+          "Name": "minecraft:spruce_slab"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "east_side"
+          }
+        }
+      },
+      {
+        "position": [
+          16,
+          2,
+          17
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "type": "top"
+          },
+          "Name": "minecraft:spruce_slab"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "north_south_center"
+          }
+        }
+      },
+      {
+        "position": [
+          17,
+          2,
+          17
+        ],
+        "before": {
+          "Properties": {
+            "half": "top",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "west_side"
+          }
+        }
+      },
+      {
+        "position": [
+          15,
+          2,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      },
+      {
+        "position": [
+          17,
+          2,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      },
+      {
+        "position": [
+          15,
+          3,
+          17
+        ],
+        "before": {
+          "Name": "minecraft:flower_pot"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          7,
+          2,
+          10
+        ],
+        "before": {
+          "Name": "minecraft:air"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_bench",
+          "Properties": {
+            "facing": "north",
+            "shape": "right",
+            "color": "none",
+            "waterlogged": "false"
+          }
+        }
+      },
+      {
+        "position": [
+          7,
+          2,
+          9
+        ],
+        "before": {
+          "Name": "minecraft:air"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "shape": "east_side",
+            "waterlogged": "false"
+          }
+        }
+      },
+      {
+        "position": [
+          8,
+          2,
+          10
+        ],
+        "before": {
+          "Name": "minecraft:air"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_bench",
+          "Properties": {
+            "facing": "north",
+            "shape": "left",
+            "color": "none",
+            "waterlogged": "false"
+          }
+        }
+      },
+      {
+        "position": [
+          8,
+          2,
+          9
+        ],
+        "before": {
+          "Name": "minecraft:air"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "shape": "west_side",
+            "waterlogged": "false"
+          }
+        }
+      },
+      {
+        "position": [
+          11,
+          2,
+          7
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "west"
+          }
+        }
+      },
+      {
+        "position": [
+          12,
+          2,
+          7
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "facing": "west"
+          },
+          "Name": "minecraft:spruce_wall_sign"
+        },
+        "after": null,
+        "beforeVisualSha256": "20a43c51dd9eda9f101efa04e3e2b4539731212db7bd18d85620fd0e75d64615"
+      },
+      {
+        "position": [
+          11,
+          2,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_wall_sign"
+        },
+        "after": null,
+        "beforeVisualSha256": "20a43c51dd9eda9f101efa04e3e2b4539731212db7bd18d85620fd0e75d64615"
+      },
+      {
+        "position": [
+          13,
+          2,
+          7
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_bench",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south",
+            "shape": "left"
+          }
+        }
+      },
+      {
+        "position": [
+          14,
+          2,
+          7
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_bench",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south",
+            "shape": "right"
+          }
+        }
+      },
+      {
+        "position": [
+          15,
+          2,
+          7
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "facing": "east"
+          },
+          "Name": "minecraft:spruce_wall_sign"
+        },
+        "after": null,
+        "beforeVisualSha256": "20a43c51dd9eda9f101efa04e3e2b4539731212db7bd18d85620fd0e75d64615"
+      },
+      {
+        "position": [
+          16,
+          2,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_bench",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "west",
+            "shape": "left"
+          }
+        }
+      },
+      {
+        "position": [
+          16,
+          2,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_wall_sign"
+        },
+        "after": null,
+        "beforeVisualSha256": "20a43c51dd9eda9f101efa04e3e2b4539731212db7bd18d85620fd0e75d64615"
+      },
+      {
+        "position": [
+          16,
+          2,
+          10
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_bench",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "west",
+            "shape": "right"
+          }
+        }
+      },
+      {
+        "position": [
+          16,
+          2,
+          11
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_wall_sign"
+        },
+        "after": null,
+        "beforeVisualSha256": "20a43c51dd9eda9f101efa04e3e2b4539731212db7bd18d85620fd0e75d64615"
+      },
+      {
+        "position": [
+          15,
+          2,
+          19
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "type": "top"
+          },
+          "Name": "minecraft:spruce_slab"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "east_side"
+          }
+        }
+      },
+      {
+        "position": [
+          16,
+          2,
+          19
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "type": "top"
+          },
+          "Name": "minecraft:spruce_slab"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "north_south_center"
+          }
+        }
+      },
+      {
+        "position": [
+          17,
+          2,
+          19
+        ],
+        "before": {
+          "Properties": {
+            "half": "top",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "west_side"
+          }
+        }
+      },
+      {
+        "position": [
+          17,
+          3,
+          19
+        ],
+        "before": {
+          "Name": "minecraft:flower_pot"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          15,
+          2,
+          20
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "north"
+          }
+        }
+      },
+      {
+        "position": [
+          17,
+          2,
+          20
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "north"
+          }
+        }
+      },
+      {
+        "position": [
+          4,
+          6,
+          11
+        ],
+        "before": {
+          "Properties": {
+            "half": "top",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "west"
+          },
+          "Name": "minecraft:nether_brick_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "east_side"
+          }
+        }
+      },
+      {
+        "position": [
+          5,
+          6,
+          11
+        ],
+        "before": {
+          "Properties": {
+            "half": "top",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:nether_brick_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "west_side"
+          }
+        }
+      },
+      {
+        "position": [
+          5,
+          7,
+          11
+        ],
+        "before": {
+          "Name": "minecraft:flower_pot"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          3,
+          6,
+          11
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "west"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "east"
+          }
+        }
+      },
+      {
+        "position": [
+          6,
+          6,
+          11
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "west"
+          }
+        }
+      },
+      {
+        "position": [
+          4,
+          6,
+          13
+        ],
+        "before": {
+          "Properties": {
+            "half": "top",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:nether_brick_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "east_side"
+          }
+        }
+      },
+      {
+        "position": [
+          4,
+          7,
+          13
+        ],
+        "before": {
+          "Name": "minecraft:flower_pot"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          5,
+          6,
+          13
+        ],
+        "before": {
+          "Properties": {
+            "half": "top",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:nether_brick_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "west_side"
+          }
+        }
+      },
+      {
+        "position": [
+          3,
+          6,
+          13
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "west"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "east"
+          }
+        }
+      },
+      {
+        "position": [
+          6,
+          6,
+          13
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "west"
+          }
+        }
+      },
+      {
+        "position": [
+          6,
+          6,
+          20
+        ],
+        "before": {
+          "Properties": {
+            "east": "false",
+            "waterlogged": "false",
+            "south": "false",
+            "north": "false",
+            "west": "false"
+          },
+          "Name": "minecraft:spruce_fence"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "single"
+          }
+        }
+      },
+      {
+        "position": [
+          6,
+          7,
+          20
+        ],
+        "before": {
+          "Properties": {
+            "powered": "false"
+          },
+          "Name": "minecraft:spruce_pressure_plate"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          5,
+          6,
+          20
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "west"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "east"
+          }
+        }
+      },
+      {
+        "position": [
+          7,
+          6,
+          20
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "west"
+          }
+        }
+      },
+      {
+        "position": [
+          9,
+          6,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "east": "true",
+            "waterlogged": "false",
+            "south": "false",
+            "north": "false",
+            "west": "false"
+          },
+          "Name": "minecraft:spruce_fence"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_table",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "shape": "single"
+          }
+        }
+      },
+      {
+        "position": [
+          9,
+          7,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "powered": "false"
+          },
+          "Name": "minecraft:spruce_pressure_plate"
+        },
+        "after": null
+      },
+      {
+        "position": [
+          9,
+          6,
+          7
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      },
+      {
+        "position": [
+          9,
+          6,
+          9
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "north"
+          }
+        }
+      },
+      {
+        "position": [
+          4,
+          6,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "south"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "north"
+          }
+        }
+      },
+      {
+        "position": [
+          5,
+          6,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "facing": "east"
+          },
+          "Name": "minecraft:spruce_wall_sign"
+        },
+        "after": null,
+        "beforeVisualSha256": "20a43c51dd9eda9f101efa04e3e2b4539731212db7bd18d85620fd0e75d64615"
+      },
+      {
+        "position": [
+          3,
+          6,
+          16
+        ],
+        "before": {
+          "Properties": {
+            "waterlogged": "false",
+            "facing": "west"
+          },
+          "Name": "minecraft:spruce_wall_sign"
+        },
+        "after": null,
+        "beforeVisualSha256": "20a43c51dd9eda9f101efa04e3e2b4539731212db7bd18d85620fd0e75d64615"
+      },
+      {
+        "position": [
+          15,
+          6,
+          21
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "west"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "east"
+          }
+        }
+      },
+      {
+        "position": [
+          19,
+          6,
+          21
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "east"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "west"
+          }
+        }
+      },
+      {
+        "position": [
+          18,
+          6,
+          8
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "west"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "east"
+          }
+        }
+      },
+      {
+        "position": [
+          23,
+          6,
+          3
+        ],
+        "before": {
+          "Properties": {
+            "half": "bottom",
+            "waterlogged": "false",
+            "shape": "straight",
+            "facing": "north"
+          },
+          "Name": "minecraft:spruce_stairs"
+        },
+        "after": {
+          "Name": "handcrafted:spruce_chair",
+          "Properties": {
+            "color": "none",
+            "waterlogged": "false",
+            "facing": "south"
+          }
+        }
+      }
+    ],
+    "adaptations": [
+      "level5 source selected for Northwatch maximum-level content",
+      "indoor campfires removed and recessed hearth restored to a continuous stone-brick floor at user request",
+      "six Handcrafted chairs and five table sections replace existing mock window/counter furniture; source walls and storage retained",
+      "foreign MineColonies colony-stash controller omitted; actual barrels retain common inventory providers",
+      "two Handcrafted bench modules and a small table in the existing clear lounge bay; exact REST annotations, original floors retained",
+      "Exact reviewed stair furniture replaced by Handcrafted chairs/benches; real staircase retained",
+      "Dining tables and tableless rest seats declared separately, including upper floor and terrace",
+      "Blank armrest signs removed only against their pinned typed visual payload hashes"
+    ],
+    "omittedControllers": [
+      "minecolonies:blockstash"
+    ],
+    "seats": [
+      {
+        "id": "dining_1",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          19,
+          2,
+          11
+        ],
+        "table": [
+          19,
+          2,
+          12
+        ],
+        "approach": [
+          18,
+          1,
+          11
+        ],
+        "egress": [
+          18,
+          1,
+          11
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "dining_2",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          19,
+          2,
+          13
+        ],
+        "table": [
+          19,
+          2,
+          12
+        ],
+        "approach": [
+          18,
+          1,
+          13
+        ],
+        "egress": [
+          18,
+          1,
+          13
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "dining_3",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          19,
+          2,
+          15
+        ],
+        "table": [
+          19,
+          2,
+          16
+        ],
+        "approach": [
+          18,
+          1,
+          15
+        ],
+        "egress": [
+          18,
+          1,
+          15
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "dining_4",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          19,
+          2,
+          17
+        ],
+        "table": [
+          19,
+          2,
+          16
+        ],
+        "approach": [
+          18,
+          1,
+          17
+        ],
+        "egress": [
+          18,
+          1,
+          17
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "dining_5",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          15,
+          2,
+          16
+        ],
+        "table": [
+          15,
+          2,
+          17
+        ],
+        "approach": [
+          15,
+          1,
+          15
+        ],
+        "egress": [
+          15,
+          1,
+          15
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "dining_6",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          17,
+          2,
+          16
+        ],
+        "table": [
+          17,
+          2,
+          17
+        ],
+        "approach": [
+          17,
+          1,
+          15
+        ],
+        "egress": [
+          17,
+          1,
+          15
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "rest_1",
+        "zone": "rest",
+        "kind": "HANDCRAFTED_BENCH",
+        "chairBlock": "handcrafted:spruce_bench",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          7,
+          2,
+          10
+        ],
+        "table": [
+          7,
+          2,
+          9
+        ],
+        "approach": [
+          7,
+          1,
+          11
+        ],
+        "egress": [
+          7,
+          1,
+          11
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "rest_2",
+        "zone": "rest",
+        "kind": "HANDCRAFTED_BENCH",
+        "chairBlock": "handcrafted:spruce_bench",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          8,
+          2,
+          10
+        ],
+        "table": [
+          8,
+          2,
+          9
+        ],
+        "approach": [
+          8,
+          1,
+          11
+        ],
+        "egress": [
+          8,
+          1,
+          11
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "furnished_9",
+        "zone": "lounge",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "none",
+        "chair": [
+          11,
+          2,
+          7
+        ],
+        "table": "none",
+        "approach": [
+          11,
+          1,
+          8
+        ],
+        "egress": [
+          11,
+          1,
+          8
+        ],
+        "facing": "WEST"
+      },
+      {
+        "id": "furnished_10",
+        "zone": "lounge",
+        "kind": "HANDCRAFTED_BENCH",
+        "chairBlock": "handcrafted:spruce_bench",
+        "tableBlock": "none",
+        "chair": [
+          13,
+          2,
+          7
+        ],
+        "table": "none",
+        "approach": [
+          13,
+          1,
+          8
+        ],
+        "egress": [
+          13,
+          1,
+          8
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "furnished_11",
+        "zone": "lounge",
+        "kind": "HANDCRAFTED_BENCH",
+        "chairBlock": "handcrafted:spruce_bench",
+        "tableBlock": "none",
+        "chair": [
+          14,
+          2,
+          7
+        ],
+        "table": "none",
+        "approach": [
+          14,
+          1,
+          8
+        ],
+        "egress": [
+          14,
+          1,
+          8
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "furnished_12",
+        "zone": "lounge",
+        "kind": "HANDCRAFTED_BENCH",
+        "chairBlock": "handcrafted:spruce_bench",
+        "tableBlock": "none",
+        "chair": [
+          16,
+          2,
+          9
+        ],
+        "table": "none",
+        "approach": [
+          15,
+          1,
+          9
+        ],
+        "egress": [
+          15,
+          1,
+          9
+        ],
+        "facing": "WEST"
+      },
+      {
+        "id": "furnished_13",
+        "zone": "lounge",
+        "kind": "HANDCRAFTED_BENCH",
+        "chairBlock": "handcrafted:spruce_bench",
+        "tableBlock": "none",
+        "chair": [
+          16,
+          2,
+          10
+        ],
+        "table": "none",
+        "approach": [
+          15,
+          1,
+          10
+        ],
+        "egress": [
+          15,
+          1,
+          10
+        ],
+        "facing": "WEST"
+      },
+      {
+        "id": "furnished_14",
+        "zone": "terrace",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          15,
+          2,
+          20
+        ],
+        "table": [
+          15,
+          2,
+          19
+        ],
+        "approach": [
+          16,
+          1,
+          20
+        ],
+        "egress": [
+          16,
+          1,
+          20
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "furnished_15",
+        "zone": "terrace",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          17,
+          2,
+          20
+        ],
+        "table": [
+          17,
+          2,
+          19
+        ],
+        "approach": [
+          16,
+          1,
+          20
+        ],
+        "egress": [
+          16,
+          1,
+          20
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "furnished_16",
+        "zone": "upper_dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          3,
+          6,
+          11
+        ],
+        "table": [
+          4,
+          6,
+          11
+        ],
+        "approach": [
+          3,
+          5,
+          12
+        ],
+        "egress": [
+          3,
+          5,
+          12
+        ],
+        "facing": "EAST"
+      },
+      {
+        "id": "furnished_17",
+        "zone": "upper_dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          6,
+          6,
+          11
+        ],
+        "table": [
+          5,
+          6,
+          11
+        ],
+        "approach": [
+          6,
+          5,
+          12
+        ],
+        "egress": [
+          6,
+          5,
+          12
+        ],
+        "facing": "WEST"
+      },
+      {
+        "id": "furnished_18",
+        "zone": "upper_dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          3,
+          6,
+          13
+        ],
+        "table": [
+          4,
+          6,
+          13
+        ],
+        "approach": [
+          3,
+          5,
+          12
+        ],
+        "egress": [
+          3,
+          5,
+          12
+        ],
+        "facing": "EAST"
+      },
+      {
+        "id": "furnished_19",
+        "zone": "upper_dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          6,
+          6,
+          13
+        ],
+        "table": [
+          5,
+          6,
+          13
+        ],
+        "approach": [
+          6,
+          5,
+          12
+        ],
+        "egress": [
+          6,
+          5,
+          12
+        ],
+        "facing": "WEST"
+      },
+      {
+        "id": "furnished_20",
+        "zone": "upper_dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          5,
+          6,
+          20
+        ],
+        "table": [
+          6,
+          6,
+          20
+        ],
+        "approach": [
+          5,
+          5,
+          19
+        ],
+        "egress": [
+          5,
+          5,
+          19
+        ],
+        "facing": "EAST"
+      },
+      {
+        "id": "furnished_21",
+        "zone": "upper_dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          7,
+          6,
+          20
+        ],
+        "table": [
+          6,
+          6,
+          20
+        ],
+        "approach": [
+          7,
+          5,
+          19
+        ],
+        "egress": [
+          7,
+          5,
+          19
+        ],
+        "facing": "WEST"
+      },
+      {
+        "id": "furnished_22",
+        "zone": "upper_dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          9,
+          6,
+          7
+        ],
+        "table": [
+          9,
+          6,
+          8
+        ],
+        "approach": [
+          8,
+          5,
+          7
+        ],
+        "egress": [
+          8,
+          5,
+          7
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "furnished_23",
+        "zone": "upper_dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          9,
+          6,
+          9
+        ],
+        "table": [
+          9,
+          6,
+          8
+        ],
+        "approach": [
+          8,
+          5,
+          9
+        ],
+        "egress": [
+          8,
+          5,
+          9
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "furnished_24",
+        "zone": "upper_rest",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "none",
+        "chair": [
+          4,
+          6,
+          16
+        ],
+        "table": "none",
+        "approach": [
+          4,
+          5,
+          17
+        ],
+        "egress": [
+          4,
+          5,
+          17
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "furnished_25",
+        "zone": "upper_rest",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "none",
+        "chair": [
+          15,
+          6,
+          21
+        ],
+        "table": "none",
+        "approach": [
+          14,
+          5,
+          21
+        ],
+        "egress": [
+          14,
+          5,
+          21
+        ],
+        "facing": "EAST"
+      },
+      {
+        "id": "furnished_26",
+        "zone": "upper_rest",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "none",
+        "chair": [
+          19,
+          6,
+          21
+        ],
+        "table": "none",
+        "approach": [
+          20,
+          5,
+          21
+        ],
+        "egress": [
+          20,
+          5,
+          21
+        ],
+        "facing": "WEST"
+      },
+      {
+        "id": "furnished_27",
+        "zone": "upper_rest",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "none",
+        "chair": [
+          18,
+          6,
+          8
+        ],
+        "table": "none",
+        "approach": [
+          18,
+          5,
+          7
+        ],
+        "egress": [
+          18,
+          5,
+          7
+        ],
+        "facing": "EAST"
+      },
+      {
+        "id": "furnished_28",
+        "zone": "upper_rest",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "none",
+        "chair": [
+          23,
+          6,
+          3
+        ],
+        "table": "none",
+        "approach": [
+          22,
+          5,
+          3
+        ],
+        "egress": [
+          22,
+          5,
+          3
+        ],
+        "facing": "SOUTH"
+      }
+    ]
+  }
+]
