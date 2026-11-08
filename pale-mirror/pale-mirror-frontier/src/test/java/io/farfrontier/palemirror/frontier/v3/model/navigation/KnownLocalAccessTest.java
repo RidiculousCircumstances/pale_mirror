@@ -6,6 +6,44 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class KnownLocalAccessTest {
+    @Test void exhaustedOpportunityReusesOnlyWalkingFactsWhileRecheckingCurrentAvailabilityAndPermission() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var geometry = flat(calls, Set.of()); var start = SurfaceAnchor.at(2, 63, 2);
+        var target = SurfaceAnchor.at(3, 63, 2);
+        assertTrue(KnownLocalAccess.opportunity(geometry, start, 8, ignored -> false, ignored -> true).isEmpty());
+        int searched = calls.get(); assertTrue(searched > 0 && searched <= 4096);
+        assertTrue(KnownLocalAccess.opportunity(geometry, start, 8, target::equals, ignored -> false).isEmpty(),
+                "changed owner permission is evaluated even when walking geometry is retained");
+        var route = KnownLocalAccess.opportunity(geometry, start, 8, target::equals, ignored -> true).orElseThrow().route();
+        assertEquals(List.of(start, target), route, "a formerly unavailable destination may become the current positive opportunity");
+        assertEquals(searched, calls.get(), "an exhausted optional scan must not redo the same geometry on every resident review");
+    }
+
+    @Test void changedImmutableGeometryCannotReuseThePredecessorsExplorationEvenWithAnEqualVersionLabel() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var start = SurfaceAnchor.at(2, 63, 2); var target = SurfaceAnchor.at(3, 63, 2);
+        var open = flat(calls, Set.of());
+        assertTrue(KnownLocalAccess.opportunity(open, start, 8, ignored -> false, ignored -> true).isEmpty());
+        var blocked = flat(calls, Set.of(target));
+        assertEquals(open.version(), blocked.version());
+        assertTrue(KnownLocalAccess.opportunity(blocked, start, 8, target::equals, ignored -> true).isEmpty(),
+                "a version/hash label is not the complete captured geometry");
+        assertEquals(target, KnownLocalAccess.opportunity(open, start, 8, target::equals, ignored -> true).orElseThrow().route().getLast(),
+                "a successor's obstruction cannot poison its predecessor's immutable facts");
+    }
+
+    private static PedestrianRouteGeometry flat(java.util.concurrent.atomic.AtomicInteger calls, Set<SurfaceAnchor> blocked) {
+        return new PedestrianRouteGeometry() {
+            public Object version() { return "same-label"; }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 8, 8); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor surface) { return blocked.contains(surface); }
+            public boolean canTraverse(SurfaceAnchor from, SurfaceAnchor to) {
+                calls.incrementAndGet(); return !blocked(from) && !blocked(to);
+            }
+        };
+    }
+
     @Test void distantGoalsDoNotReadGeometryAndAnExhaustedShortcutLeavesCompleteRoutingAvailable() {
         var calls = new int[1];
         var map = new PedestrianRouteGeometry() {

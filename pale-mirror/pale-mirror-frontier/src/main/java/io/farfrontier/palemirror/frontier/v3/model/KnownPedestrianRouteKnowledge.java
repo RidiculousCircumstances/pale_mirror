@@ -673,6 +673,12 @@ public final class KnownPedestrianRouteKnowledge {
 
     private KnownPedestrianRouteKnowledge excludingAccessSurfaces(Set<SurfaceAnchor> excluded) {
         if (excluded.isEmpty()) return this;
+        var exact = Set.copyOf(excluded);
+        return constrainedViews.get(exact, () -> constrainAccessSurfaces(exact));
+    }
+
+    private final BoundedValueMemo<Set<SurfaceAnchor>, KnownPedestrianRouteKnowledge> constrainedViews = new BoundedValueMemo<>(16);
+    private KnownPedestrianRouteKnowledge constrainAccessSurfaces(Set<SurfaceAnchor> excluded) {
         var forbidden = excluded.stream().map(SurfaceAnchor::support).collect(java.util.stream.Collectors.toSet());
         var allowedDepartures = new HashSet<>(raisedDepartureSupports);
         excluded.forEach(surface -> allowedDepartures.remove(surface.support()));
