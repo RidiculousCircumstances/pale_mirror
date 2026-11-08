@@ -1,4 +1,4 @@
-# Active continuity — 2026-11-08
+# Active continuity — 2026-11-09
 
 Latest user order: research crafting/resource costs, especially bread productivity.
 RESEARCH COMPLETE; recipes, source and runtime unchanged. Main alone, no agents/push.
@@ -16,9 +16,18 @@ milling wheat->1flour+25%2extra, then1dough->1bread:64guaranteed/96expected from
 wheat versus NPC21. FD egg dough also more efficient. Need pack-wide tech parity
 before merely increasing NPC wheat cost. Clothes are not a recurring cloth sink;
 wood ratios vanilla; iron repairs restore HALF125durability, not full250.
-Proposed only, NOT implemented/approved: keep3:1, trial breadnutrition200/work320,
-explicit food-labour target and controlled multi-day trade-adjusted measurements.
-Future balance must use a new profile, preserving r38. No pending implementation.
+2026-11-09 user ACCEPTED the direction: keep3wheat->1bread, approximately2bread
+per daily meal,4x baking work, separately define Create mechanization advantage.
+Research numerical candidate nutrition200/work320 is not implemented. User also
+wants an intermediate milling/flour link and currently asks how Create does it.
+Verified installed6.0.10 recipes: wheat Millstone1flour+25%2extra (+25%seed),
+flour->dough via mixing with1000mBwater or fan washing,1dough->1bread via cooking.
+Millstone needs rotation; processing speed depends on RPM. Direct crushing/wheat
+recipe absent (do not infer crushing fallback). Proposed NPC chain3wheat->3flour
+->1dough->1bread preserves approved total; shared Create flour would expose its
+existing1flour->1bread path, so cross-provider recipe policy must be explicit.
+No source/runtime/economic changes this turn. Future implementation uses a new
+profile preserving r38; milling station/physical integration is not yet authored.
 
 
 Previous restaurant order: make the restaurant's remaining chairs/benches functional.
