@@ -38,11 +38,12 @@
       "timeoutMs": 120000,
       "checks": [
         {
-          "view": "settlement",
-          "id": "settlement:1",
+          "view": "actor",
+          "id": "resident:1-22",
           "expect": {
             "status": "ok",
-            "hasArmedGuard": true
+            "life": "ALIVE",
+            "guardMethod": "MELEE"
           }
         }
       ]
@@ -53,7 +54,7 @@
       "position": {
         "diagnostic": {
           "view": "actor",
-          "id": "resident:1-16",
+          "id": "resident:1-22",
           "field": "position"
         }
       },
@@ -62,21 +63,23 @@
     {
       "type": "visit_nearest_entity",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Eli Stone",
       "maxDistance": 128,
       "timeoutMs": 30000,
       "standOff": 2,
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-22"
     },
     {
       "type": "assert_fixture",
       "timeoutMs": 30000,
       "checks": [
         {
-          "view": "settlement",
-          "id": "settlement:1",
+          "view": "actor",
+          "id": "resident:1-22",
           "expect": {
-            "status": "ok"
+            "status": "ok",
+            "life": "ALIVE",
+            "guardMethod": "MELEE"
           }
         }
       ]
@@ -84,11 +87,11 @@
     {
       "type": "visit_nearest_entity",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Eli Stone",
       "maxDistance": 128,
       "timeoutMs": 30000,
       "standOff": 0,
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-22"
     },
     {
       "type": "command",
@@ -103,33 +106,33 @@
     {
       "type": "look_nearest_entity",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Eli Stone",
       "maxDistance": 64,
       "timeoutMs": 30000,
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-22"
     },
     {
       "type": "attack_nearest_entity",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Eli Stone",
       "maxDistance": 32,
       "maxAttacks": 1,
       "requireRemoval": false,
       "requireDamage": true,
       "timeoutMs": 30000,
       "causalMilestone": "player_harmed_declared_guard",
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-22"
     },
     {
       "type": "observe_entity_motion",
       "id": "close-combat-response",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Eli Stone",
       "durationTicks": 100,
       "sampleEveryTicks": 1,
       "timeoutMs": 45000,
       "maxDistance": 48,
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-22"
     },
     {
       "type": "wait_until_player_health",
@@ -142,7 +145,7 @@
       "type": "observe_entity_motion",
       "id": "circling-player-pursuit",
       "entityType": "minecraft:villager",
-      "nameContains": "Nora Bell",
+      "nameContains": "Eli Stone",
       "durationTicks": 160,
       "sampleEveryTicks": 1,
       "timeoutMs": 45000,
@@ -165,7 +168,7 @@
           "z": 2
         }
       ],
-      "workerId": "resident:1-16"
+      "workerId": "resident:1-22"
     },
     {
       "type": "visit",
