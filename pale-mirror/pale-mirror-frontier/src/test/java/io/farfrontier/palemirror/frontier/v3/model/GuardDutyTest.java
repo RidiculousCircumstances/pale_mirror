@@ -38,6 +38,42 @@ class GuardDutyTest {
         state=state.withChanges(FrontierWorldStateUpdate.begin().security(state.security().retired(duty.id())));
         assertTrue(ActorExecutionComposition.LIFECYCLE.mayBegin(state,actor),"actual security withdrawal restores ordinary care admission");
     }
+    @Test void clinicalMovementCanLeaveItsNativeBodyWhileGuardDutyRemainsSuspended() {
+        var state=armed(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:guard-care-unload"),41,
+                FrontierRulesets.installed("frontier-v3-clinical-care-r35"))));
+        var duty=state.strategicPlans().guards().values().iterator().next();var actor=duty.execution().actorId();
+        var location=state.actorLocations().get(actor);
+        state=state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(ImmutableLookupMap.withEntry(state.actorLocations(),actor,
+                location.withObserved(location.body(),location.condition().withHealth(FixedScalar.whole(12))))));
+        state=io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTransitions.apply(state,actor,
+                new io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalEvent.Vitality(actor,Optional.empty(),21001),21001);
+        var taskId=new SubjectId("clinical:guard-body-departure");
+        var execution=state.actorExecutions().next(actor,ActorActivityKind.CLINICAL_CARE,taskId);
+        var task=new io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask(taskId,duty.home(),actor,execution,
+                io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask.Role.PATIENT,
+                io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask.Phase.SELECT,1,location.supportingSurface(),Optional.empty(),Optional.empty(),21001);
+        state=io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTransitions.apply(state,taskId,
+                new io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalEvent.Started(task),21001);
+        var movement=new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(task.order(),21002,
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ClinicalLeg(taskId,task.revision()),execution);
+        state=ActorMovementProcess.reduceStarted(state,actor,new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted(movement));
+        state=ActorBodyAuthority.demand(state,actor);var body=ActorBodyAuthority.current(state,actor);state=ActorBodyAuthority.running(state,body);
+        var codec=new FrontierWorldStateCodec();state=codec.decode(codec.encode(state));
+        var running=state;var currentLocation=state.actorLocations().get(actor);
+        var request=new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityBodyCheckpoint.Request(state,duty.execution(),body,currentLocation.body());
+        assertTrue(new ActorMovementBodyCheckpoint().acknowledge(request).changes().changedComponents().isEmpty());
+        var stale=new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,ActorActivityKind.GUARD,duty.id(),duty.execution().generation()+50);
+        assertThrows(IllegalArgumentException.class,()->new ActorMovementBodyCheckpoint().acknowledge(
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityBodyCheckpoint.Request(running,stale,body,currentLocation.body())));
+        var unloaded=new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded(body,currentLocation.body(),currentLocation.condition().health(),
+                currentLocation.body(),currentLocation.condition().health(),Optional.of(execution));
+        var departed=ActorBodyAuthority.unloaded(state,unloaded);
+        assertFalse(ActorBodyAuthority.retainsPhysicalCustody(departed,actor));
+        assertEquals(state.actorExecutions(),departed.actorExecutions());assertEquals(state.inventory(),departed.inventory());
+        assertEquals(movement.executionId(),departed.actorMovements().get(actor).executionId());
+        assertEquals(currentLocation,departed.actorLocations().get(actor));assertTrue(departed.actorExecutions().retainsSuspended(actor,ActorActivityKind.GUARD,duty.id()));
+        assertEquals(departed,codec.decode(codec.encode(departed)));
+    }
     private static FrontierWorldState initial() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:peaceful-guards"), 41,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));
@@ -368,8 +404,9 @@ class GuardDutyTest {
         return apply(state, FrontierWorldProcessCatalog.planScheduled(FrontierWorldRuntimeDefinition.processRegistry(), state,
                 ActorMovementProcess.progress(movement, now), new SimInstant(now)), now);
     }
-    static FrontierWorldState armed() {
-        var state = initial(); var home = state.bootstrap().settlements().getFirst();
+    static FrontierWorldState armed() { return armed(initial()); }
+    private static FrontierWorldState armed(FrontierWorldState state) {
+        var home = state.bootstrap().settlements().getFirst();
         var depot = state.inventory().containers().get(FrontierWorldState.depotId(home.id()));
         state = AutomaticStationProductionTest.supply(state, depot, "minecraft:iron_ingot", 4, "guard-metal");
         state = AutomaticStationProductionTest.supply(state, depot, "minecraft:stick", 2, "guard-handles");

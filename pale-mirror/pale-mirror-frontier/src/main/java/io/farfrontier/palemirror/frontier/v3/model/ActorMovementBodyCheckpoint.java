@@ -9,8 +9,12 @@ public final class ActorMovementBodyCheckpoint implements ActorActivityBodyCheck
         var state = request.expectedState();
         var movement = state.actorMovements().get(request.execution().actorId());
         if (movement == null) return new Acknowledgement(request, FrontierWorldStateUpdate.begin());
+        state.actorExecutions().requireRetained(request.execution());
+        state.actorExecutions().requireCurrent(movement.executionId());
+        // Every retained owner receives the same body departure. Only the current
+        // movement owner has a route clock to checkpoint; suspended work owns none.
         if (!movement.executionId().equals(request.execution()))
-            throw new IllegalArgumentException("movement body checkpoint has a foreign execution");
+            return new Acknowledgement(request, FrontierWorldStateUpdate.begin());
         var movements = new LinkedHashMap<>(state.actorMovements());
         movements.put(request.execution().actorId(), movement.withoutColdTravel());
         return new Acknowledgement(request, FrontierWorldStateUpdate.begin().actorMovements(movements));
