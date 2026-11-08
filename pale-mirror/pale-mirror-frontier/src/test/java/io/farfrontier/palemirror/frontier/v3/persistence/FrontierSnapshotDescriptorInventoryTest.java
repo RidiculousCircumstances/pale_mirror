@@ -9,6 +9,20 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierSnapshotDescriptorInventoryTest {
+    @Test void exactClinicalEmissionAddendumPreservesTheSameSchemaStateAndNoOtherSuccessor() {
+        var current = FrontierDurationProcessDriverRegistry.inventoryFingerprint();
+        assertEquals(FrontierSnapshotDescriptorInventory.WITH_CLINICAL_INTERRUPTION, current,
+                "a later descriptor change must deliberately retire or revise this one exact compatibility edge");
+        var codec = new FrontierWorldStateCodec();
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:clinical-emission-addendum"),139L));
+        var encoded = codec.encode(state);
+        var predecessor = replace(encoded,current,FrontierSnapshotDescriptorInventory.BEFORE_CLINICAL_INTERRUPTION);
+        assertEquals(state.bootstrap().worldId(),FrontierWorldSnapshotHeader.read(predecessor).worldId());
+        assertEquals(state,codec.decode(predecessor));
+        assertArrayEquals(encoded,codec.encode(codec.decode(predecessor)),"new writes retain only the complete current declaration");
+        assertFalse(FrontierSnapshotDescriptorInventory.accepts(FrontierSnapshotDescriptorInventory.BEFORE_CLINICAL_INTERRUPTION,"f".repeat(64)));
+        assertFalse(FrontierSnapshotDescriptorInventory.accepts(current,FrontierSnapshotDescriptorInventory.BEFORE_CLINICAL_INTERRUPTION),"the edge is not reversible");
+    }
     @Test void currentCompositionPreservesHeaderAndFullState() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:station-recovery-upgrade"), 91L));
         var codec = new FrontierWorldStateCodec();
