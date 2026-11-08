@@ -1,34 +1,57 @@
 # Active continuity — 2026-11-08
 
-## Current task
-User approved trying two leisure places: outdoor well plaza and indoor kitchen
-corner, with Handcrafted seating and actual residents approaching/sitting/leaving.
-Main alone; subagents/push prohibited. Standing reviewed commit/deploy authority.
-Disposable fresh worlds authorized when schema/template change requires it.
-No new goal-tool goal requested. Preserve user client profiles and unrelated WIP.
+## Current task — crash repaired, combat latency evidence incomplete
+User requested lasttwo combat recordings/stalls, thenreported serverdown.
+Cause actualquarantine14991 at10065: expired STRETCH resident:1-13 sequence4
+(start9466,pause600,due10066) tried Ended while exact nativehealingpending.
+Read-only official snapshot14792/WAL replay to14990 proves oldplanneremitted
+Ended/reducerrefused; newplanner emits finiteRescheduled. Sharedinteraction
+fence now gates routine progress and capabilityrelease.37focusedchecksPASS
+(Routine7/SeatedLeisure7/SeatedMeal5/Clinical8/Architecture10), inclrealhealing
+prepare/snapshot/wait/unappliedreceipt/closure nohealthgift. Guardrails/package
+PASS, oldbroadunchanged evidence reused/debt retained. Source8a351e750 committed,
+clean detachedrelease built, rootpublish/install/postverifyPASS. SAMEWORLD
+preserved and running again; userrd reconnected. Originalroutine4 CLOSED,
+healingPendingfalse at10300/rev15473, later fifthroutine alsoCLOSED12930/rev20577.
+RequiredConflicts1/blocked is retainedhistoricalincident14991/occurrences1,
+not a new quarantine and not erased. No blanketgreenclaim.
+Receipt docs/verification/northwatch-routine-healing-recovery-20261108.json.
+
+Two priorcaptures13:51:33/13:53:03 host+05 failed OPEN_FAILED16filecap.
+12olderCLOSED records archived/notdeleted, hashes underLIVE/debug/pale-mirror/
+combat/archive/20261108-recording-capacity/manifest.json;4oldrecordsretained.
+Oldwindow13:51–13:54:32slowcombat-meleeturns91.6–1034.4ms,20guardprepwaits204–695ms,
+5GUARDambientrefusals; not exactrootstackproof. Useragreed newfight; newcapture
+af67bdb9-8ce8-490c-9358-c0e98cc58562 complete7810events/dataLossfalse but only
+3hits on unarmed civilians whileplayercreative, no actualmelee decisions/strikes.
+Tolduser survival+armedguard required for representative response. JFRactualoldJVM
+2461762 requested120s, protectiveexit73s,4validchunks43MiB,629serverCPUsamples,
+4withCombat/Melee name include recorder; cannot attributeoldcombatstalls.
+Evidence IMPL/build/combat-delay-20261108/ (rawrecord/JFR/quarantinelog and
+window-summary.json). No combatlatencyfixclaim. Next useful evidence actual
+armed survivalfight. Latest user crash request restored; mainalone/no subagents/
+push/newgoal. Preserve WIP/clientprofiles.
 
 IMPL /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror, Git root parent,
-branch feat/baker-carry-orders-20260926, HEADa26414bebf351a48dc694c197c7e1207a3f85fd9.
+branch feat/baker-carry-orders-20260926, HEAD8a351e75064aaf30b8d2fe93e07f7ea6ce855b8a.
 Tracked clean after task commit, unrelated .serena retained. PACK /home/rd/proj/minecraft HEAD909c26c,
 tracked clean, unrelated .f0v-baseline retained. GOV parent repo has extensive
 preexisting WIP; preserve. This compact ledger replaces/archive of prior state:
 docs/archive/continuity-2026-11-08-before-leisure-seats.md.
 
 ## Current deployed release
-LIVE /home/rd/far-frontier-server, far-frontier-v3-live.service, world
-northwatch-leisure-seed139-20261108, seed139/r37/schema351/network10.
-Reviewed source a26414bebf351a48dc694c197c7e1207a3f85fd9; clean detached release
-/home/rd/proj/pm-leisure-release-20261108/pale-mirror, build/package PASS.
-CoreSHA512 c10930d9e0c25617b124ee725b157bfc88e3b9f35b33d9a60430a971057cc9c3d3a95f5fd5ba3211fec95486c86796d93f1249f7555f4f5198f841ed61f35e1a.
+LIVE /home/rd/far-frontier-server, far-frontier-v3-live.service, SAMEworld
+northwatch-leisure-seed139-20261108 seed139/r37/schema351/network10.
+Source8a351e75064aaf30b8d2fe93e07f7ea6ce855b8a, clean detached
+/home/rd/proj/pm-routine-healing-release-20261108/pale-mirror.
+CoreSHA51219e9487dd00319c0d82ccc81fecd1ff933e98c2085be14b3c6cb01fe17b6617dc2008fd37d169c7115d940846798506440be5539f5c6c6b22a81fb4c900d1209.
 Visuals unchanged2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601.
-wrapper2461725/java2461762, invocation52bfb9f681a0489a984cf564e0c3507d,
-notBefore1794129263. Java22 /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
-Root preflight/publish/install/freshpreflight/postverify PASS; old
-northwatch-max-living-seed139-20261108 saved/stopped/exited and preserved.
-Old optional combat-capture shutdown save refused indexlimit16; canonical save
-complete, actual JVM exited. Capture retention issue not fixed by this task.
-HTTP8092/8094/observatory preserved. User client updater/fullrestart needed network10.
-Receipt docs/verification/northwatch-leisure-20261108.json records exact scopes.
+wrapper2689418/java2689444, invocation6e22b97ac69d4e4e980b3ae0e68fcece,
+notBefore1794130369; Java22 /home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java.
+OldJVM protectivequiescence saved all dimensions beforeexit14:23:09host+05;
+installer selected SAME existingworld, profileunchanged, postverifyPASS.
+Currentclock passed12093, historicaloneincident14991 remains. HTTP8092/8094/
+observatory preserved, no taskclientlaunched duringrepair. See currentreceipt.
 
 ## Established reusable results
 Station-facing correction verified/deployed, receipt committed0bddff9cf:
@@ -44,7 +67,7 @@ Known broad unrelated failures remain26JVM and4Node baseline; do not claim blank
 green. Prior fullnative479PASS dependency-valid for unchanged paths, not newfeature.
 
 ## Completed implementation — reviewed and deployed
-IMPL HEAD a26414beb, clean tracked / unrelated .serena retained. PACK tracked
+Leisure feature commit a26414beb; IMPL currentrepair8a351e750, clean tracked / unrelated .serena retained. PACK tracked
 clean / unrelated .f0v-baseline retained. GOV unrelated WIP preserved.
 
 Existing bounded LEISURE routine gains SIT5/SEATING4 and typed Seated receipt;
