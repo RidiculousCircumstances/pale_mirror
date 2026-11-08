@@ -1,5 +1,18 @@
 # Active continuity — 2026-11-09
 
+Fast territory search research2026-11-09: World Preview (Unofficial Port),
+Modrinth world-preview-fork, is a ready candidate. Official API confirmed1.5.6,
+versionD2lL0Nws for MC1.21.1/NeoForge. NOT installed or runtime-verified here.
+Project describes seed search, biome-area/distance filters, height/slope/flat-area
+analysis, CSV/JSON reports and PNG terrain export; client/singleplayer-only.
+Run against the exact future worldgen stack/settings before claiming matching maps.
+Search up to4biomes is ANY-match, not simultaneous required-landscape proof.
+Datapack Map maintainer issue103 explicitly limits it to datapacks, not mod maps.
+Recommended coarse-to-fine selection plus actual generated shortlisted parcels;
+connected usable farmland, soil/water/route proof require PM/local checks, not
+aggregate biome percentages. Existing FieldDevelopmentLand is local bounded survey,
+not a multi-seed atlas. No measured search speed or world-wide pregen proposed.
+
 Worldgen inventory verified2026-11-09 from current PACK manifests and actual LIVE
 mods: Terralith/Tectonic/Lithostitched/Structurify are ABSENT from active pack/server,
 explicitly listed in config/retired-v3-mod-prefixes.txt. Historical full-pack WORLD
