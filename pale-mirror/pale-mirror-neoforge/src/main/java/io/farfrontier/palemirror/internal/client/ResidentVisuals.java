@@ -10,9 +10,8 @@ public final class ResidentVisuals {
     private static final Map<UUID,Seen> SEEN=new HashMap<>();
     private static long clock;
     static boolean apply(Villager actor,float partial,ResidentPoseRig rig){
-        if(io.farfrontier.palemirror.internal.frontier.v3.PaleMirrorSeatEntities.isResidentSeat(actor.getVehicle())){
-            rig.leg(true,-1.35f);rig.leg(false,-1.35f);
-        }
+        boolean seated=io.farfrontier.palemirror.internal.frontier.v3.PaleMirrorSeatEntities.isResidentSeat(actor.getVehicle())
+                && rig.seatedPose();
         var frame=PaleMirrorCombatClient.frame(actor,partial);
         if(frame!=null){
             var pose=MeleeAnimation.sample(frame);var hand=actor.getMainArm();float mirror=hand==HumanoidArm.RIGHT?1:-1;
@@ -64,7 +63,7 @@ public final class ResidentVisuals {
             if(pose.twoHands())rig.arm(hand.getOpposite(),pose.shoulder(),pose.elbow(),-mirror*pose.yaw(),-mirror*pose.roll());
             rig.torso(mirror*pose.torso(),pose.lean());PaleMirrorResidentWorkClient.rendered(actor,work,pose);return true;
         }
-        return held;
+        return held || seated;
     }
     static void rendered(Villager actor,String rig){if(SEEN.size()<256 || SEEN.containsKey(actor.getUUID()))SEEN.put(actor.getUUID(),new Seen(rig,clock));}
     public static String renderedRig(Villager actor){var value=SEEN.get(actor.getUUID());return value!=null && clock-value.tick()<=2?value.rig():"unobserved";}

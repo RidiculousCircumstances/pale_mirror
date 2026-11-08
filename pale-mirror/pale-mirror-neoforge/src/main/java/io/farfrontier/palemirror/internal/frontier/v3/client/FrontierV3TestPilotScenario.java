@@ -62,7 +62,7 @@ final class FrontierV3TestPilotScenario {
             if (!validCausalMilestone(action, causalMilestones) || (type.equals("release_fast_forward_hold") && action.size() != 1) ||
                     (type.equals("command") && !action.has("command")) ||
                     (type.equals("visit") && !validVisit(action)) ||
-                    (type.equals("visit_nearest_entity") && (!section.equals("setup") || !validLookNearestEntity(action))) ||
+                    (type.equals("visit_nearest_entity") && !validLookNearestEntity(action)) ||
                     (type.equals("inspect") && !validDiagnosticIdentity(action)) ||
                     (type.equals("wait_until_diagnostic") && (!validDiagnosticIdentity(action) || !action.has("expect")
                             || !action.get("expect").isJsonObject() || !boundedDiagnosticWait(action) || !validOptionalIncreasePath(action)

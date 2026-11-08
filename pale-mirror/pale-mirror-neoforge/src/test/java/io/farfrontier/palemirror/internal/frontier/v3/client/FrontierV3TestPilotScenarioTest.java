@@ -16,6 +16,25 @@ class FrontierV3TestPilotScenarioTest {
             assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(declaration.replace("crossbowName","undeclaredGuardName")));
         }
     }
+    @Test void actualDiningPoseCarrierAndItsRecoverySegmentAreAcceptedBeforeClientLaunch() throws java.io.IOException {
+        var source=java.nio.file.Files.readString(java.nio.file.Path.of("..","tools","frontier-v3-test-pilot",
+                "scenarios","disposable-northwatch-dining-pose-cycle.json"));
+        var declaration=JsonParser.parseString(source).getAsJsonObject();
+        assertEquals(23,FrontierV3TestPilotScenario.parse(source).actionCount());
+        int split=declaration.getAsJsonObject("restart").get("afterAction").getAsInt();
+        var actions=new com.google.gson.JsonArray();var frames=new com.google.gson.JsonArray();
+        var all=declaration.getAsJsonArray("actions");
+        for(int index=split;index<all.size();index++)actions.add(all.get(index).deepCopy());
+        for(var item:declaration.getAsJsonArray("frames")){
+            var frame=item.getAsJsonObject().deepCopy();int after=frame.get("after").getAsInt();
+            if(after>split){frame.addProperty("after",after-split);frames.add(frame);}
+        }
+        declaration.add("setup",new com.google.gson.JsonArray());declaration.add("actions",actions);declaration.add("frames",frames);
+        var recovered=declaration.toString();
+        assertEquals(17,FrontierV3TestPilotScenario.parse(recovered).actionCount());
+        assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(recovered.replace("1.5","2.1")));
+        assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(recovered.replace("resident:1-11","container:foreign")));
+    }
     @Test void acceptsReadOnlyPlayerHealthObservationButRejectsUnboundedOrInvertedPredicates() {
         String value="{\"schema\":1,\"actions\":[{\"type\":\"wait_until_player_health\",\"minimum\":1,\"maximum\":19,\"timeoutMs\":30000}]}";
         assertEquals(1,FrontierV3TestPilotScenario.parse(value).actionCount());
@@ -47,7 +66,7 @@ class FrontierV3TestPilotScenarioTest {
         assertEquals(12,FrontierV3TestPilotScenario.parse(declaration).actionCount());
         assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(
                 "{\"schema\":1,\"actions\":[{\"type\":\"visit_nearest_entity\",\"entityType\":\"minecraft:villager\","
-                        +"\"nameContains\":\"Guard\",\"maxDistance\":64,\"timeoutMs\":30000}]}"));
+                        +"\"nameContains\":\"Guard\",\"workerId\":\"container:foreign\",\"maxDistance\":64,\"timeoutMs\":30000}]}"));
     }
     @Test void ordinarySaplingGrowthDeclarationHasBoundedNativeItemUse() throws java.io.IOException {
         var source = java.nio.file.Files.readString(java.nio.file.Path.of("..", "tools", "frontier-v3-test-pilot",

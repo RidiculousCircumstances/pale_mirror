@@ -32,6 +32,14 @@ final class HumanVillagerRenderer extends VillagerRenderer {
             }
         });
     }
+    @Override protected void scale(Villager actor,PoseStack pose,float partial){
+        super.scale(actor,pose,partial);
+        // Human Era/FA lowers its complete riding pose by six model pixels.
+        // PM's chair already positions the actual passenger at seated hip height.
+        // Compensate only this render stack; dismount/other actors inherit no pose.
+        if(io.farfrontier.palemirror.internal.frontier.v3.PaleMirrorSeatEntities.isResidentSeat(actor.getVehicle()))
+            pose.translate(0,-6.0/16.0,0);
+    }
     @Override protected void setupRotations(Villager actor,PoseStack pose,float age,float yaw,float partial,float scale){
         var frame=PaleMirrorCombatClient.frame(actor,partial);
         super.setupRotations(actor,pose,age,frame==null?yaw:MeleeAnimation.facingYaw(frame,yaw),partial,scale);

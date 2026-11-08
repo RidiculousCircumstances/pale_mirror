@@ -90,6 +90,7 @@ public final class FrontierV3TestPilotClient {
     private static FrontierV3HarvestSemanticOracle harvestSemanticOracle;
     /** Local-only focus retained while the asynchronous X11 frame handshake is in flight. */
     private static Vec3 captureFocus;
+    private static Entity captureEntity;
     static final Map<DiagnosticIdentity, ObservedDiagnostic> diagnostics = new HashMap<>();
     private FrontierV3TestPilotClient() { }
     @SubscribeEvent
@@ -113,7 +114,7 @@ public final class FrontierV3TestPilotClient {
             boardInteractionAttempted = false;
             entityInteractionAttempted = false;
             attackedEntityRuntimeId = -1; entityAttackAttempts = 0; attackedEntityInitialHealth = Float.NaN; lastEntityAttackTick = Long.MIN_VALUE; lastAttackedEntityPosition = null;
-            captureBarrier = null; captureFocus = null; diagnostics.clear(); PLAYER_HEALTH.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset();
+            captureBarrier = null; captureFocus = null; captureEntity = null; diagnostics.clear(); PLAYER_HEALTH.clear(); FrontierV3PilotMotionObserver.reset(); FrontierV3PilotSettlementPopulationObserver.reset();
             harvestSemanticOracle = null;
             FrontierV3TestPilotPresentation.clear(Minecraft.getInstance());
             if (FrontierV3PilotSessionControl.resumed()) {
@@ -485,7 +486,7 @@ public final class FrontierV3TestPilotClient {
         // preceding look action.  Keep this read-only presentation assertion aimed locally while
         // waiting; it still requires the actual target state in the rendered client level.
         look(minecraft, expected);
-        captureFocus = Vec3.atCenterOf(expected);
+        captureEntity = null; captureFocus = Vec3.atCenterOf(expected);
         Vec3 delta = Vec3.atCenterOf(expected).subtract(minecraft.player.getEyePosition());
         double distance = delta.length();
         boolean aimed = distance > 0.0D && distance <= 128.0D
@@ -512,7 +513,7 @@ public final class FrontierV3TestPilotClient {
         BlockPos anchor = resolvedPosition(minecraft, action, "position");
         if (anchor == null) return;
         FrontierV3PilotPresentationAssertions.assertVisibleBoard(minecraft, action, actionStartedTick, anchor,
-                value -> look(minecraft, value), value -> captureFocus = Vec3.atCenterOf(value), FrontierV3TestPilotClient::advance);
+                value -> look(minecraft, value), value -> { captureEntity = null; captureFocus = Vec3.atCenterOf(value); }, FrontierV3TestPilotClient::advance);
     }
     /** Presentation-only proof: the player camera sees a locally rendered ordinary entity, not a server-selected UUID. */
     private static void assertVisibleEntity(Minecraft minecraft, JsonObject action) {
@@ -524,7 +525,8 @@ public final class FrontierV3TestPilotClient {
         Vec3 eye = minecraft.player.getEyePosition(); Vec3 view = minecraft.player.getViewVector(1.0F).normalize();
         boolean visible = minecraft.level.getEntitiesOfClass(Entity.class, minecraft.player.getBoundingBox().inflate(maxDistance), entity -> {
             if (entity.isRemoved() || !BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(expectedType)
-                    || !(entity instanceof Display.TextDisplay || entity.isCustomNameVisible())
+                    // A hidden nameplate does not make the received body invisible.
+                    || entity.isInvisibleTo(minecraft.player)
                     || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)
                     || !minecraft.player.hasLineOfSight(entity)
                     || action.has("pose")&&!entity.getPose().name().equals(action.get("pose").getAsString())
@@ -548,7 +550,7 @@ public final class FrontierV3TestPilotClient {
         Entity target=FrontierV3TestPilotPresentation.nearestVisibleNamedEntity(minecraft,action);
         if(target==null){timeout(minecraft,action,"no visible received entity for "+action.get("nameContains"));return;}
         // Direct local rotation updates the render view; inherited Entity.lookAt does not reliably do so.
-        captureFocus=target.getEyePosition();look(minecraft,captureFocus);advance("look_nearest_entity");
+        captureEntity=target;captureFocus=target.getBoundingBox().getCenter();look(minecraft,captureFocus);advance("look_nearest_entity");
     }
     /**
      * Uses Minecraft's normal entity interaction packet and waits for its local, optional
@@ -830,7 +832,7 @@ public final class FrontierV3TestPilotClient {
         BlockPos target = resolvedPosition(minecraft, action, action.has("at") ? "at" : "position");
         if (target == null) return;
         look(minecraft, target);
-        captureFocus = Vec3.atCenterOf(target);
+        captureEntity = null; captureFocus = Vec3.atCenterOf(target);
         advance("look");
     }
     /** Resolves a narrow immutable plan anchor from a read-only diagnostic. */
@@ -930,19 +932,25 @@ public final class FrontierV3TestPilotClient {
             JsonObject frame = element.getAsJsonObject(); if (frame.get("after").getAsInt() == completedAction) return frame;
         } return null;
     }
-    /** The camera stays fixed while the independent X11 capture handshake is pending. */
+    /** Literal frames stay fixed; entity frames follow the exact received body during X11 capture. */
     private static void advanceCaptureBarrier(Minecraft minecraft) {
+        if (captureEntity != null) {
+            if (captureEntity.isRemoved() || captureEntity.level() != minecraft.level
+                    || minecraft.level.getEntity(captureEntity.getId()) != captureEntity)
+                throw new IllegalStateException("the exact frame subject left the received client world");
+            captureFocus = captureEntity.getBoundingBox().getCenter();
+        }
         if (captureFocus != null) look(minecraft, captureFocus);
         var next = captureBarrier.advance(minecraft.level.getGameTime());
         captureBarrier = next.orElse(null);
         if (next.isEmpty()) {
-            captureFocus = null;
+            captureFocus = null; captureEntity = null;
             if (index >= actions.size()) FrontierV3TestPilotCompletion.complete(actions.size());
         }
     }
     private static void reset() {
         Minecraft minecraft = Minecraft.getInstance(); minecraft.options.keyUp.setDown(false); minecraft.options.keyJump.setDown(false); FrontierV3TestPilotPresentation.reset(minecraft);
-        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
+        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; captureEntity = null; runningSetup = false; index = 0; actionStartedTick = -1L;
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
         visitSent = false; FrontierV3PilotEntityVisit.reset(); visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L;
                     visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;
@@ -954,7 +962,7 @@ public final class FrontierV3TestPilotClient {
     }
     private static void clearExpectedLossTransientState() {
         Minecraft.getInstance().options.keyUp.setDown(false); Minecraft.getInstance().options.keyJump.setDown(false);
-        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
+        actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; captureEntity = null; runningSetup = false; index = 0; actionStartedTick = -1L;
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
         placementAttempted = false; itemUse = null; visitSent = false; FrontierV3PilotEntityVisit.reset(); visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null;
         visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;

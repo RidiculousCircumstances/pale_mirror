@@ -597,9 +597,12 @@ test('persistent client deadline includes the declared disconnected COLD and res
 });
 
 
-test('physical entity rendezvous remains bounded setup and cannot become an evidence action', () => {
+test('player-only camera rendezvous stays bounded before and between semantic observations', () => {
+  const camera={...scenario,assertions:[],frames:[]};
   const action={type:'visit_nearest_entity',entityType:'minecraft:villager',nameContains:'Guard',maxDistance:64,timeoutMs:30000};
-  assert.doesNotThrow(()=>validateScenario({...scenario,setup:[action]}));
-  assert.throws(()=>validateScenario({...scenario,actions:[action]}));
-  assert.throws(()=>validateScenario({...scenario,setup:[{...action,maxDistance:129}]}));
+  assert.doesNotThrow(()=>validateScenario({...camera,setup:[action]}));
+  assert.doesNotThrow(()=>validateScenario({...camera,actions:[action]}));
+  assert.throws(()=>validateScenario({...camera,setup:[{...action,maxDistance:129}]}));
+  assert.throws(()=>validateScenario({...camera,actions:[{...action,standOff:2.1}]}));
+  assert.throws(()=>validateScenario({...camera,actions:[{...action,workerId:'container:foreign'}]}));
 });

@@ -38,6 +38,7 @@ final class CombatVillagerModel extends VillagerModel<Villager> implements Armed
         var arm=side==HumanoidArm.RIGHT?right:left;var forearm=side==HumanoidArm.RIGHT?rightForearm:leftForearm;
         arm.xRot=shoulder;arm.yRot=yaw;arm.zRot=roll;forearm.xRot=elbow;
     }
+    public boolean seatedPose(){leg(true,-1.35f);leg(false,-1.35f);return true;}
     public void leg(boolean right,float pitch){if(pitch!=0)(right?rightLeg:leftLeg).xRot=pitch;}
     public void torso(float yaw,float lean){body.yRot=yaw;body.xRot=lean;right.z-=2*lean;left.z-=2*lean;}
     public void look(float yaw,float pitch){getHead().yRot=yaw;getHead().xRot=pitch;}

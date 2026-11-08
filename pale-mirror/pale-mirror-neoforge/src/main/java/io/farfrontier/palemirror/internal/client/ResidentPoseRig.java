@@ -4,6 +4,8 @@ import net.minecraft.world.entity.HumanoidArm;
 interface ResidentPoseRig {
     void arm(HumanoidArm side,float shoulder,float elbow,float yaw,float roll);
     void leg(boolean right,float pitch);
+    /** True only when this adapter changes its base sitting pose. */
+    boolean seatedPose();
     void torso(float yaw,float lean);
     void look(float yaw,float pitch);
 }

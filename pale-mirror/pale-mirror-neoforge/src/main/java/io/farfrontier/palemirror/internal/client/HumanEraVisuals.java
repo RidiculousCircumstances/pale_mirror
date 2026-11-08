@@ -67,6 +67,9 @@ final class HumanEraVisuals {
             var arm=side==HumanoidArm.RIGHT?right:left;arm.xRot=shoulder+elbow*0.35f;arm.yRot=yaw;arm.zRot=roll;
         }
         List<ModelPart> parts(){var result=new ArrayList<ModelPart>(heads);result.add(body);result.add(right);result.add(left);result.add(rightLeg);result.add(leftLeg);return List.copyOf(result);}
+        // The pinned CEM animations own both leg rotations and their translated
+        // parent/child joints. Overriding one after evaluation tears that pose apart.
+        public boolean seatedPose(){return false;}
         public void leg(boolean right,float pitch){if(pitch!=0)(right?rightLeg:leftLeg).xRot=pitch;}
         public void torso(float yaw,float lean){ResidentPoseOverlay.torso(body,yaw,lean,0,-12,0);}
         public void look(float yaw,float pitch){for(var head:heads){head.yRot=yaw;head.xRot=pitch;}}
