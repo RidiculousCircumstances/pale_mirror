@@ -11,6 +11,33 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BoundProductionAdmissionTest {
+    @Test void unloadedBoundPickupYieldsItsServiceTurnWithoutReleasingTheJobOrResourceClaim() {
+        var state=fixture();var task=state.strategicPlans().tasks().values().iterator().next();
+        var events=ProductionProcess.planStart(state,ProductionProcess.start(task,200));
+        var started=events.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state=StrategicObjectiveProcess.reduceTaskTransition(state,task.ownerId(),
+                events.stream().map(ProposedEvent::payload).filter(StrategicTaskTransition.class::isInstance)
+                    .map(StrategicTaskTransition.class::cast).findFirst().orElseThrow());
+        state=ProductionProcess.reduceStarted(state,task.ownerId(),started);
+        var job=state.productionJobs().get(started.job().id());var source=StationWorkStorage.source(job);
+        state=state.withActorBody(job.workerId(),StationWorkGoal.current(state,job).station().standingBody());
+        assertTrue(ProductionServiceAccess.resumeBlocker(state,job).isEmpty());
+        var scope=ReferenceContainerCustody.scopeId(source);var lease=state.replicaCustody().custodyByScope().get(scope);
+        var released=state.replicaCustody().checkpoint(scope,lease.authorityEpoch(),lease.expectedCanonicalRevision(),lease.expectedReplicaRevision())
+                .release(scope,lease.authorityEpoch(),lease.expectedCanonicalRevision(),lease.expectedReplicaRevision());
+        var waiting=state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(released));
+        assertEquals(java.util.Optional.of(ProductionServiceAccess.ServiceWait.SOURCE_PHYSICAL_BINDING),
+                ProductionServiceAccess.resumeBlocker(waiting,job));
+        assertFalse(ProductionServiceAccess.available(waiting,job));
+        assertTrue(ProductionServiceAccess.waitingForServiceResource(waiting,HumanAssignmentProjection.compile(waiting).assignment(job.workerId())));
+        assertTrue(ServiceAccessCapabilities.current(waiting,source).stream().filter(d->d.identity().ownerId().equals(job.id()))
+                .noneMatch(ServiceAccessDemand::readyToEnter));
+        assertEquals(state.productionJobs(),waiting.productionJobs());assertSame(state.inventory(),waiting.inventory());
+        var restored=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertTrue(ProductionServiceAccess.resumeBlocker(restored,restored.productionJobs().get(job.id())).isEmpty(),
+                "the actual live source restores eligibility without a sticky derived refusal");
+    }
     @Test
     void exactPermissionsSurviveSnapshotAndDoNotCancelAnAlreadyAdmittedExecution() {
         var state = twoBakerFixture();

@@ -69,6 +69,32 @@ class SeatedLeisureProcessTest {
     assertTrue(s.humanPopulation().seats().free(selected.id()));assertFalse(s.humanPopulation().seats().uses().containsKey(ACTOR));
     assertEquals(originalInventory,s.inventory());assertTrue(s.actorExecutions().actors().get(ACTOR).current().isEmpty());
   }
+  @Test void coldStandUpRecoversNativeChairFeetCellWithoutInventingSeatedProgress() {
+    var s=arrived(departed(started()));long tick=s.routines().rows().get(ACTOR).phaseAt()+1;
+    s=step(s,tick);var row=s.routines().rows().get(ACTOR);var use=ResidentRoutines.use(s,row);
+    var chair=use.place().chair();
+    s=s.withActorBody(ACTOR,new BodyPosition(chair.x(),chair.y(),chair.z()));
+    s=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(s));
+    long end=row.startedAt()+s.bootstrap().ruleset().residentLife().routines().walkingBudgetTicks()+1;
+    var events=FrontierWorldRuntimeDefinition.planScheduled(s,ResidentRoutineProcess.progress(row,end),new SimInstant(end));
+    assertTrue(events.stream().anyMatch(e->e.payload() instanceof SeatEvent.Changed));
+    s=ResidentRoutineProcessTest.apply(s,events,end);
+    assertEquals(SeatUse.Phase.RESERVED,ResidentRoutines.use(s,row).phase());
+    assertEquals(use.place().egress(),s.actorLocations().get(ACTOR).supportingSurface());
+    assertEquals(ResidentRoutine.Phase.SEATING,s.routines().rows().get(ACTOR).phase(),"a lost native contact earns no rest interval");
+    s=step(s,end+20);assertEquals(ResidentRoutine.Phase.CLOSED,s.routines().rows().get(ACTOR).phase());
+  }
+  @Test void coldAlreadyVacatedSeatDoesNotPullTheObservedBodyBackOrInventUnknownSupport() {
+    var s=arrived(departed(started()));long tick=s.routines().rows().get(ACTOR).phaseAt()+1;
+    s=step(s,tick);var row=s.routines().rows().get(ACTOR);var use=ResidentRoutines.use(s,row);
+    var actual=use.place().egress().standingBody();s=s.withActorBody(ACTOR,actual);
+    var unknown=s.recordPhysicalDelta(new PhysicalDelta(actual.supportingSurface().support(),PhysicalDeltaKind.UNKNOWN_SCAR,
+        Optional.empty(),Optional.empty(),"test:seat-vacancy-unknown"));
+    assertTrue(SeatContacts.coldExit(unknown,use).isEmpty());
+    long end=row.startedAt()+s.bootstrap().ruleset().residentLife().routines().walkingBudgetTicks()+1;
+    s=step(s,end);assertEquals(actual,s.actorLocations().get(ACTOR).body());
+    assertEquals(SeatUse.Phase.RESERVED,ResidentRoutines.use(s,row).phase());
+  }
   @Test void incompleteForeignAndMissingSeatDeclarationsFailBeforeAdmissionOrRecovery() {
     var s=ResidentRoutineProcessTest.hotPresence(initial(),ACTOR);var body=ResidentRoutineProcessTest.actuation(s,ACTOR);var place=ResidentRoutines.seats(s,ACTOR).getFirst();
     assertThrows(IllegalArgumentException.class,()->new RoutineEvent.Requested(body,ResidentRoutine.Kind.SIT,place.approach()));

@@ -23,11 +23,11 @@ public final class ServiceClearanceRoutes {
         var excluded = new java.util.ArrayList<ServiceAccessBoundary>();
         for (var point : ServiceBoundaryComposition.operationalDeclarations(state).values()) {
             if (point.boundary().occupied(origin.standingBody())) continue;
-            if (busy.computeIfAbsent(point.pointId(), id -> !ServiceAccessCapabilities.current(state, id).isEmpty()))
+            if (demanded(point.pointId()))
                 excluded.add(point.boundary());
         }
-        departure = PedestrianLocalDeparture.departure(state, origin).forActor(state, actor).excludingServiceBoundaries(excluded);
         publicGeometry = KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, actor);
+        departure = PedestrianLocalDeparture.departure(state, origin).forActor(state, actor).excludingServiceBoundaries(excluded);
         nearby = ServiceBoundaryComposition.nearbyDeclarationIndex(state);
     }
 
@@ -36,6 +36,10 @@ public final class ServiceClearanceRoutes {
     }
     public static ServiceClearanceRoutes fromService(FrontierWorldState state, SubjectId actor, SurfaceAnchor actual, ServicePointId point) {
         return new ServiceClearanceRoutes(state, actor, actual, java.util.Optional.of(point));
+    }
+    private boolean demanded(SubjectId point) {
+        return busy.computeIfAbsent(point, id -> ServiceAccessCapabilities.current(state, id).stream()
+                .anyMatch(demand -> demand.readyToEnter() || demand.physicallyAdmitted()));
     }
     public KnownPedestrianRouteKnowledge knowledge() { return departure; }
     public int evaluatedPointCount() { return evaluated.size(); }
@@ -55,10 +59,9 @@ public final class ServiceClearanceRoutes {
     public boolean allows(List<SurfaceAnchor> route) {
         if (route.isEmpty() || !route.getFirst().equals(origin) || !publicDestination(route.getLast())) return false;
         int firstPublic = 0;
-        // A no-parking contact is still ordinary transit. Using destination
-        // policy here can move the exit threshold beyond its own boundary and
-        // reject every otherwise legal route out of an authored building.
-        while (firstPublic < route.size() && !publicGeometry.traversable(List.of(route.get(firstPublic)))) firstPublic++;
+        // The declared outward prefix may traverse the facility's no-parking
+        // access contacts; the public continuation begins at its first idle contact.
+        while (firstPublic < route.size() && !publicDestination(route.get(firstPublic))) firstPublic++;
         if (firstPublic == route.size()) return false;
         // Only the declared, geometrically valid private exit may precede public service space.
         if (firstPublic > 0 && !departure.traversable(route.subList(0, firstPublic + 1))) return false;
@@ -71,8 +74,7 @@ public final class ServiceClearanceRoutes {
             var boundary = point.boundary();
             // An unused service envelope is ordinary transit, never inventory authority.
             // Keep the incumbent's outward-only crossing and currently demanded throats.
-            if (incumbent.filter(point.identity()::equals).isEmpty() && !busy.computeIfAbsent(point.pointId(),
-                    id -> !ServiceAccessCapabilities.current(state, id).isEmpty())) continue;
+            if (incumbent.filter(point.identity()::equals).isEmpty() && !demanded(point.pointId())) continue;
             if (boundary.allowsWaitingRoute(route)) continue;
             // The first public contact may be inside its service throat. This is outward
             // clearance, not permission to cross another service zone or re-enter after leaving.

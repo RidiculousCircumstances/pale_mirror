@@ -29,10 +29,9 @@ class ServiceAreaDestinationPlanningTest {
                     Set.of(), candidate -> candidate.manhattanDistance(start) > 4, candidate -> true).isEmpty());
             assertEquals(0, queries.get(), "a known sealed component cannot request one route per exterior cell");
             var opened = initial;
-            assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> ServiceAreaDestinations.select(
-                    ServiceClearanceRoutes.from(opened, actor, start), actor, start, Set.of(),
-                    candidate -> candidate.manhattanDistance(start) > 4, candidate -> true));
-            assertEquals(1, queries.get(), "changed geometry reconsiders the real shared route without an invented arrival");
+            assertTrue(ServiceAreaDestinations.select(ServiceClearanceRoutes.from(opened, actor, start), actor, start, Set.of(),
+                    candidate -> candidate.manhattanDistance(start) > 4, candidate -> true).isPresent());
+            assertEquals(0, queries.get(), "changed geometry reopens a proved local opportunity without a global route wait");
             assertEquals(start, opened.actorLocations().get(actor).supportingSurface());
         }
     }
@@ -139,7 +138,7 @@ class ServiceAreaDestinationPlanningTest {
                 java.util.Optional.empty(),java.util.Optional.empty(),"test:aisle-obstruction"));
         assertFalse(ServiceClearanceRoutes.from(damaged,actor,route.getFirst()).allows(route),"shared transit retains real geometry checks");
     }
-    @Test void unfinishedDestinationSearchIsOneCooperativeWaitNotAnAbsentOrInventedRestingPlace() throws Exception {
+    @Test void boundedDestinationOpportunityUsesSharedWalkingEdgesWithoutAGlobalWait() throws Exception {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:parking-planning"), 421L));
         var actor = state.bootstrap().settlements().getFirst().residents().getFirst().id();
         var start = state.actorLocations().get(actor).supportingSurface();
@@ -149,12 +148,12 @@ class ServiceAreaDestinationPlanningTest {
             queries.incrementAndGet();
             return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 1, 1, "pending");
         })) {
-            var observed = PedestrianRoutePlanning.observe(() -> assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
-                    () -> ServiceAreaDestinations.select(ServiceClearanceRoutes.from(state,actor,start),actor,start,Set.of(),
-                            candidate -> Math.abs(candidate.x()-start.x())+Math.abs(candidate.z()-start.z())>4,candidate -> true)));
-            assertEquals(PedestrianRouteResult.Status.PLANNING, observed.result().status());
-            assertEquals(1, queries.get(), "an unfinished candidate must not fan out through the whole resting area");
-            assertEquals(1, observed.requests().size());
+            var observed = PedestrianRoutePlanning.observe(() -> ServiceAreaDestinations.select(
+                    ServiceClearanceRoutes.from(state,actor,start),actor,start,Set.of(),
+                    candidate -> Math.abs(candidate.x()-start.x())+Math.abs(candidate.z()-start.z())>4,candidate -> true));
+            assertTrue(observed.result().isPresent());
+            assertEquals(0, queries.get(), "a local optional opportunity cannot hold a global canonical predecessor");
+            assertTrue(observed.requests().isEmpty());
             assertEquals(start, state.actorLocations().get(actor).supportingSurface());
         }
         var selected = ServiceAreaDestinations.select(ServiceClearanceRoutes.from(state,actor,start),actor,start,Set.of(start),candidate -> true,candidate -> true).orElseThrow();

@@ -1,8 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -10,7 +8,6 @@ import java.util.Set;
 /** Geometry policy for resting outside all temporary service buffers, independent of the service's purpose. */
 public final class ServiceAreaDestinations {
     private static final int MAX_SEARCH_RADIUS = 32; // Bounded search, never an expanding whole-world scan.
-    private record Candidate(SurfaceAnchor surface, long distance, int ordinal) { }
     private ServiceAreaDestinations() { }
 
     /** Actual-origin escape uses the common declared departure; target and native-route probes stay separate. */
@@ -47,47 +44,14 @@ public final class ServiceAreaDestinations {
             if (hasStandingClearance(candidate, excluded) && available.test(candidate)
                     && !temporary.test(candidate) && routeAllowed.test(local.get(candidate))
                     && reachable.test(candidate)) return Optional.of(candidate);
-        // Parking is a bounded local opportunity. Discover its actual connected
-        // component once through shared walking edges before requesting routes.
-        // A sealed service aisle must not queue one world search per exterior
-        // target and hold every other resident behind that repeated prefix.
-        // Exhaustion/unknown space is no global NO_PATH claim: a later ordinary
-        // owner review can reconsider the opportunity after geometry/demand changes.
-        var connected = Set.copyOf(io.farfrontier.palemirror.frontier.v3.model.geometry.ReachableSurfaceArea.select(
-                knowledge.geometry(), List.of(start), start, MAX_SEARCH_RADIUS, 4096, 4096, surface -> true).selected());
-        var candidates = new java.util.PriorityQueue<Candidate>(java.util.Comparator.comparingLong(Candidate::distance)
-                .thenComparingInt(Candidate::ordinal));
-        int ordinal = 0;
-        for (int distance = 1; distance <= MAX_SEARCH_RADIUS; distance++) {
-            // Expand columns lazily, but rank actual 3-D displacement. A nearby column
-            // above a pit is not a nearby sidestep; unseen columns have distance > this ring.
-            for (int dx = -distance; dx <= distance; dx++) {
-                int dz = distance - Math.abs(dx);
-                for (int sign : dz == 0 ? new int[] {1} : new int[] {1, -1}) {
-                    for (SurfaceAnchor candidate : knowledge.surfacesAt(start.x() + dx, start.z() + sign * dz)) {
-                        long displacement = distance + Math.abs((long) candidate.y() - start.y());
-                        if (displacement <= MAX_SEARCH_RADIUS) candidates.add(new Candidate(candidate, displacement, ordinal++));
-                    }
-                }
-            }
-            while (!candidates.isEmpty() && candidates.peek().distance() <= distance) {
-                var candidate = candidates.remove().surface();
-                if (!connected.contains(candidate) || local.containsKey(candidate) || !hasStandingClearance(candidate, excluded)
-                        || !available.test(candidate) || temporary.test(candidate)) continue;
-                MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
-                        TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-                try {
-                    List<SurfaceAnchor> route = knowledge.plannedPath(start, order);
-                    if (routeAllowed.test(route) && reachable.test(candidate))
-                        return Optional.of(candidate);
-                } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                    if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
-                        throw unavailable;
-                    // Unsupported/blocked/unknown columns cannot consume a native candidate probe.
-                }
-            }
-        }
-        return Optional.empty();
+        // Optional parking cannot hold the canonical predecessor behind one
+        // global route request per rejected destination. Reuse the common bounded
+        // positive access proof, stopping at the first actually permitted route.
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.KnownLocalAccess.opportunity(
+                knowledge.geometry(), start, MAX_SEARCH_RADIUS,
+                candidate -> hasStandingClearance(candidate, excluded) && available.test(candidate) && !temporary.test(candidate),
+                route -> routeAllowed.test(route) && reachable.test(route.getLast()))
+                .map(receipt -> receipt.route().getLast());
     }
 
     /** Idle placement leaves a pedestrian-width gap; this is not a route obstacle policy. */

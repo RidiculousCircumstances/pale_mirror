@@ -85,6 +85,16 @@ public final class SeatContacts {
         var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, use.place().home(),
                 passages(state, use.place()))
                 .forActor(state, use.execution().actorId());
+        var actual = state.actorLocations().get(use.execution().actorId()).body();
+        var contact = use.place().contact().standingBody();
+        var physicalCell = new BodyPosition(use.place().chair().x(), use.place().chair().y(), use.place().chair().z());
+        if (!actual.equals(contact) && !actual.equals(physicalCell)) {
+            // A settled native departure can already have vacated the chair.
+            // Retire only its logical occupancy at that exact current supported
+            // body; never pull it back to a preferred exit or invent a route.
+            return knowledge.clearStation(actual.supportingSurface())
+                    ? Optional.of(actual.supportingSurface()) : Optional.empty();
+        }
         var exits = new LinkedHashSet<SurfaceAnchor>(); exits.add(use.place().egress());
         for (var facing : FacilityFacing.values()) exits.add(new SurfaceAnchor(use.place().chair().offset(facing.x(), -1, facing.z())));
         return exits.stream().filter(knowledge::clearStation).findFirst();
@@ -173,7 +183,12 @@ public final class SeatContacts {
                     || change.action() == SeatUse.Action.EXIT && use.phase() != SeatUse.Phase.SEATED
                     || change.action() == SeatUse.Action.ENTER && !approachClear(state, use) || !Objects.equals(expected, change.observed()))
                 throw new IllegalArgumentException("seat COLD transition lacks exact reservation/geometry");
-            var from = change.action() == SeatUse.Action.ENTER ? use.place().approach().standingBody() : use.place().contact().standingBody();
+            var from = change.action() == SeatUse.Action.ENTER ? use.place().approach().standingBody()
+                    : state.actorLocations().get(subject).body();
+            // A retired native passenger may be captured in the chair's feet
+            // cell rather than its logical standing contact. The exact seated
+            // use owns this nearby stand-up; common custody/fence/distance checks
+            // still apply. A previously vacated supported body stays where it is.
             changes.actorLocations(ActorLocalContact.change(state, use.execution(), from, expected));
         }
         var next = state.actorLocations().get(subject).condition().status() != ActorLifeStatus.ALIVE

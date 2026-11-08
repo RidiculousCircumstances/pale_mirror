@@ -21,7 +21,7 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
     }
     public sealed interface ResumeWait { String label(); }
     public enum ServiceWait implements ResumeWait {
-        STATION_CUSTODY, FUEL_DELIVERY, AUTOMATIC_PROCESSING, OUTPUT_STORAGE_CAPACITY;
+        SOURCE_PHYSICAL_BINDING, STATION_CUSTODY, FUEL_DELIVERY, AUTOMATIC_PROCESSING, OUTPUT_STORAGE_CAPACITY;
         @Override public String label() { return name(); }
     }
     public record StationWait(ProductionStationProcessing.StartReadiness readiness) implements ResumeWait {
@@ -124,6 +124,10 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
     }
     private static java.util.Optional<ResumeWait> operationBlocker(FrontierWorldState state, ProductionJob job) {
         var work = job.stationWork().orElseThrow();
+        if (work.pendingPhysicalStep().isEmpty() && work.phase() == StationWorkState.Phase.DEPOT_PICKUP
+                && job.inputHold() instanceof ProductionInputHold.FungibleBound
+                && !ReferenceContainerCustody.hasOperationalCustody(state, StationWorkStorage.source(job)))
+            return java.util.Optional.of(ServiceWait.SOURCE_PHYSICAL_BINDING);
         if (work.pendingPhysicalStep().isEmpty() && work.phase() == StationWorkState.Phase.STATION_LOAD) {
             var station = ProductionStationEnergy.record(state, work.stationId());
             if (ReferenceContainerCustody.blocksCanonicalUse(state, station.id())) return java.util.Optional.of(ServiceWait.STATION_CUSTODY);
