@@ -67,7 +67,10 @@ public final class ServiceAccessCoordinator {
     public static java.util.Set<SubjectId> wakePoints(FrontierWorldState state, SubjectId actorId) {
         var points = new java.util.HashSet<SubjectId>();
         var movement = state.actorMovements().get(actorId);
-        if (movement != null) movement.context().clearancePoint().ifPresent(points::add);
+        if (movement != null) {
+            movement.context().clearancePoint().ifPresent(points::add);
+            movement.context().entranceClaim(movement).map(ServiceAccessDemand.Identity::pointId).ifPresent(points::add);
+        }
         var actor = state.actorLocations().get(actorId);
         if (actor != null) ServiceBoundaryComposition.nearbyDeclarations(state,
                     new TerrainColumn(actor.body().x(), actor.body().z())).stream()
@@ -110,7 +113,7 @@ public final class ServiceAccessCoordinator {
         // A waiting declaration retains its identity and physical footprint but cannot win entry.
         if (demands.stream().anyMatch(demand -> demand.identity().equals(requested) && !demand.readyToEnter())) return new AccessDecision(false, AccessReason.RESOURCE_WAIT, Optional.of(requested.actorId()));
         var selfCare = demands.stream().filter(ServiceAccessDemand::readyToEnter).filter(demand -> demand.priority() == ServiceAccessDemand.Priority.SELF_CARE).toList();
-        var entering = selfCare.stream().filter(demand -> demand.presence() == ServiceAccessDemand.Presence.ENTERING)
+        var entering = selfCare.stream().filter(demand -> demand.presence() == ServiceAccessDemand.Presence.ENTERING || committedEntrance(state, demand))
                 .min(Comparator.comparingLong(ServiceAccessDemand::requestedAtTick)
                         .thenComparing(demand -> demand.identity().actorId()));
         var workers = demands.stream().filter(ServiceAccessDemand::readyToEnter).filter(demand -> demand.priority() == ServiceAccessDemand.Priority.WORK)
@@ -162,12 +165,17 @@ public final class ServiceAccessCoordinator {
                 .orElseGet(() -> new AccessDecision(false, AccessReason.NO_READY_WORKER, Optional.empty()));
     }
 
+    private static boolean committedEntrance(FrontierWorldState state, ServiceAccessDemand demand) {
+        var movement = state.actorMovements().get(demand.identity().actorId());
+        return movement != null && movement.context().entranceClaim(movement).equals(Optional.of(demand.identity()));
+    }
     /** A future request cannot hold the door ahead of a visitor already waiting
-     * there. Preserve a granted COLD entrance until its witnessed arrival; only
+     * there. Preserve an explicitly committed shared journey or COLD entrance until its witnessed arrival; only
      * uncommitted approaches compete by distance. This does not plan a route. */
     static Comparator<ServiceAccessDemand> approachOrder(FrontierWorldState state, ServiceAccessBoundary access) {
         return Comparator.<ServiceAccessDemand, Boolean>comparing(demand ->
                         demand.presence() != ServiceAccessDemand.Presence.OCCUPIED)
+                .thenComparing(demand -> !committedEntrance(state, demand))
                 .thenComparing(demand -> {
                     var movement = state.actorMovements().get(demand.identity().actorId());
                     return movement == null || movement.coldTravel().filter(travel ->

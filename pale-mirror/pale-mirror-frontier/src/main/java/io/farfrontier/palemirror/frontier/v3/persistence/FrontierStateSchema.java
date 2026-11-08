@@ -30,7 +30,8 @@ final class FrontierStateSchema {
     // Exact authored building content and explicit structural material wire identities.
     // Explicit manual-passage capability and alternate transit collision shape.
     // Authored inventories replace synthetic settlement stores; optional rack provider has stable tag3.
-    static final int VERSION = 347;
+    // Shared seat reservations retain declared furniture, exact activity and pending body interaction.
+    static final int VERSION = 350;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

@@ -6,8 +6,8 @@ import { assertF02cAftermathCarrier } from '../src/f02c-aftermath-carrier.mjs';
 import { isolatedScenarioOuterAttemptEnvironment, persistentRecoveryMetadata, resolveIsolatedScenarioOuterAttempt } from '../src/isolated-scenario-attempt.mjs';
 import { buildF02cAftermathCarrierReceipt, isolatedScenarioSupervisorInvocation, preflightF02cAftermathCarrier } from '../src/run-f02c-aftermath-carrier.mjs';
 
-const selector = 'cause:development-settlement-assault-epoch-4-attacker-bioform-west-19';
-const position = { x: -360, y: 64, z: -340 };
+const selector = 'cause:development-settlement-assault-epoch-2-attacker-bioform-west-7';
+const position = { x: -360, y: 64, z: -328 };
 const outerAttempt = '00000000-0000-0000-0000-000000000011';
 const clientRunId = '00000000-0000-0000-0000-000000000012';
 const nonce = '00000000-0000-0000-0000-000000000013';
@@ -16,8 +16,8 @@ const declarationSource = await readFile(new URL('../scenarios/disposable-cold-b
 const declarationSha256 = hash(declarationSource);
 const clearDeclaration = JSON.parse(declarationSource);
 const build = { sourceCommit: '1c8bd3df6cb075f48341c780b9e900d7637905b5', sourceDirty: false, profile: 'disposable_lite' };
-const pending = (revision) => ({ kind: 'aftermath', id: selector, status: 'ok', aftermathId: 'aftermath:development-settlement-assault-bomber-4',
-  cause: selector, epoch: 4, expectedOwner: 'structure:1-hall', expectedPart: 'FOUNDATION', expectedMaterial: 'HALL', provenance: 'captive-bomber-strike:assault:development-settlement-assault',
+const pending = (revision) => ({ kind: 'aftermath', id: selector, status: 'ok', aftermathId: 'aftermath:development-settlement-assault-bomber-2',
+  cause: selector, epoch: 2, expectedOwner: 'structure:1-hall', expectedPart: 'PUBLIC_ACCESS_SURFACE', expectedMaterial: 'Authored[block=NavigationBlockState[kind=minecraft:stone_bricks, properties={}], repairItemKind=minecraft:stone_bricks, data=Optional.empty]', provenance: 'captive-bomber-strike:assault:development-settlement-assault',
   eventAt: 400, revision, terminal: false, nextStatus: 'PENDING', cellStatus: 'PENDING', authorityRevision: -1, cursor: 0, observedAt: null, position });
 const realized = { ...pending(45), terminal: true, nextStatus: 'NONE', cellStatus: 'REALIZED', authorityRevision: 17, cursor: 1, observedAt: 445 };
 
@@ -55,7 +55,7 @@ function envelope() {
 test('F0.2C carrier consumes three assertion-bound records from the persistent final manifest, ignoring raw polling duplicates', () => {
   const value = runnerEnvelope();
   assert.deepEqual(assertF02cAftermathCarrier({ clearDeclaration: value.declaration, clearManifest: value.manifest }), {
-    aftermathId: 'aftermath:development-settlement-assault-bomber-4', cause: selector, position, owner: 'structure:1-hall', semanticPart: 'FOUNDATION', revision: 45
+    aftermathId: 'aftermath:development-settlement-assault-bomber-2', cause: selector, position, owner: 'structure:1-hall', semanticPart: 'PUBLIC_ACCESS_SURFACE', revision: 45
   });
 });
 

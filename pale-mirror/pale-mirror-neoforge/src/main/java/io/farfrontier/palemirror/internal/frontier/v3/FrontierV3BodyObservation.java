@@ -17,6 +17,7 @@ final class FrontierV3BodyObservation {
     static Observation capture(Entity body) {
         Objects.requireNonNull(body, "physical body");
         var support = body.getOnPos();
+        if (body.getVehicle() instanceof FrontierV3SeatCarrier) support = body.getVehicle().blockPosition();
         if (body.level() instanceof ServerLevel level) {
             // hasChunkAt tests the ticket level, not the physical presence of the full
             // chunk. A hidden body's final save may precede the actual terrain unload.
@@ -55,7 +56,8 @@ final class FrontierV3BodyObservation {
                                        net.minecraft.core.BlockPos support) {
         if (geometry instanceof net.minecraft.world.level.chunk.LevelChunk chunk
                 && !chunk.getPos().equals(new net.minecraft.world.level.ChunkPos(support))) return unsupported(body);
-        if(FrontierV3RestingPose.at(body,geometry,support)){
+        if(FrontierV3RestingPose.at(body,geometry,support)
+                || body.getVehicle() instanceof FrontierV3SeatCarrier seat && seat.contactEvidence(body,geometry,support)){
             var surface=SurfaceAnchor.at(support.getX(),support.getY(),support.getZ());
             return new Observation(surface.standingBody(),Optional.of(surface));
         }

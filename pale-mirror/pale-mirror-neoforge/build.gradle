@@ -192,6 +192,8 @@ dependencies {
     // Optional client model adapter only; resource packs and EMF/ETF are supplied by the client pack.
     compileOnly 'maven.modrinth:entity-model-features:197m3VoU'
     compileOnly 'maven.modrinth:entitytexturefeatures:lwNx1nD1'
+    // Exact optional furniture API. The pack supplies its runtime; PM never shades Handcrafted.
+    compileOnly 'maven.modrinth:handcrafted:JfqnpP2Z'
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     // Minecraft supplies Gson at runtime; unit tests execute outside its launch classpath.

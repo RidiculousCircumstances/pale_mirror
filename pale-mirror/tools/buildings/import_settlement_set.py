@@ -180,6 +180,11 @@ def build(spec,source,out):
   prop['bed.'+bid+'.purpose']='MEDICAL' if medical else 'RESIDENTIAL'
   prop['bed.'+bid+'.recoveryPermille']='5000' if medical else '3000'
  prop['beds']=','.join(beds)
+ if spec.get('seats'):
+  prop['format']='5';prop['seats']=','.join(seat['id'] for seat in spec['seats'])
+  for seat in spec['seats']:
+   for key,value in seat.items():
+    if key!='id':prop['seat.'+seat['id']+'.'+key]=','.join(map(str,point(value))) if isinstance(value,list) else value
  for zone in spec.get('zones',[]):
   name=zone['id'];prop['zones']+=(',' if prop['zones'] else '')+name
   for key,value in {'room':'main','use':zone['use'],'min':point(zone['min']),'max':point(zone['max']),'categories':','.join(zone.get('categories',[])),'priority':str(zone.get('priority',0))}.items():

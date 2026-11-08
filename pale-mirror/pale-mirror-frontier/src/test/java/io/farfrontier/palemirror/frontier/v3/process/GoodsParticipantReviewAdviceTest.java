@@ -130,6 +130,41 @@ class GoodsParticipantReviewAdviceTest {
         assertTrue(state.shipments().missions().isEmpty(), "review-stage reuse grants no shipment or stock authority");
     }
 
+    @Test void datedDomesticReuseCannotRewindCurrentNutritionWhenReassessingCultivation() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:cultivation-review-current-nutrition"), 139L,
+                FrontierRulesets.installed("frontier-v3-living-residents-r36")));
+        var home = state.bootstrap().settlements().getFirst();
+        var crop = state.bootstrap().ruleset().fields().cultivationCrop();
+        var field = state.resourceSiteDescriptors().values().stream()
+                .filter(site -> site.settlementId().equals(home.id())
+                        && site.kind() == crop)
+                .findFirst().orElseThrow().id();
+        var preparation = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(field, 0));
+        state = ResourceSiteProcess.reducePreparationStarted(state, field,
+                (ResourceSitePreparationStarted) preparation.getFirst().payload());
+        state = ResourceSiteProcess.reducePrepared(state, field, (ResourceSitePrepared) preparation.get(1).payload());
+        var action = GoodsParticipantProcess.review(home.id(), 4000);
+        var first = SettlementEconomicPlanPreparation.review(state, action, new SimInstant(4000));
+        assertTrue(first.publication().orElseThrow().cultivation().isPresent());
+        var actor = home.residents().getFirst().id();
+        var advanced = state.withHumanPopulation(state.humanPopulation().accrueHunger(
+                actor, 4001, state.bootstrap().ruleset().residentLife()));
+        var retried = SettlementEconomicPlanPreparation.review(advanced, action, new SimInstant(4001));
+        assertSame(first.publication().orElseThrow().domestic(), retried.publication().orElseThrow().domestic(),
+                "the dated domestic forecast is reused without renewing its validity");
+        assertEquals(first.atTick(), retried.atTick());
+        assertEquals(first.publication().orElseThrow().reviewAtTick(), retried.publication().orElseThrow().reviewAtTick());
+        assertEquals(CultivationEconomicEvaluation.evaluate(advanced, home.id(), 4001),
+                retried.publication().orElseThrow().cultivation(),
+                "the newly collected cultivation option uses its actual current snapshot instant");
+        assertThrows(IllegalArgumentException.class, () -> advanced.humanPopulation().nutrition(actor)
+                .accrueThrough(4000, advanced.bootstrap().ruleset().residentLife()),
+                "the nutrition owner still rejects historical writes/reads from a future snapshot");
+        assertTrue(advanced.companies().goodsTrade().contracts().isEmpty());
+        assertTrue(advanced.shipments().missions().isEmpty(), "a forecast grants no shipment authority");
+    }
+
     @Test void publicQuoteWakesOpposingCommodityInterestsOnceAndLeavesOtherKnownPeersAlone() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:addressed-market-wake"), 126L,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));

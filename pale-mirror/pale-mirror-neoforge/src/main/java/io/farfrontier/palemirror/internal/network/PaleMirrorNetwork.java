@@ -18,7 +18,13 @@ public final class PaleMirrorNetwork {
 
     public static void register(RegisterPayloadHandlersEvent event) {
         // Authored-fabric preview has a larger bounded model envelope; require a matching decoder.
-        var registrar = event.registrar("7");
+        var registrar = event.registrar("9");
+        registrar.playToClient(ResidentRoutinePresentationPayload.TYPE,ResidentRoutinePresentationPayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->{if(FMLEnvironment.dist==Dist.CLIENT)
+                    io.farfrontier.palemirror.internal.client.PaleMirrorResidentRoutineClient.receive(payload);}));
+        registrar.playToClient(ResidentMealPresentationPayload.TYPE, ResidentMealPresentationPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> { if (FMLEnvironment.dist == Dist.CLIENT)
+                    io.farfrontier.palemirror.internal.client.PaleMirrorResidentMealClient.receive(payload); }));
         registrar.playToClient(BuildingPreviewPayload.TYPE,BuildingPreviewPayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->{if(FMLEnvironment.dist==Dist.CLIENT)
                     io.farfrontier.palemirror.internal.client.PaleMirrorBuildingPreviewClient.receive(payload);}));

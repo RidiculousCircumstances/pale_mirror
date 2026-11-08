@@ -1,0 +1,178 @@
+{
+  "schema": 1,
+  "id": "disposable_northwatch_seated_dining",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 139
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25599,
+    "profile": "northwatch-dining",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 300 0 true"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1439,
+        "y": 64,
+        "z": -1418
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-11",
+      "expect": {
+        "status": "ok",
+        "physicalBodyCustody": true,
+        "ambientStatus": "HOT"
+      },
+      "timeoutMs": 45000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-11",
+      "expect": {
+        "status": "ok",
+        "nutrition": "HUNGRY"
+      },
+      "timeoutMs": 120000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-11",
+      "expect": {
+        "status": "ok",
+        "mealPhase": "CONSUME",
+        "seatPhase": "SEATED",
+        "seatPending": false
+      },
+      "timeoutMs": 120000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-11",
+          "field": "name"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-11",
+          "field": "name"
+        }
+      },
+      "vehicleType": "pale_mirror:resident_seat",
+      "mealItem": "minecraft:bread",
+      "maxDistance": 32,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-11",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "storedSatietyUnits": 1000,
+        "mealPhase": "NONE",
+        "seatPhase": "NONE"
+      },
+      "timeoutMs": 120000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-14",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "storedSatietyUnits": 1000,
+        "mealPhase": "NONE",
+        "seatPhase": "NONE"
+      },
+      "timeoutMs": 120000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-17",
+      "expect": {
+        "status": "ok",
+        "nutrition": "NOURISHED",
+        "storedSatietyUnits": 1000,
+        "mealPhase": "NONE",
+        "seatPhase": "NONE"
+      },
+      "timeoutMs": 120000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 10,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 6,
+      "name": "northwatch-actual-seated-eating-before-restart"
+    },
+    {
+      "after": 9,
+      "name": "northwatch-three-seated-meals-complete"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 6,
+    "resumeSetup": []
+  }
+}

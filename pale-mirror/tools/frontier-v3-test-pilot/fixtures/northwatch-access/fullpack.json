@@ -1,0 +1,223 @@
+{
+  "schema": 1,
+  "client": [
+    {
+      "filename": "FarmersDelight-1.21.1-1.3.2.jar",
+      "sha512": "da5a4236427df8010d75992201c8723ac84a8fa71efa55670551d333cac94a90ae8e8c536da63ae07a67f4d00dc2774ae4151030f41d26886e508f4a037c8694"
+    },
+    {
+      "filename": "Quark-4.1-482.jar",
+      "sha512": "811e1e9f263a7e4951896a646507d6d03bebef6c38c113425e5d25acd4da0af9a07a6e5f9f11393cb41cb6f1a97667d7748c4bf21bf842e87ca2b05d6ea9cd81"
+    },
+    {
+      "filename": "SimplyTooltips-neoforge-0.1.3.jar",
+      "sha512": "de69a684be47c7e25e6f8612f4aabe0fbf12816a40a8432eb9176b7f2d766e866dd96efbc0952e9dd683e97747ee15e1fe4d62cec1485c5c8dde9e58eef673ad"
+    },
+    {
+      "filename": "Zeta-1.1-40.jar",
+      "sha512": "a81dcf44f2bfd0fc1a52f00d9ca47a84ad2baf067adedb35eec859f6b9cec7b61ca432e549a3342b10902f84e76d70224cd54400285c8b13a0926835a62c667c"
+    },
+    {
+      "filename": "architectury-13.0.11-neoforge.jar",
+      "sha512": "d9f7c3bb8162577dfb461ffdf04bd6a3563c7586934a0e2a744c14421beffb8286f0d88d4c758317003f20f99fe8072a39b9d675af061e036970d36db36027f0"
+    },
+    {
+      "filename": "blockui-1.0.212-1.21.1-snapshot.jar",
+      "sha512": "defaae595ade0f82e4be5f426978b71cbe9e7a84301f8f8e4e096581b8aefe3b053d8f5e6e0ee55844c3d4e07f3db781e70aab4663fd222a61e20c30f66cd3a3"
+    },
+    {
+      "filename": "create-1.21.1-6.0.10.jar",
+      "sha512": "11cc8fc049d2f67f6548c7abfada6b82a3adb5c7ca410a742de04bbca76e03862c518721b88d806f6e6d768a4d68531fdb903a85859b25d1484d550cc7bafd4b"
+    },
+    {
+      "filename": "domum-ornamentum-1.0.237-snapshot-main.jar",
+      "sha512": "f0d56073a6053ff1318701ec1b9bfcb5aae40be658ec6e7cb4211613dfb170288e4cf408c8ff676d5369bf3789492d1a629ba8736422ee8d2fb9fa0d019e9d60"
+    },
+    {
+      "filename": "entity_model_features-3.3.12-1.21-neoforge.jar",
+      "sha512": "b18bde755c6719c62579d65c96e6e768c99b25fba9f987dc843b2a64ce4d713ba2f8151da4a98efe76d854550f40356ac4fdfa952568cf1fb11771353dfc70e8"
+    },
+    {
+      "filename": "entity_texture_features-7.2.6-1.21-neoforge.jar",
+      "sha512": "0e349c235b509de605ef4175a60e87ee78eab208b554ebc1dfa756b18ab2b531ce4641bfdc1c4542cb3c24d45b81698ca1413fcd001d589d82cbad6cea346f46"
+    },
+    {
+      "filename": "ferritecore-7.0.3-neoforge.jar",
+      "sha512": "19af89a2075bb10a63884fa853ebf84b02c79dc3242430ecdad056fd764fdcde367a7303276b329df01b0736e2ef264c5d80c7dc92c6aebd244f556a230bb417"
+    },
+    {
+      "filename": "fzzy_config-0.7.6+1.21+neoforge.jar",
+      "sha512": "6071890aba7f2273c9fd508914acc7850de9d986423760f9ce416875ffa04eea2ad71a7a6f4d5f90f0625a672f6f54606778d11151b155f3fd98c223c61a4a6d"
+    },
+    {
+      "filename": "geckolib-neoforge-1.21.1-4.9.2.jar",
+      "sha512": "c91012b16cc40c8f48f69b78cb8e2e5c006486ae2431fbd289dfc01be7a4217294becea22d83a155d6b32b3969450df871352a3695e1452168b84f41355f7b9e"
+    },
+    {
+      "filename": "handcrafted-neoforge-1.21.1-4.0.3.jar",
+      "sha512": "4ff5fb2aa9582b886d03f647fe9b8c12a828d29a1787e9c9b463be18192ea798e6a4ac83479623042791bce0bacbf6e3e2c2e9ef086640aeeb6970d3404e7ee4"
+    },
+    {
+      "filename": "kotlinforforge-5.12.0-all.jar",
+      "sha512": "b8c3942f4d33179edf3f102f3d870b99dd436f8b8236dbbd31aa51b888162c692cfd88927295f24dc8b4375232f4c6c17360c5d6c4823f93cbcd7cf4bdc8bd14"
+    },
+    {
+      "filename": "minecolonies-1.1.1411-1.21.1-snapshot.jar",
+      "sha512": "b32a5e954f68dc15d2616602bc55b4c6bc5b604ed6c921ffc446362ac1160abb1ce256b30c8b0477c0fe830e0afdad54d628b1a1d59aef5ea21d92a1acc4cfb0"
+    },
+    {
+      "filename": "moonlight-1.21.1-3.3.2-neoforge.jar",
+      "sha512": "6fde59eaef7b1ec8919f112f3f73908dd575ad7cb42ed34191c4f402664b2b3a4252d362af406f459353b4549ffea40e21b6aa2e98224573bee92e5f4e260ad8"
+    },
+    {
+      "filename": "multipiston-1.2.58-1.21.1.jar",
+      "sha512": "60007e72516857228c45cbfee14ec18c9c4e89b626ecdd659fff3a146d5dc527d52563645e3348b79820f7eeb0b6d3aeab4394e7b6d6a065666ed04333c05a48"
+    },
+    {
+      "filename": "pale_mirror_visuals-hosted.jar",
+      "sha512": "2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601"
+    },
+    {
+      "filename": "resourcefullib-neoforge-1.21-3.0.12.jar",
+      "sha512": "a9d20e345faa9bcb297bd95ac9524205834804d1bb13518397dd4f7f62b352b08c3339ee7f7870d3669078ceeb33d5c31ea527aecce4b31d62ec1ff7d8b562c8"
+    },
+    {
+      "filename": "sodium-neoforge-0.8.13-beta.2+mc1.21.1.jar",
+      "sha512": "6e9273862fb3397b5abea7ad37a65c3cd6d6bcb5cc06634d2b62b49999c00dac8972e4600e1d5b3c3936d0a92ccfad8ed4d04ed065595797d3c1e559f20aa08c"
+    },
+    {
+      "filename": "structurize-1.0.837-1.21.1-snapshot.jar",
+      "sha512": "5a03a88a5a7d432a86966c2d02e6ab7916a22f39e90aa408c43ce7fe8454c84d28fb94f88cacf128ca9b847a8c5e4c5105116f16741584e2a7ce9e9a71302067"
+    },
+    {
+      "filename": "supplementaries-1.21.1-3.8.8-neoforge.jar",
+      "sha512": "1602507a1485e989490d3e702cfdeeff99da7d05f08a435f31270f839f7b80f3c3d29ee171b31aa58c27526b304ba5c6395a211980ab58f784b7f53573b04115"
+    },
+    {
+      "filename": "towntalk-1.2.0.jar",
+      "sha512": "2414089d190045fea8ee80779a33f569827195ebbba41df712fa2feb7226f9d23b3b9be79d74515dd4207d8ac8d6549ccb22c2f9ea6ac6780da79cf7c4eb741d"
+    }
+  ],
+  "server": [
+    {
+      "filename": "FarmersDelight-1.21.1-1.3.2.jar",
+      "sha512": "da5a4236427df8010d75992201c8723ac84a8fa71efa55670551d333cac94a90ae8e8c536da63ae07a67f4d00dc2774ae4151030f41d26886e508f4a037c8694"
+    },
+    {
+      "filename": "Quark-4.1-482.jar",
+      "sha512": "811e1e9f263a7e4951896a646507d6d03bebef6c38c113425e5d25acd4da0af9a07a6e5f9f11393cb41cb6f1a97667d7748c4bf21bf842e87ca2b05d6ea9cd81"
+    },
+    {
+      "filename": "Zeta-1.1-40.jar",
+      "sha512": "a81dcf44f2bfd0fc1a52f00d9ca47a84ad2baf067adedb35eec859f6b9cec7b61ca432e549a3342b10902f84e76d70224cd54400285c8b13a0926835a62c667c"
+    },
+    {
+      "filename": "architectury-13.0.11-neoforge.jar",
+      "sha512": "d9f7c3bb8162577dfb461ffdf04bd6a3563c7586934a0e2a744c14421beffb8286f0d88d4c758317003f20f99fe8072a39b9d675af061e036970d36db36027f0"
+    },
+    {
+      "filename": "blockui-1.0.212-1.21.1-snapshot.jar",
+      "sha512": "defaae595ade0f82e4be5f426978b71cbe9e7a84301f8f8e4e096581b8aefe3b053d8f5e6e0ee55844c3d4e07f3db781e70aab4663fd222a61e20c30f66cd3a3"
+    },
+    {
+      "filename": "create-1.21.1-6.0.10.jar",
+      "sha512": "11cc8fc049d2f67f6548c7abfada6b82a3adb5c7ca410a742de04bbca76e03862c518721b88d806f6e6d768a4d68531fdb903a85859b25d1484d550cc7bafd4b"
+    },
+    {
+      "filename": "domum-ornamentum-1.0.237-snapshot-main.jar",
+      "sha512": "f0d56073a6053ff1318701ec1b9bfcb5aae40be658ec6e7cb4211613dfb170288e4cf408c8ff676d5369bf3789492d1a629ba8736422ee8d2fb9fa0d019e9d60"
+    },
+    {
+      "filename": "ferritecore-7.0.3-neoforge.jar",
+      "sha512": "19af89a2075bb10a63884fa853ebf84b02c79dc3242430ecdad056fd764fdcde367a7303276b329df01b0736e2ef264c5d80c7dc92c6aebd244f556a230bb417"
+    },
+    {
+      "filename": "fzzy_config-0.7.6+1.21+neoforge.jar",
+      "sha512": "6071890aba7f2273c9fd508914acc7850de9d986423760f9ce416875ffa04eea2ad71a7a6f4d5f90f0625a672f6f54606778d11151b155f3fd98c223c61a4a6d"
+    },
+    {
+      "filename": "geckolib-neoforge-1.21.1-4.9.2.jar",
+      "sha512": "c91012b16cc40c8f48f69b78cb8e2e5c006486ae2431fbd289dfc01be7a4217294becea22d83a155d6b32b3969450df871352a3695e1452168b84f41355f7b9e"
+    },
+    {
+      "filename": "handcrafted-neoforge-1.21.1-4.0.3.jar",
+      "sha512": "4ff5fb2aa9582b886d03f647fe9b8c12a828d29a1787e9c9b463be18192ea798e6a4ac83479623042791bce0bacbf6e3e2c2e9ef086640aeeb6970d3404e7ee4"
+    },
+    {
+      "filename": "kotlinforforge-5.12.0-all.jar",
+      "sha512": "b8c3942f4d33179edf3f102f3d870b99dd436f8b8236dbbd31aa51b888162c692cfd88927295f24dc8b4375232f4c6c17360c5d6c4823f93cbcd7cf4bdc8bd14"
+    },
+    {
+      "filename": "lithium-neoforge-0.15.4+mc1.21.1.jar",
+      "sha512": "2735da2088b88a8bdcd4ad02a2b6fffbfd3925557cefd4fa54b5477dfb9e582ea7f521300c060f57dff1325dd21bff276b7333363ad3371ed6893e3de9eca9cd"
+    },
+    {
+      "filename": "minecolonies-1.1.1411-1.21.1-snapshot.jar",
+      "sha512": "b32a5e954f68dc15d2616602bc55b4c6bc5b604ed6c921ffc446362ac1160abb1ce256b30c8b0477c0fe830e0afdad54d628b1a1d59aef5ea21d92a1acc4cfb0"
+    },
+    {
+      "filename": "modernfix-neoforge-5.27.2+mc1.21.1.jar",
+      "sha512": "5c3430cea1b7e0662b10eb2238c53212a32587f4181270d90e40ad81b5672a4c8d4922e664c19a55888c6779bad7804d7fa7ce35c692baffbd26396598a8c532"
+    },
+    {
+      "filename": "moonlight-1.21.1-3.3.2-neoforge.jar",
+      "sha512": "6fde59eaef7b1ec8919f112f3f73908dd575ad7cb42ed34191c4f402664b2b3a4252d362af406f459353b4549ffea40e21b6aa2e98224573bee92e5f4e260ad8"
+    },
+    {
+      "filename": "multipiston-1.2.58-1.21.1.jar",
+      "sha512": "60007e72516857228c45cbfee14ec18c9c4e89b626ecdd659fff3a146d5dc527d52563645e3348b79820f7eeb0b6d3aeab4394e7b6d6a065666ed04333c05a48"
+    },
+    {
+      "filename": "pale_mirror_visuals-hosted.jar",
+      "sha512": "2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601"
+    },
+    {
+      "filename": "resourcefullib-neoforge-1.21-3.0.12.jar",
+      "sha512": "a9d20e345faa9bcb297bd95ac9524205834804d1bb13518397dd4f7f62b352b08c3339ee7f7870d3669078ceeb33d5c31ea527aecce4b31d62ec1ff7d8b562c8"
+    },
+    {
+      "filename": "structurize-1.0.837-1.21.1-snapshot.jar",
+      "sha512": "5a03a88a5a7d432a86966c2d02e6ab7916a22f39e90aa408c43ce7fe8454c84d28fb94f88cacf128ca9b847a8c5e4c5105116f16741584e2a7ce9e9a71302067"
+    },
+    {
+      "filename": "supplementaries-1.21.1-3.8.8-neoforge.jar",
+      "sha512": "1602507a1485e989490d3e702cfdeeff99da7d05f08a435f31270f839f7b80f3c3d29ee171b31aa58c27526b304ba5c6395a211980ab58f784b7f53573b04115"
+    },
+    {
+      "filename": "towntalk-1.2.0.jar",
+      "sha512": "2414089d190045fea8ee80779a33f569827195ebbba41df712fa2feb7226f9d23b3b9be79d74515dd4207d8ac8d6549ccb22c2f9ea6ac6780da79cf7c4eb741d"
+    },
+    {
+      "filename": "zfastnoise-1.0.13+1.21.1+neoforge.jar",
+      "sha512": "23c50dc3d75da96d87b065381e32a979528017f872d056bf1cb012e085122734ab218ea8af7b5570403d83c88ebfb53296969af47198fdb637058753d3974278"
+    }
+  ],
+  "residentAssets": [
+    {
+      "path": "config/pale_mirror/resident-packs/fresh-animations-1.11.2.zip",
+      "sha512": "e64c2fc73d2c61f6814d1223ac2a2bb1dda7ed55edb75efef23449475140a42ef2a490c4789f42e022eca96ffa6b50b63de70a2858fc7b257421b36aab5c10b3"
+    },
+    {
+      "path": "config/pale_mirror/resident-packs/human-villagers-3.91.5.zip",
+      "sha512": "cda1fb9b16d744feb5ae1da605ebdb340c0244c7a5910de1d58a99c1ab0ca009f8296877e62474b8899bd1d30ff31f0428ad1d32259e71a6d3f81a8a797e6359"
+    },
+    {
+      "path": "config/pale_mirror/resident-packs/human-villagers-fa-3.91.5.zip",
+      "sha512": "4766159b419154e23b8a9a99ff88d8ab247cbd17e0ddb7a5c950a16a25c17c01e0980964946be1a1a16b75067582113b874c9edf2d79264718a3d4b37d6dc725"
+    },
+    {
+      "path": "config/pale_mirror/resident-packs/manifest.json",
+      "sha512": "7ec8ea8af9c49ebc229b27c1b8c77c7b020a110c0ba291da9d2f0e6784babe74b6769b7cc6d5520a2ee9b63b60b1b07204260f380a3e5d81487ac313107526f4"
+    }
+  ],
+  "java": {
+    "version": "22.0.2+9",
+    "sha512": "bbe0b52c301ed0e21c2c54bcb335c4205ebc75c9b8410ba4a38a0504daaa8dee05f588bb6917899f315d7e1d01c9e8fcb50da4cbb6fe726afa2115a4919b3a20"
+  },
+  "grayboxAssets": [
+    {
+      "path": "config/pale-mirror-visuals-server.toml",
+      "sha512": "c28b6dc4864dbb3ba02b4e41c1250fae43fbd2a710bb37ac7af02d3c1fcac78c25f329d118cecc6eba1bab62160d45ca95370b5c6bd0756d45598c9b5f20de0c"
+    }
+  ]
+}

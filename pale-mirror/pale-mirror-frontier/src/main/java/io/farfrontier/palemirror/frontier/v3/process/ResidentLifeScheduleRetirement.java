@@ -27,6 +27,7 @@ final class ResidentLifeScheduleRetirement {
         return pending.get().stream().filter(action -> newlyDead.contains(action.subject()))
                 .filter(action -> action.kind().equals(ResidentNeedProcess.REVIEW)
                         || action.kind().equals(ResidentActivityProcess.REVIEW)
-                        || action.kind().equals(ResidentMealProcess.PROGRESS)).toList();
+                        || action.kind().equals(ResidentMealProcess.PROGRESS)
+                        || action.kind().equals(ResidentRoutineProcess.PROGRESS)).toList();
     }
 }

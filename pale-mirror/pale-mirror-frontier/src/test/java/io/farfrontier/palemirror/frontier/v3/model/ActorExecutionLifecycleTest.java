@@ -174,13 +174,13 @@ class ActorExecutionLifecycleTest {
         assertEquals(2L, interrupted.generation());
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(interrupted, state.actorExecutions().actors().get(job.workerId()));
+        var mealDriver = new ModelEventDriver();
         long due = 27_001L;
         for (int step = 0; step < 32 && state.humanPopulation().meals().containsKey(job.workerId()); step++) {
             var meal = state.humanPopulation().meals().get(job.workerId());
             var events = ResidentMealProcess.planProgress(state, ResidentMealProcess.progress(meal, due));
+            state = mealDriver.apply(state, events, due);
             for (var event : events) {
-                if (event.payload() instanceof ResidentMealColdStep advanced)
-                    state = ResidentMealProcess.reduceColdStep(state, job.workerId(), advanced);
                 if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled
                         && rescheduled.replacement().kind().equals(ResidentMealProcess.PROGRESS))
                     due = rescheduled.replacement().dueAt().ticks();

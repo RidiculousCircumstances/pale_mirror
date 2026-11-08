@@ -15,7 +15,7 @@ test('the pack pilot binds one materialized pack source and records the loader i
   assert.match(runner, /-PfrontierV3PilotPackSource=\$\{packPilotDirectory\}/);
   assert.match(runner, /-PfrontierV3PilotRequiredMods=\$\{PACK_PILOT_REQUIRED_MOD_IDS\.join\(','\)\}/);
   assert.match(runner, /PMV3_PILOT_LOADED_MODS\\s\+\(\\\{\.\*\\\}\)/);
-  assert.match(runner, /\(!packPilot \|\| loadedModInventory !== null\)/);
+  assert.match(runner, /\(!requiresModInventory \|\| loadedModInventory !== null\)/);
   assert.match(build, /frontierV3PilotPackSource/);
   assert.match(build, /include 'mods\/\*\*', 'config\/\*\*', 'defaultconfigs\/\*\*', 'resourcepacks\/\*\*', 'shaderpacks\/\*\*'/);
   assert.match(build, /pack source must be a materialized directory, not a symbolic link/);

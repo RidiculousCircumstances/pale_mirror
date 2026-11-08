@@ -169,11 +169,14 @@ final class HumanPopulationPayloadCodecs {
                     FrontierWorldPayloadCodecs.writeSubject(output, prepared.residentId());
                     ResidentMealPhysicalStep step = prepared.step();
                     HumanPopulationStateCodec.writeMealPhysicalStep(output, step);
+                    output.writeBoolean(prepared.seatBody().isPresent());
+                    if (prepared.seatBody().isPresent()) CombatWire.actuation(output, prepared.seatBody().orElseThrow());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotEffectPrepared(
-                        FrontierWorldPayloadCodecs.readSubject(input).value(), HumanPopulationStateCodec.readMealPhysicalStep(input)));
+                        FrontierWorldPayloadCodecs.readSubject(input).value(), HumanPopulationStateCodec.readMealPhysicalStep(input),
+                        input.readBoolean() ? java.util.Optional.of(CombatWire.actuation(input)) : java.util.Optional.empty()));
             }
         };
     }
@@ -300,6 +303,29 @@ final class HumanPopulationPayloadCodecs {
         };
     }
 
+    static PayloadCodec mealSeatReselected() {
+        return new PayloadCodec() {
+            public String type() { return "frontier.resident_meal_seat_reselected"; }
+            public byte[] encode(FrontierPayload payload) {
+                var e = (ResidentMealSeatReselected) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                    CombatWire.actuation(out, e.actor()); out.writeLong(e.revision());
+                    out.writeUTF(e.destination().buildingId().value()); out.writeUTF(e.destination().localId());
+                });
+            }
+            public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ResidentMealSeatReselected(
+                        CombatWire.actuation(in), in.readLong(), new io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(in.readUTF()), in.readUTF())));
+            }
+        };
+    }
+    static PayloadCodec mealEntranceRequested() {
+        return new PayloadCodec() {
+            public String type() { return "frontier.resident_meal_entrance_requested"; }
+            public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(out -> CombatWire.actuation(out, ((ResidentMealEntranceRequested) payload).actor())); }
+            public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ResidentMealEntranceRequested(CombatWire.actuation(in))); }
+        };
+    }
     static PayloadCodec mealDiningRequired() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_meal_dining_required"; }

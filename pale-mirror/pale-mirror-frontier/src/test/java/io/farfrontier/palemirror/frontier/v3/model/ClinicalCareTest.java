@@ -68,6 +68,15 @@ class ClinicalCareTest {
                     &&medics.stream().anyMatch(id->!current.humanPopulation().clinical().tasks().containsKey(id))
                     &&current.humanPopulation().clinical().wounds().get(t.actor()).qualityPermille()>ClinicalAuthority.quality(current,t);
             if(use!=null&&use.phase()==io.farfrontier.palemirror.frontier.v3.model.rest.RestUse.Phase.RESTING&&!restarted){
+                var medic=current.humanPopulation().clinical().tasks().values().stream()
+                        .filter(task->task.role()==ClinicalTask.Role.MEDIC&&task.patient().equals(t.patient())).findFirst().orElseThrow();
+                var head=use.place().head();var foot=use.place().foot();
+                var atFoot=new SurfaceAnchor(foot.offset(foot.x()-head.x(),-1,foot.z()-head.z()));
+                assertTrue(ClinicalAuthority.procedureStation(current,medic,atFoot),"a clear foot-side contact belongs to the complete two-cell bed");
+                assertFalse(ClinicalAuthority.procedureStation(current,medic,new SurfaceAnchor(head)),"the clinician cannot stand on the patient");
+                assertFalse(ClinicalAuthority.procedureStation(current,medic,new SurfaceAnchor(foot)),"the bed foot is not a clinician station");
+                assertFalse(ClinicalAuthority.procedureStation(current,medic,new SurfaceAnchor(atFoot.support().offset(0,2,0))),"another floor cannot dress through the ceiling");
+                assertFalse(ClinicalAuthority.procedureStation(current,medic,new SurfaceAnchor(atFoot.support().offset(2*(foot.x()-head.x()),0,2*(foot.z()-head.z())))),"a remote contact cannot replace actual arrival");
                 var image=new io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage(base.worldId(),Optional.of(new io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord(engine.checkpoint(),0)),List.of());
                 engine=io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.recoverCanonicalStateAccess(configuration,image);
                 assertEquals(current.humanPopulation().clinical(),engine.canonicalState().state().humanPopulation().clinical());

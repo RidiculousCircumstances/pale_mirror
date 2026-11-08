@@ -51,7 +51,7 @@ public record PhysicalIntentRetirementProof(
         case TRANSPORT_MISSION -> "transport-mission";
         case ACTOR -> "actor";
         case GUARD_DUTY -> "guard-duty";
-        case CLINICAL_TASK -> "clinical-task";case REST_USE -> "rest-use";
+        case CLINICAL_TASK -> "clinical-task";case REST_USE -> "rest-use";case SEAT_USE -> "seat-use";case RESIDENT_ROUTINE -> "resident-routine";
         case FORESTRY_WORK -> "forestry-work"; case FOREST_SOURCE -> "forest-source";
         case EXTRACTION_SITE -> "extraction-site"; case EXTRACTION_WORK -> "extraction-work";
         case SETTLEMENT -> "settlement"; case MINERAL_DEPOSIT -> "mineral-deposit";

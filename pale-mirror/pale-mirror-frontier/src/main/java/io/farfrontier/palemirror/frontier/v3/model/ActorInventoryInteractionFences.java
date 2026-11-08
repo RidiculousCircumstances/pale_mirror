@@ -10,6 +10,7 @@ import java.util.function.BiFunction;
 /** Inventory interaction owners declare their fences; shared activity/body code knows no job phases. */
 public final class ActorInventoryInteractionFences {
     private static final List<BiFunction<FrontierWorldState, SubjectId, Optional<SubjectId>>> OWNERS = List.of(
+            io.farfrontier.palemirror.frontier.v3.model.seating.SeatContacts::pendingOwner,
             io.farfrontier.palemirror.frontier.v3.model.rest.RestPlaces::pendingOwner,io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalAuthority::pendingOwner, ExpeditionSupplyAuthority::pendingOwnerForActor,
                 ReferenceContainerCustody::pendingOwnerForActor,
             ExtractionWorkAuthority::pendingOwner, ForestryWorkAuthority::pendingOwner, StationWorkDeathResources::pendingOwner,

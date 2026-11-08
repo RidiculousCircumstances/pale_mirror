@@ -79,7 +79,7 @@ public final class RestPlaces {
             if(change.body().isEmpty()){
                 var expected=change.action()==RestUse.Action.ENTER?new SurfaceAnchor(use.place().head()).standingBody():change.observed().supportingSurface().standingBody();
                 if(!expected.equals(change.observed()))throw new IllegalArgumentException("cold rest cannot relocate outside its retained nearby interaction");
-                var location=s.actorLocations().get(actor);changes.actorLocations(ImmutableLookupMap.withEntry(s.actorLocations(),actor,location.withBody(expected)));
+                changes.actorLocations(ActorLocalContact.change(s,use.execution(),s.actorLocations().get(actor).body(),expected));
             }else if(!s.actorLocations().get(actor).body().equals(change.observed()))throw new IllegalArgumentException("rest outcome requires common physical body observation");
         }
         return s.withChanges(changes.humanPopulation(s.humanPopulation().withRestPlaces(places.with(use.changed(next,tick,change.applied()&&change.body().isEmpty()&&

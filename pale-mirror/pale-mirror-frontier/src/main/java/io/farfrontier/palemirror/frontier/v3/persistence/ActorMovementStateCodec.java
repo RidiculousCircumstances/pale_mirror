@@ -41,6 +41,8 @@ final class ActorMovementStateCodec {
             output.writeLong(movement.issuedAtTick());
             ActorExecutionStateCodec.writeId(output, movement.executionId());
             switch (movement.context()) {
+                case ActorMovementContext.RoutineLeg leg -> { output.writeByte(17); output.writeLong(leg.sequence()); }
+                case ActorMovementContext.MealEntrance leg -> { output.writeByte(16); FrontierWorldStateCodec.writeString(output, leg.pointId().value()); }
                 case ActorMovementContext.ClinicalLeg leg -> {output.writeByte(15);FrontierWorldStateCodec.writeString(output,leg.taskId().value());output.writeLong(leg.revision());}
                 case ActorMovementContext.StationWorkLeg leg -> {
                     output.writeByte(10); FrontierWorldStateCodec.writeString(output, leg.jobId().value());
@@ -117,6 +119,8 @@ final class ActorMovementStateCodec {
             long issuedAt = input.readLong();
             var executionId = ActorExecutionStateCodec.readId(input);
             ActorMovementContext context = switch (input.readUnsignedByte()) {
+                case 17 -> new ActorMovementContext.RoutineLeg(input.readLong());
+                case 16 -> new ActorMovementContext.MealEntrance(new SubjectId(FrontierWorldStateCodec.readString(input)));
                 case 14 -> new ActorMovementContext.CombatManeuverLeg(new SubjectId(FrontierWorldStateCodec.readString(input)),input.readLong());
                 case 13 -> new ActorMovementContext.EvasionLeg(new SubjectId(FrontierWorldStateCodec.readString(input)),input.readLong());
                 case 12 -> new ActorMovementContext.GuardMissionLeg(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());

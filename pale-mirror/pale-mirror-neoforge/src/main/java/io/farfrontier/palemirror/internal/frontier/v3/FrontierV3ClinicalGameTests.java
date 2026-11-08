@@ -82,6 +82,28 @@ public final class FrontierV3ClinicalGameTests {
         try{FrontierV3NativeProductionDefinitions.validate(h.getLevel().getServer(),FrontierRulesets.installed("frontier-v3-clinical-care-r35").production());}
         catch(IllegalArgumentException mismatch){h.fail(mismatch.getMessage());return;}h.succeed();
     }
+    @GameTest(batch="pm-frontier-v3-scene-local-navigation",templateNamespace="minecraft",template="bastion/treasure/big_air_full",timeoutTicks=40)
+    public static void footSideDressingUsesTheRealSleepingBodyAndStillRefusesAnInterveningWall(GameTestHelper h){
+        var medic=person(h,2);var patient=person(h,4);var level=h.getLevel();
+        patient.setHealth(10);medic.getInventory().setItem(0,new ItemStack(PaleMirrorItems.BANDAGE.get(),3));
+        var foot=h.absolutePos(new BlockPos(3,2,3));var head=foot.east();
+        level.setBlock(foot.below(),Blocks.STONE.defaultBlockState(),3);
+        level.setBlock(foot,Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.PART,BedPart.FOOT).setValue(BedBlock.FACING,Direction.EAST),3);
+        level.setBlock(head,Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.PART,BedPart.HEAD).setValue(BedBlock.FACING,Direction.EAST),3);
+        var procedure=tend(medic,patient);
+        h.assertTrue(FrontierV3RestPlaceExecutor.changePose(level,patient,head,foot,RestUse.Action.ENTER,procedure.patient(),1)
+                ==FrontierV3NativeEffect.Outcome.APPLIED&&patient.isSleeping(),"patient occupies the real two-cell bed");
+        level.setBlock(foot.above(),Blocks.STONE.defaultBlockState(),3);
+        h.assertTrue(FrontierV3ClinicalTreatmentExecutor.dress(medic,patient,procedure)==FrontierV3NativeEffect.Outcome.REFUSED_WITHOUT_EFFECT
+                &&medic.getInventory().getItem(0).getCount()==3,"foot-side access cannot dress through a wall");
+        level.setBlock(foot.above(),Blocks.AIR.defaultBlockState(),3);
+        h.assertTrue(FrontierV3ClinicalTreatmentExecutor.dress(medic,patient,procedure)==FrontierV3NativeEffect.Outcome.APPLIED,
+                "a clinician actually beside the bed foot can dress its sleeping patient");
+        h.assertTrue(medic.getInventory().getItem(0).getCount()==2&&patient.getHealth()==10,"actual bandage is spent without instant healing");
+        FrontierV3ClinicalTreatmentExecutor.dress(medic,patient,procedure);
+        h.assertTrue(medic.getInventory().getItem(0).getCount()==2,"the same physical dressing cannot spend again");
+        patient.stopSleeping();patient.discard();medic.discard();h.succeed();
+    }
     private static Villager person(GameTestHelper h,int x){
         var floor=h.absolutePos(new BlockPos(x,1,3));h.getLevel().setBlock(floor,Blocks.STONE.defaultBlockState(),3);
         for(int y=1;y<=3;y++)h.getLevel().setBlock(floor.above(y),Blocks.AIR.defaultBlockState(),3);

@@ -353,6 +353,7 @@ public final class BuildingCatalog {
                 production ? Optional.of(workplace.id()) : Optional.empty(),
                 Map.of(),
                 Map.of(),
+                Map.of(),
                 Map.of());
     }
 

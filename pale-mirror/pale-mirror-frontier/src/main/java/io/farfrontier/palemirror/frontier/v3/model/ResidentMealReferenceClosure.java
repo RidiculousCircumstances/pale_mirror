@@ -18,6 +18,8 @@ public final class ResidentMealReferenceClosure {
             new Source<>(state -> state.inventory().fungibleResources().claims());
     private static final Source<FrontierWorldState, SubjectId, ResourceLot> LOTS =
             new Source<>(state -> state.inventory().fungibleResources().lots());
+    private static final Source<FrontierWorldState, SubjectId, io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse> SEATS =
+            new Source<>(state -> state.humanPopulation().seats().uses());
     // A portion contains at most 64 lots, plus its actor/authority/storage/account reads.
     private static final ImmutableReferenceIndex<FrontierWorldState, SubjectId, ResidentMeal> MEALS =
             new ImmutableReferenceIndex<>(SimulationCapacity.MAX_RESIDENTS, 80, sources(),
@@ -27,11 +29,12 @@ public final class ResidentMealReferenceClosure {
                     });
     private static List<Source<FrontierWorldState, ?, ?>> sources() {
         var result = new ArrayList<Source<FrontierWorldState, ?, ?>>(ShipmentEndpointReferences.SOURCES);
-        result.addAll(List.of(ACTORS, LEASES, ASSIGNMENTS, ACCOUNTS, CLAIMS, LOTS)); return List.copyOf(result);
+        result.addAll(List.of(ACTORS, LEASES, ASSIGNMENTS, ACCOUNTS, CLAIMS, LOTS, SEATS)); return List.copyOf(result);
     }
     private static List<Read<FrontierWorldState>> reads(FrontierWorldState state, ResidentMeal meal) {
         var result = new ArrayList<Read<FrontierWorldState>>();
         result.add(ACTORS.at(meal.residentId())); result.add(LEASES.at(meal.residentId()));
+        if (meal.destination() instanceof MealDestination.Seat) result.add(SEATS.at(meal.residentId()));
         result.add(ASSIGNMENTS.at(meal.residentId())); result.add(CLAIMS.at(meal.claimId()));
         result.add(ACCOUNTS.at(meal.sourceAccountId())); result.add(ACCOUNTS.at(meal.actorAccountId()));
         meal.portion().lotQuantities().keySet().forEach(id -> result.add(LOTS.at(id)));
@@ -106,6 +109,7 @@ public final class ResidentMealReferenceClosure {
 
     private static void validateMeal(FrontierWorldState state, FungibleResourceLedger ledger,
                                      HumanAssignmentProjection assignments, ResidentMeal meal) {
+            if (meal.destination() instanceof MealDestination.Seat) ResidentMealSeating.use(state, meal);
             if (meal.source() instanceof ResidentFoodSource.Storage storage) {
                 var container = state.inventory().containers().get(storage.containerId());
                 if (container == null || !container.ownerId().equals(storage.settlementId()) || container.storage().isEmpty())

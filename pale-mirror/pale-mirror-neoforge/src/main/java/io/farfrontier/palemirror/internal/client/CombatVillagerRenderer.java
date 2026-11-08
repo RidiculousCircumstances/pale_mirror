@@ -21,7 +21,14 @@ final class CombatVillagerRenderer extends MobRenderer<Villager,CombatVillagerMo
         });
         addLayer(new ItemInHandLayer<>(this,context.getItemInHandRenderer()){
             @Override public void render(PoseStack pose,MultiBufferSource buffer,int light,Villager actor,float swing,float amount,float partial,float age,float yaw,float pitch){
-                if(getParentModel().combat())super.render(pose,buffer,light,actor,swing,amount,partial,age,yaw,pitch);
+                if(!getParentModel().combat())return;
+                pose.pushPose();if(getParentModel().young){pose.translate(0,.75,0);pose.scale(.5f,.5f,.5f);}
+                for(var hand:net.minecraft.world.entity.HumanoidArm.values()){
+                    var stack=PaleMirrorResidentMealClient.display(actor,hand,hand==actor.getMainArm()?actor.getMainHandItem():actor.getOffhandItem());
+                    renderArmWithItem(actor,stack,hand==net.minecraft.world.entity.HumanoidArm.LEFT?net.minecraft.world.item.ItemDisplayContext.THIRD_PERSON_LEFT_HAND:
+                            net.minecraft.world.item.ItemDisplayContext.THIRD_PERSON_RIGHT_HAND,hand,pose,buffer,light);
+                }
+                pose.popPose();
             }
         });
     }

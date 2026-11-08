@@ -1,8 +1,8 @@
-package io.farfrontier.palemirror.frontier.v3.persistence;
-import io.farfrontier.palemirror.frontier.v3.model.*; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar; import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
+package io.farfrontier.palemirror.frontier.v3.persistence; import io.farfrontier.palemirror.frontier.v3.api.FixedRatio; import io.farfrontier.palemirror.frontier.v3.api.FixedScalar; import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId; import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec; import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodecs;
-import java.nio.ByteBuffer; import java.io.ByteArrayInputStream; import java.io.ByteArrayOutputStream; import java.io.DataInputStream; import java.io.DataOutputStream; import java.io.IOException; import java.util.List; import java.util.Map;
+import io.farfrontier.palemirror.frontier.v3.model.*; import java.io.ByteArrayInputStream; import java.io.ByteArrayOutputStream; import java.io.DataInputStream; import java.io.DataOutputStream;
+        import java.io.IOException; import java.nio.ByteBuffer; import java.util.List;
 /** Complete payload registry for the currently installed v3 world processes. */
 public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCodecs() { }
     public static PayloadCodecs create() { return FrontierWorldProcessCodecs.create(); }
@@ -30,7 +30,9 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             HumanPopulationPayloadCodecs.mealHotEffectObserved(), HumanPopulationPayloadCodecs.mealResourceEffectObserved(),
             HumanPopulationPayloadCodecs.mealPortionDispositionObserved(),
             HumanPopulationPayloadCodecs.mealHotHandMaterialized(), HumanPopulationPayloadCodecs.mealHotHandReleased(),
-            HumanPopulationPayloadCodecs.mealHotAccessCleared(), HumanPopulationPayloadCodecs.mealClearanceRequired(), HumanPopulationPayloadCodecs.mealDiningRequired(), HumanPopulationPayloadCodecs.mealApproachRequired(),
+            HumanPopulationPayloadCodecs.mealHotAccessCleared(), HumanPopulationPayloadCodecs.mealClearanceRequired(), HumanPopulationPayloadCodecs.mealDiningRequired(),
+                HumanPopulationPayloadCodecs.mealEntranceRequested(),
+                HumanPopulationPayloadCodecs.mealSeatReselected(), HumanPopulationPayloadCodecs.mealApproachRequired(),
             HumanPopulationPayloadCodecs.mealColdStep(), HumanPopulationPayloadCodecs.mealGrounded(), SettlementProvisionPayloadCodecs.legacyStarted(),
             SettlementProvisionPayloadCodecs.started(), SettlementProvisionPayloadCodecs.consumed(), SettlementProvisionPayloadCodecs.resolved(),
             HumanHealthPayloadCodecs.residentTransition(), HumanHealthPayloadCodecs.quarantineTransition(),

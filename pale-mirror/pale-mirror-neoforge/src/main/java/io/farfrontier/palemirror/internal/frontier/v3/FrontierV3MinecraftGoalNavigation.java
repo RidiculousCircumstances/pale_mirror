@@ -418,8 +418,21 @@ final class FrontierV3MinecraftGoalNavigation {
                     && actor.position().distanceToSqr(FrontierV3SemanticMovement.point(level, control.target())) <= 9.0D)
                 alignment = ";endpoint-alignment=" + FrontierV3NativeStationAlignment.rejection(level, actor, control.target(),
                         control.progressPath(), control.scope()).map(Enum::name).orElse("CLEAR");
+            var path = actor.getNavigation().getPath();
+            String progress = ";native-done=" + actor.getNavigation().isDone() + ";no-progress-ticks="
+                    + (actor.level().getGameTime() - control.lastProgressAt()) + ";following-wait="
+                    + control.followingWait().duration(actor.level().getGameTime());
+            if (path != null) {
+                progress += ";node=" + path.getNextNodeIndex() + "/" + path.getNodeCount();
+                if (!path.isDone()) {
+                    var next = path.getNextNodePos();
+                    progress += ";next=" + next.getX() + "," + next.getY() + "," + next.getZ();
+                    if (actor.level() instanceof ServerLevel currentLevel && FrontierV3LoadedWorld.ready(currentLevel, next))
+                        progress += ";next-block=" + currentLevel.getBlockState(next);
+                }
+            }
             return new Observation("MOVING", control.permission().pace().map(pace -> "pace-blocks-per-tick="
-                    + pace.blocksPerTick() + ";native-speed-modifier=" + speed(actor, control.permission())).orElse("") + alignment,
+                    + pace.blocksPerTick() + ";native-speed-modifier=" + speed(actor, control.permission())).orElse("") + alignment + progress,
                     control.legalStations(), List.of());
         }
         var failure = FAILURES.get(actor);

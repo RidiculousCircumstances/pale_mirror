@@ -19,6 +19,7 @@ public final class PaleMirrorMod {
         modBus.addListener(PaleMirrorNetwork::register);
         NeoForge.EVENT_BUS.addListener(PaleMirrorCommandRegistrar::register);
         PaleMirrorItems.register(modBus);
+        io.farfrontier.palemirror.internal.frontier.v3.PaleMirrorSeatEntities.register(modBus);
         io.farfrontier.palemirror.internal.agriculture.AgricultureRegistration.register(modBus);
         io.farfrontier.palemirror.internal.world.GeologyRegistration.register(modBus);
         io.farfrontier.palemirror.internal.forestry.ForestRegistration.register(modBus);

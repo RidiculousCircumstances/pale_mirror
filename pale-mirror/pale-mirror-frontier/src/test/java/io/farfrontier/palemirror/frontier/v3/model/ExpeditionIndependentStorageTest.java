@@ -15,6 +15,16 @@ class ExpeditionIndependentStorageTest {
         var state = ConsolidatedTradeFixture.initial(new WorldId("frontier:independent-provisions"), 20260918065L, false);
         var seller = new SubjectId("settlement:1");
         var buyer = state.companies().goodsTrade().participants().participants().get(seller).known().getFirst().party().id();
+        // Admit the original trip with provision stock only at the mixed cargo port.
+        // Otherwise the maximum kitchen's closer initial pantry is already an exact
+        // retained promise before the independent warehouse is introduced below.
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), seller);
+        var pantryLedger = state.inventory().fungibleResources();
+        var pantryAccount = FungibleResourceCustodySupport.accountAtContainer(state, pantry).orElseThrow();
+        var pantryBread = new TreeMap<SubjectId,Integer>();
+        for (var entry : pantryAccount.lotQuantities().entrySet())
+            if (pantryLedger.lots().get(entry.getKey()).itemKind().equals("minecraft:bread")) pantryBread.put(entry.getKey(), entry.getValue());
+        state = state.withInventory(state.inventory().withFungibleResources(pantryLedger.destroy(pantryAccount.id(), pantryBread, Map.of())));
         state = review(state, seller, 400); state = review(state, buyer, 401);
         var original = state.shipments().missions().values().stream().findFirst().orElseThrow();
         var home = original.organization().sponsor().id();

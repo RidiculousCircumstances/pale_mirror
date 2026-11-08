@@ -22,7 +22,7 @@ public record ActorMovementReferences(HumanPopulation people, ExactInventory inv
                                      UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,
                                      ForestState forest, Map<SubjectId, ProductionJob> productionJobs,
                                      Map<SubjectId, ActorLocation> actors,
-                                     ActorExecutionState executions, io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat) {
+                                     ActorExecutionState executions, io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat, io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutineState routines) {
     public ActorMovementReferences {
         Objects.requireNonNull(people); Objects.requireNonNull(inventory); Objects.requireNonNull(shipments);
         Objects.requireNonNull(groups); Objects.requireNonNull(extractionSites);
@@ -64,8 +64,9 @@ public record ActorMovementReferences(HumanPopulation people, ExactInventory inv
             EVASIONS=new Source<>(r->r.combat().evasions());
     public static final Source<ActorMovementReferences,SubjectId,io.farfrontier.palemirror.frontier.v3.model.combat.MeleeManeuver>
             MANEUVERS=new Source<>(r->r.combat().maneuvers());
+    public static final Source<ActorMovementReferences,SubjectId,io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutine> ROUTINES=new Source<>(r->r.routines().rows());
     public static final List<Source<ActorMovementReferences, ?, ?>> SOURCES = List.of(
-            CLINICAL, MANEUVERS, EVASIONS, PRODUCTION, FORESTRY, GUARDS, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
+            ROUTINES,CLINICAL, MANEUVERS, EVASIONS, PRODUCTION, FORESTRY, GUARDS, ASSAULTS, CONTAINERS, MISSIONS, GROUPS, RESIDENTS, SHIPMENTS, EXTRACTION, DEPOSITS, ACTORS, EXECUTIONS, MEALS);
     public List<Read<ActorMovementReferences>> reads(ActorMovement movement) {
         var actor = movement.order().actorId();
         var result = new java.util.ArrayList<Read<ActorMovementReferences>>();

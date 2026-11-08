@@ -1,8 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
-
-import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics;
 
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayDeque;
@@ -30,13 +29,15 @@ public final class FrontierDomainRelationships {
         GOODS_ORDER, GOODS_CONTRACT, ECONOMIC_ACCOUNT, CONTAINER, SHIPMENT, UNIT_GROUP, TRANSPORT_MISSION,
         PRODUCTION_JOB, HIVE_GROWTH_JOB, RESOURCE_SITE, RESOURCE_HARVEST_JOB, RESIDENT, EXACT_ITEM, RESOURCE_LOT, RESOURCE_ACCOUNT,
         RESOURCE_CLAIM, PROVISION_CYCLE, PROVISION_ALLOCATION, SCENE_LEASE, AMBIENT_LEASE, CARRIER_EVIDENCE,
-        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE, ACTOR, EXTRACTION_SITE, EXTRACTION_WORK, SETTLEMENT, MINERAL_DEPOSIT, FORESTRY_WORK, FOREST_SOURCE, GUARD_DUTY,CLINICAL_TASK,REST_USE
+        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE, ACTOR, EXTRACTION_SITE, EXTRACTION_WORK, SETTLEMENT, MINERAL_DEPOSIT, FORESTRY_WORK, FOREST_SOURCE, GUARD_DUTY,CLINICAL_TASK,REST_USE,SEAT_USE,RESIDENT_ROUTINE
     }
 
     /** Stable semantic strings are deliberately independent from enum ordinal/wire ordering. */
     public enum Kind {
         CLINICAL_HOME("clinical-home"),CLINICAL_PERFORMER("clinical-performer"),CLINICAL_PATIENT("clinical-patient"),CLINICAL_REST("clinical-rest"),
         REST_ACTOR("rest-actor"),REST_BUILDING("rest-building"),
+        ROUTINE_ACTOR("routine-actor"),ROUTINE_HOME("routine-home"),
+        SEAT_ACTOR("seat-actor"),SEAT_BUILDING("seat-building"),
         GUARD_HOME("guard-home"), GUARD_RESIDENT("guard-resident"), GUARD_WEAPON("guard-weapon"), GUARD_STORAGE("guard-storage"),
         FORESTRY_HOME("forestry-home"), FORESTRY_WORKER("forestry-worker"), FORESTRY_TOOL("forestry-tool"),
         FORESTRY_TOOL_SOURCE("forestry-tool-source"), FORESTRY_STORAGE("forestry-storage"), FORESTRY_SOURCE("forestry-source"), FORESTRY_CARGO("forestry-cargo"),
@@ -105,6 +106,8 @@ public final class FrontierDomainRelationships {
     private static EntityKind source(Kind kind) { return switch (kind) {
         case CLINICAL_HOME,CLINICAL_PERFORMER,CLINICAL_PATIENT,CLINICAL_REST->EntityKind.CLINICAL_TASK;
         case REST_ACTOR,REST_BUILDING->EntityKind.REST_USE;
+        case SEAT_ACTOR,SEAT_BUILDING->EntityKind.SEAT_USE;
+        case ROUTINE_ACTOR,ROUTINE_HOME->EntityKind.RESIDENT_ROUTINE;
         case GUARD_HOME, GUARD_RESIDENT, GUARD_WEAPON, GUARD_STORAGE -> EntityKind.GUARD_DUTY;
         case FORESTRY_HOME, FORESTRY_WORKER, FORESTRY_TOOL, FORESTRY_TOOL_SOURCE, FORESTRY_STORAGE, FORESTRY_SOURCE, FORESTRY_CARGO -> EntityKind.FORESTRY_WORK;
         case EXTRACTION_MINERAL -> EntityKind.EXTRACTION_SITE;
@@ -128,8 +131,8 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static EntityKind target(Kind kind) { return switch (kind) {
-        case CLINICAL_HOME->EntityKind.SETTLEMENT;case CLINICAL_PERFORMER,CLINICAL_PATIENT,REST_ACTOR->EntityKind.RESIDENT;
-        case CLINICAL_REST->EntityKind.REST_USE;case REST_BUILDING->EntityKind.STRUCTURE;
+        case CLINICAL_HOME,ROUTINE_HOME->EntityKind.SETTLEMENT;case CLINICAL_PERFORMER,CLINICAL_PATIENT,REST_ACTOR,SEAT_ACTOR,ROUTINE_ACTOR->EntityKind.RESIDENT;
+        case CLINICAL_REST->EntityKind.REST_USE;case REST_BUILDING,SEAT_BUILDING->EntityKind.STRUCTURE;
         case GUARD_HOME -> EntityKind.SETTLEMENT;
         case GUARD_RESIDENT -> EntityKind.RESIDENT;
         case GUARD_WEAPON -> EntityKind.EXACT_ITEM;
@@ -180,6 +183,8 @@ public final class FrontierDomainRelationships {
     private static EntityKind owner(Kind kind) { return switch (kind) {
         case CLINICAL_HOME,CLINICAL_PERFORMER,CLINICAL_PATIENT,CLINICAL_REST->EntityKind.CLINICAL_TASK;
         case REST_ACTOR,REST_BUILDING->EntityKind.REST_USE;
+        case SEAT_ACTOR,SEAT_BUILDING->EntityKind.SEAT_USE;
+        case ROUTINE_ACTOR,ROUTINE_HOME->EntityKind.RESIDENT_ROUTINE;
         case GUARD_HOME, GUARD_RESIDENT, GUARD_WEAPON, GUARD_STORAGE -> EntityKind.GUARD_DUTY;
         case FORESTRY_HOME, FORESTRY_WORKER, FORESTRY_TOOL, FORESTRY_TOOL_SOURCE, FORESTRY_STORAGE, FORESTRY_SOURCE, FORESTRY_CARGO -> EntityKind.FORESTRY_WORK;
         case EXTRACTION_MINERAL -> EntityKind.EXTRACTION_SITE;
@@ -219,20 +224,28 @@ public final class FrontierDomainRelationships {
     }
     private static final List<Family> INVENTORY = List.of(
             new Family("clinical-care-rest",FamilyDisposition.RELATION_LAYER_CURRENT,"HumanPopulation/ClinicalState/RestPlaceState",
-                "exact patient/performer/home, independent retained rest place, native preparations and bounded latest pickup evidence; clinical owner validates current/continued execution and physical preimages"),
+              "exact patient/performer/home, independent retained rest place, native preparations"
+                  + " and bounded latest pickup evidence; clinical owner validates"
+                  + " current/continued execution and physical preimages"),
             new Family("production-machine-operations", FamilyDisposition.OWNER_EXPLICIT_UNCHANGED, "ProductionStations/ProductionOperation",
-                    "explicit instance/facility/container and operation/client/allocation; bidirectional registered-owner validation; "
-                            + "output claim ends at pickup; retire only after disposed effects and retired container"),
+              "explicit instance/facility/container and operation/client/allocation; bidirectional"
+                  + " registered-owner validation; output claim ends at pickup; retire only after"
+                  + " disposed effects and retired container"),
             new Family("unit-groups-transport-missions", FamilyDisposition.RELATION_LAYER_CURRENT, "UnitGroupState/ShipmentState",
-                    "explicit roster, nominal mission port and bidirectional exact shipment binding; retire only after crew return and receipt closure"),
+              "explicit roster, nominal mission port and bidirectional exact shipment binding;"
+                  + " retire only after crew return and receipt closure"),
             new Family("recipient-neutral-shipments", FamilyDisposition.RELATION_LAYER_CURRENT, "ShipmentState",
-                    "explicit endpoints, delegated allocation and exact common courier execution; transport receipts do not sell goods"),
+              "explicit endpoints, delegated allocation and exact common courier execution;"
+                  + " transport receipts do not sell goods"),
             new Family("shipment-terminal-evidence", FamilyDisposition.NOT_A_DOMAIN_RELATION, "Shipment",
-                    "unloaded/withdrawn cargo and execution declarations are historical; no live claim/account authority after terminal result"),
+              "unloaded/withdrawn cargo and execution declarations are historical; no live"
+                  + " claim/account authority after terminal result"),
             new Family("goods-trade", FamilyDisposition.RELATION_LAYER_CURRENT, "GoodsTradeState",
-                    "commercial orders/contracts retain explicit participants, endpoints, allocations and funds; GoodsTradeStateSupport validates publication/recovery"),
+              "commercial orders/contracts retain explicit participants, endpoints, allocations and"
+                  + " funds; GoodsTradeStateSupport validates publication/recovery"),
             new Family("goods-receipt-evidence", FamilyDisposition.NOT_A_DOMAIN_RELATION, "GoodsTradeAcceptance/ResourceTitleTransfer",
-                    "immutable prior accepted quantity/custody/title evidence; consumed claim and prior lot/account IDs are historical, never current resource authority"),
+              "immutable prior accepted quantity/custody/title evidence; consumed claim and prior"
+                  + " lot/account IDs are historical, never current resource authority"),
             new Family("strategic-objective-task", FamilyDisposition.RELATION_LAYER_CURRENT, "StrategicPlanState", "F0.6R3 vertical"),
             new Family("market-demand-order-production", FamilyDisposition.RELATION_LAYER_CURRENT, "MarketOrderBook/ProductionJob", "F0.6R3 vertical"),
             new Family("hive-growth-task", FamilyDisposition.RELATION_LAYER_CURRENT, "HiveColony/HiveGrowthJob", "SA-09 explicit job-task retention"),
@@ -242,7 +255,8 @@ public final class FrontierDomainRelationships {
             new Family("hive-operation-roster", FamilyDisposition.RELATION_LAYER_CURRENT, "HiveColony/StrategicPlanState", "ARC-001C current mobilization roster"),
             new Family("service-work-station", FamilyDisposition.RELATION_LAYER_CURRENT, "SettlementServiceWork", "ARC-001C current service endpoints"),
             new Family("retired-meal-resources", FamilyDisposition.OWNER_EXPLICIT_UNCHANGED, "HumanPopulation/ResidentMealResourceObligation",
-                    "ResidentMealReferenceClosure validates exact dead actor/body/execution and portion allocation; no active meal or physical permission"),
+              "ResidentMealReferenceClosure validates exact dead actor/body/execution and portion"
+                  + " allocation; no active meal or physical permission"),
             new Family("replica-fingerprint", FamilyDisposition.NOT_A_DOMAIN_RELATION, "PhysicalReplicaCustodyState", "adapter evidence, never domain relationship authority"));
     public static List<Family> inventory() { return INVENTORY; }
 
@@ -263,8 +277,13 @@ public final class FrontierDomainRelationships {
     }
 
     private static final List<OwnerSurface> CURRENT_OWNER_SURFACES = List.of(
-            surface(io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask.class,"id","home","patient"),
-            surface(io.farfrontier.palemirror.frontier.v3.model.rest.RestPlace.class,"home"),
+            surface(io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutine.class,
+              "actor",
+              "home"),
+          surface(
+              io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTask.class,"id","home","patient"),
+            surface(io.farfrontier.palemirror.frontier.v3.model.rest.RestPlace.class, "home"),
+          surface(io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.class,"home"),
             surface(GuardDuty.class, "id", "home", "weapon"),
             surface(io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryWork.class,
                     "id", "home", "toolId", "carriedAccount", "outputLot"),
@@ -448,6 +467,8 @@ public final class FrontierDomainRelationships {
         ForestryRelationships.collect(state, edges);
         GuardRelationships.collect(state, edges);
         ClinicalRelationships.collect(state,edges);
+        io.farfrontier.palemirror.frontier.v3.model.seating.SeatRelationships.collect(state, edges);
+        io.farfrontier.palemirror.frontier.v3.model.routine.RoutineRelationships.collect(state,edges);
         UnitGroupRelationships.collect(state, edges);
         FinancialBudgetRelationships.collect(state, edges);
         addLeases(state, edges);
@@ -467,6 +488,8 @@ public final class FrontierDomainRelationships {
 
     /** Full-state/recovery audit.  A derived view never changes this result. */
     public static void validate(FrontierWorldState state) {
+        io.farfrontier.palemirror.frontier.v3.model.routine.RoutineRelationships.validate(state);
+        io.farfrontier.palemirror.frontier.v3.model.seating.SeatRelationships.validate(state);
         View view = view(state);
         Optional<Incident> blocking = view.incidents().stream().filter(incident -> incident.traceCorrelation().startsWith("relationship:")).findFirst();
         if (blocking.isPresent()) {
@@ -504,7 +527,33 @@ public final class FrontierDomainRelationships {
     private record ValidationFamily(String traceName, java.util.function.Function<FrontierWorldState, List<Object>> dependencies,
                                     ValidationCollector collect) { }
     private static final List<ValidationFamily> VALIDATION_FAMILIES = List.of(
-            new ValidationFamily("relations-clinical",s->List.of(s.humanPopulation().clinical(),s.humanPopulation().restPlaces(),s.humanPopulation().residents(),s.actorExecutions(),s.fencedRecovery()),(s,edges,
+          new ValidationFamily(
+              "relations-routines",
+              s ->
+                  List.of(
+                      s.routines(),
+                      s.humanPopulation().residents(),
+                      s.actorExecutions(),
+                      s.actorLocations(),
+                      s.actorMovements()),
+              (s, edges, incidents) ->
+                  io.farfrontier.palemirror.frontier.v3.model.routine.RoutineRelationships.validate(
+                      s)),
+          new ValidationFamily(
+              "relations-seats",
+              s ->
+                  List.of(
+                      s.humanPopulation().seats(),
+                      s.humanPopulation().meals(),
+                      s.humanPopulation().mealResourceObligations(),
+                      s.humanPopulation().residents(),
+                      s.actorExecutions(),
+                      s.actorLocations(),
+                      s.fencedRecovery()),
+              (s, edges, incidents) ->
+                  io.farfrontier.palemirror.frontier.v3.model.seating.SeatRelationships.validate(
+                      s)),
+          new ValidationFamily("relations-clinical",s->List.of(s.humanPopulation().clinical(),s.humanPopulation().restPlaces(),s.humanPopulation().residents(),s.actorExecutions(),s.fencedRecovery()),(s,edges,
                 incidents)->ClinicalRelationships.validate(s)),
             new ValidationFamily("relations-guards", s -> List.of(s.strategicPlans().guards(), s.actorExecutions(), s.humanPopulation().residents(), s.inventory().items(), s.inventory().containers(),s.combat().pending()),
                     (s, edges, incidents) -> GuardAuthority.validateReferences(s.bootstrap(), s.strategicPlans(), s.humanPopulation(), s.actorLocations(), s.actorExecutions(),s.combat())),

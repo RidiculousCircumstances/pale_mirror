@@ -85,6 +85,8 @@ final class FrontierV3PhysicalExecutors {
             executor("security-perception", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("defender-equipment-issue"), "security-perception", FrontierV3SecurityExecutor::tick),
             executor("evasion-perception", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("security-perception"), "evasion-perception", FrontierV3EvasionObserver::tick),
             executor("rest-place",FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,Set.of("clinical-healing"),"rest-place",FrontierV3RestPlaceExecutor::tick),
+            executor("seat-contact",FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,Set.of("evasion-perception", "rest-place"),"seat-contact",FrontierV3SeatExecutor::tick),
+            executor("resident-routines",FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,Set.of("seat-contact"),"resident-routine-admission",FrontierV3ResidentRoutineExecutor::tick),
             executor("clinical-supply",FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,Set.of("defender-equipment-issue"),"clinical-supply",FrontierV3ClinicalSupplyExecutor::tick),
             executor("clinical-treatment",FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,Set.of("clinical-supply"),"clinical-treatment",FrontierV3ClinicalTreatmentExecutor::tick),
             executor("clinical-healing",FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,Set.of("clinical-treatment"),"clinical-healing",FrontierV3ClinicalHealingExecutor::tick),

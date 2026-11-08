@@ -63,7 +63,8 @@ public final class BuildingDefinitionFormat {
             Map<BlockPosition, BuildingDefinition.Block> blocks,
             String sha256) {
         var r = new Reader(source);
-        if (r.integer("format") != 4)
+        int format = r.integer("format");
+        if (format != 4 && format != 5)
             throw new IllegalArgumentException("unsupported building markup format");
         var id = new BuildingTemplateId(r.take("id"));
         int version = r.integer("version");
@@ -140,6 +141,15 @@ public final class BuildingDefinitionFormat {
                     Integer.parseInt(r.take(key+".recoveryPermille")));
             beds.put(name,new BuildingDefinition.Bed(name,point(r.take(key+".head")),point(r.take(key+".foot")),profile));
         }
+        var seats = new LinkedHashMap<String, BuildingSeat>();
+        if (format == 5) for (var name : r.names("seats")) {
+            var key = "seat." + name;
+            seats.put(name, new BuildingSeat(name, r.take(key + ".zone"),
+                    BuildingSeat.Kind.valueOf(r.take(key + ".kind")), r.take(key + ".chairBlock"), r.take(key + ".tableBlock"),
+                    point(r.take(key + ".chair")), point(r.take(key + ".table")),
+                    point(r.take(key + ".approach")), point(r.take(key + ".egress")),
+                    FacilityFacing.valueOf(r.take(key + ".facing"))));
+        }
         r.finished();
         return new BuildingDefinition(
                 id,
@@ -160,6 +170,7 @@ public final class BuildingDefinitionFormat {
                 workplace,
                 anchors,
                 beds,
+                seats,
                 blocks);
     }
 

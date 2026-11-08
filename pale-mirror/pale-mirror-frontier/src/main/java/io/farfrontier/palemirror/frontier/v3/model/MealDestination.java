@@ -4,7 +4,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Objects;
 
 /** Retained purpose of the journey, independent of the portion's source/custody. */
-public sealed interface MealDestination permits MealDestination.Here, MealDestination.DiningArea {
+public sealed interface MealDestination permits MealDestination.Here, MealDestination.DiningArea, MealDestination.Seat {
+    record Seat(io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id id) implements MealDestination {
+        public Seat { Objects.requireNonNull(id); }
+    }
     record Here(SurfaceAnchor station) implements MealDestination {
         public Here { Objects.requireNonNull(station); }
     }

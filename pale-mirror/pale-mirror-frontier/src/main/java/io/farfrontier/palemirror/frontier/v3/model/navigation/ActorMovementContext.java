@@ -7,12 +7,49 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
-public sealed interface ActorMovementContext permits ActorMovementContext.ClinicalLeg, ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
+public sealed interface ActorMovementContext permits ActorMovementContext.RoutineLeg, ActorMovementContext.MealEntrance, ActorMovementContext.ClinicalLeg, ActorMovementContext.ServiceExit,
+        ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
         ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg, ActorMovementContext.StationWorkLeg,
             ActorMovementContext.GuardEquipment, ActorMovementContext.GuardMissionLeg, ActorMovementContext.EvasionLeg, ActorMovementContext.CombatManeuverLeg {
-    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION, EVASION, COMBAT_MANEUVER, CLINICAL }
+    enum Provider { RESIDENT_ROUTINE, MEAL_ENTRANCE, SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION, EVASION, COMBAT_MANEUVER, CLINICAL }
     Provider provider();
+    /** A producer's retained entrance journey; distance cannot revoke this exact live turn. */
+    default java.util.Optional<ServiceAccessDemand.Identity> entranceClaim(ActorMovement movement) { return java.util.Optional.empty(); }
+    record RoutineLeg(long sequence) implements ActorMovementContext {
+        public RoutineLeg{if(sequence<1)throw new IllegalArgumentException("invalid routine sequence");}
+        public Provider provider(){return Provider.RESIDENT_ROUTINE;}
+        public java.util.Optional<SubjectId> delegatedGoalOwner(){return java.util.Optional.empty();}
+        public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs,ActorMovement movement){return java.util.List.of(ActorMovementReferences.ROUTINES.at(movement.order().actorId()));}
+        public void validateReferences(ActorMovementReferences refs,ActorMovement movement){
+            var row=refs.routines().rows().get(movement.order().actorId());
+            if(row==null||row.sequence()!=sequence||row.phase()!=io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutine.Phase.WALKING
+                    ||!row.execution().equals(java.util.Optional.of(movement.executionId()))||!movement.order().equals(new MovementOrder(row.actor(),row.actor(),1,row.sequence(),java.util.List.of(row.goal()),
+                            TraversalCapability.PEDESTRIAN,MovementOrder.ArrivalPolicy.EXACT_STATION)))
+                throw new IllegalArgumentException("routine movement lost its explicit performer/goal/sequence/execution");
+        }
+    }
+    record MealEntrance(SubjectId pointId) implements ActorMovementContext {
+        public MealEntrance { Objects.requireNonNull(pointId); }
+        public Provider provider() { return Provider.MEAL_ENTRANCE; }
+        public java.util.Optional<ServiceAccessDemand.Identity> entranceClaim(ActorMovement movement) {
+            return java.util.Optional.of(new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.MEAL,
+                    movement.order().actorId(), movement.order().actorId(), pointId));
+        }
+        public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
+        public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.MEALS.at(movement.order().actorId()), ActorMovementReferences.CONTAINERS.at(pointId));
+        }
+        public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
+            var meal = refs.people().meals().get(movement.order().actorId());
+            if (meal == null || meal.portable() || meal.phase() != ResidentMeal.Phase.MOVE || !meal.depotId().equals(pointId)
+                    || !meal.executionId().equals(movement.executionId()) || !meal.claimId().equals(movement.order().ownerId())
+                    || movement.order().goalOrdinal() != FrontierWireTags.tag(meal.phase()) || movement.order().goalRevision() != meal.startedAtTick() + 1
+                    || meal.pendingPhysicalStep().isPresent() || meal.coldTravel().isPresent())
+                throw new IllegalArgumentException("meal entrance lost its exact retained meal/source/execution");
+        }
+    }
+
     /** This exact nominal context owns reference closure, not the generic movement aggregate. */
     void validateReferences(ActorMovementReferences references, ActorMovement movement);
     /** Complete owner-declared immutable inputs to this context's structural reference check. */

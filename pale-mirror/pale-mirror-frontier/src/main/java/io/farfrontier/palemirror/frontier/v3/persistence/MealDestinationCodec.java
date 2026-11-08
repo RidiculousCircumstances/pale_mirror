@@ -14,12 +14,18 @@ final class MealDestinationCodec {
                 out.writeByte(2); FrontierWorldStateCodec.writeString(out, area.facilityId().value());
                 FrontierWorldStateCodec.writeString(out, area.zoneId());
             }
+            case MealDestination.Seat seat -> {
+                out.writeByte(3); FrontierWorldStateCodec.writeString(out, seat.id().buildingId().value());
+                FrontierWorldStateCodec.writeString(out, seat.id().localId());
+            }
         }
     }
     static MealDestination read(DataInputStream in) throws IOException {
         return switch (in.readUnsignedByte()) {
             case 1 -> new MealDestination.Here(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)));
             case 2 -> new MealDestination.DiningArea(new SubjectId(FrontierWorldStateCodec.readString(in)), FrontierWorldStateCodec.readString(in));
+            case 3 -> new MealDestination.Seat(new io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id(
+                    new SubjectId(FrontierWorldStateCodec.readString(in)), FrontierWorldStateCodec.readString(in)));
             default -> throw new IllegalArgumentException("unknown meal destination schema");
         };
     }

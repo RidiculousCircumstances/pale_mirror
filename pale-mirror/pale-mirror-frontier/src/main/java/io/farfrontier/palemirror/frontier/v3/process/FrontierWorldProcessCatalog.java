@@ -74,7 +74,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_meal_resource_effect_observed",
             "frontier.resident_meal_portion_disposition_observed",
             "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
-            "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required", "frontier.resident_meal_dining_required",
+            "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required", "frontier.resident_meal_dining_required", "frontier.resident_meal_entrance_requested", "frontier.resident_meal_seat_reselected",
             "frontier.resident_meal_approach_required",
             "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
             "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
@@ -154,11 +154,12 @@ public final class FrontierWorldProcessCatalog {
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
             UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
 DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES, ForestryProcessModule.TYPES, GuardProcessModule.TYPES, SecurityProcessModule.TYPES,
-                CombatProcessModule.TYPES, RangedProcessModule.TYPES, GuardAmmunitionProcessModule.TYPES,ClinicalProcessModule.TYPES,RestPlaceProcessModule.TYPES, EvasionProcessModule.TYPES);
+                CombatProcessModule.TYPES, RangedProcessModule.TYPES, GuardAmmunitionProcessModule.TYPES,ClinicalProcessModule.TYPES,RestPlaceProcessModule.TYPES,SeatProcessModule.TYPES,
+                        ResidentRoutineProcessModule.TYPES, EvasionProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("forestry", new ForestryProcessModule()),
             Map.entry("guard", new GuardProcessModule()),
-            Map.entry("clinical-care",new ClinicalProcessModule()),Map.entry("rest-place",new RestPlaceProcessModule()),
+            Map.entry("clinical-care",new ClinicalProcessModule()),Map.entry("rest-place",new RestPlaceProcessModule()),Map.entry("seat-contact",new SeatProcessModule()),Map.entry("resident-routines",new ResidentRoutineProcessModule()),
             Map.entry("security", new SecurityProcessModule()),
             Map.entry("combat", new CombatProcessModule()),
             Map.entry("ranged-combat", new RangedProcessModule()),
@@ -211,6 +212,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
         };
     }
     private static final Map<String, FrontierScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
+            Map.entry(ResidentRoutineProcess.PROGRESS,ScheduledReviewAdmission.coalescedContinuation(atExecutionTime((s,a,t)->ResidentRoutineProcess.plan(s,a,t.ticks())))),
             Map.entry(EvasionProcess.REVIEW,coalescedReview(withPlanningRecovery(atExecutionTime((state,action,instant)->EvasionProcess.review(state,action,instant.ticks()))))),
             Map.entry(io.farfrontier.palemirror.frontier.v3.model.security.SecurityReview.KIND, coalescedReview(atExecutionTime(
                     (state,action,instant) -> SecurityProcessModule.review(state,action,instant.ticks())))),
@@ -455,7 +457,8 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
                 PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR,
                     CultivationProcessModule.DESCRIPTOR, ForestryProcessModule.DESCRIPTOR, GuardProcessModule.DESCRIPTOR,
-                    SecurityProcessModule.DESCRIPTOR, CombatProcessModule.DESCRIPTOR,RangedProcessModule.DESCRIPTOR,GuardAmmunitionProcessModule.DESCRIPTOR,ClinicalProcessModule.DESCRIPTOR,RestPlaceProcessModule.DESCRIPTOR,
+                    SecurityProcessModule.DESCRIPTOR, CombatProcessModule.DESCRIPTOR,RangedProcessModule.DESCRIPTOR,GuardAmmunitionProcessModule.DESCRIPTOR,ClinicalProcessModule.DESCRIPTOR,
+                            RestPlaceProcessModule.DESCRIPTOR,SeatProcessModule.DESCRIPTOR,ResidentRoutineProcessModule.DESCRIPTOR,
                         EvasionProcessModule.DESCRIPTOR);
     }
 
@@ -706,7 +709,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
             "frontier.resident_meal_resource_effect_observed",
             "frontier.resident_meal_portion_disposition_observed",
             "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
-            "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required", "frontier.resident_meal_dining_required",
+            "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required", "frontier.resident_meal_dining_required", "frontier.resident_meal_entrance_requested", "frontier.resident_meal_seat_reselected",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff"); }
     private static Set<String> economyCommands() { return types(
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
@@ -828,7 +831,7 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     "frontier.settlement_assault_march_issue_observed",
                     "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_departed");
-            case "population" -> union(DefenderEquipmentReturnVisitProcessModule.TYPES, types(
+            case "population" -> union(SeatProcessModule.TYPES, DefenderEquipmentReturnVisitProcessModule.TYPES, types(
                     "kernel.reconsideration_requested", "frontier.reference_mutation_closed",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.actor_movement_interrupted", "frontier.actor_movement_started", "frontier.actor_execution_resumed",
@@ -842,16 +845,16 @@ DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.
                     "frontier.resident_meal_resource_effect_observed",
                     "frontier.resident_meal_portion_disposition_observed",
                     "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
-                    "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required", "frontier.resident_meal_dining_required",
+                    "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required", "frontier.resident_meal_dining_required", "frontier.resident_meal_entrance_requested", "frontier.resident_meal_seat_reselected",
                     "frontier.resident_meal_approach_required",
                     "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
                     "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
                     "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff", "frontier.structure_cell_observed", "frontier.physical_delta_observed", "frontier.physical_deltas_observed",
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
                     "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition"));
-            case "actor-movement" -> types("frontier.actor_movement_grounded", "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
+            case "actor-movement" -> union(ResidentRoutineProcessModule.TYPES, types("frontier.actor_movement_grounded", "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
                     "frontier.actor_movement_cold_route_started", "kernel.reconsideration_requested",
-                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
+                    "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled"));
             case "economy" -> types(
                     "frontier.actor_movement_started", "frontier.actor_movement_interrupted",
                     "kernel.reconsideration_requested", "frontier.reference_mutation_closed",

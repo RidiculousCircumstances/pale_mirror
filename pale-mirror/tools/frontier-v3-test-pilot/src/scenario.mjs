@@ -294,7 +294,8 @@ export function validateScenario(scenario) {
           || (action.maxAngleDeg !== undefined && (!Number.isFinite(action.maxAngleDeg) || action.maxAngleDeg < 1 || action.maxAngleDeg > 90)))) {
         throw new Error('assert_visible_board needs text, position and bounded visibility limits');
       }
-      if (action.type === 'assert_visible_entity' && ((action.pose !== undefined && !['STANDING','SLEEPING'].includes(action.pose)) || !validItemKind(action.entityType) || !validEntityName(action.nameContains)
+      if (action.type === 'assert_visible_entity' && ((action.routineKind !== undefined && !['STROLL','LOOK_AROUND','GREET','STRETCH'].includes(action.routineKind)) || (action.vehicleType !== undefined && !validItemKind(action.vehicleType))
+          || (action.mealItem !== undefined && !validItemKind(action.mealItem)) || (action.pose !== undefined && !['STANDING','SLEEPING'].includes(action.pose)) || !validItemKind(action.entityType) || !validEntityName(action.nameContains)
           || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000
           || (action.maxDistance !== undefined && (!Number.isFinite(action.maxDistance) || action.maxDistance < 1 || action.maxDistance > 128))
           || (action.maxAngleDeg !== undefined && (!Number.isFinite(action.maxAngleDeg) || action.maxAngleDeg < 1 || action.maxAngleDeg > 90)))) {

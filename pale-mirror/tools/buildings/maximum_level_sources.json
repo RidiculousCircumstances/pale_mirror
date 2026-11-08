@@ -492,14 +492,14 @@
         "id": "dining",
         "use": "DINING",
         "min": [
-          7,
+          14,
           2,
-          9
+          10
         ],
         "max": [
-          9,
+          21,
           4,
-          12
+          19
         ]
       }
     ],
@@ -1078,6 +1078,176 @@
     ],
     "omittedControllers": [
       "minecolonies:blockstash"
+    ],
+    "seats": [
+      {
+        "id": "dining_1",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          19,
+          2,
+          11
+        ],
+        "table": [
+          19,
+          2,
+          12
+        ],
+        "approach": [
+          18,
+          1,
+          11
+        ],
+        "egress": [
+          18,
+          1,
+          11
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "dining_2",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          19,
+          2,
+          13
+        ],
+        "table": [
+          19,
+          2,
+          12
+        ],
+        "approach": [
+          18,
+          1,
+          13
+        ],
+        "egress": [
+          18,
+          1,
+          13
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "dining_3",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          19,
+          2,
+          15
+        ],
+        "table": [
+          19,
+          2,
+          16
+        ],
+        "approach": [
+          18,
+          1,
+          15
+        ],
+        "egress": [
+          18,
+          1,
+          15
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "dining_4",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          19,
+          2,
+          17
+        ],
+        "table": [
+          19,
+          2,
+          16
+        ],
+        "approach": [
+          18,
+          1,
+          17
+        ],
+        "egress": [
+          18,
+          1,
+          17
+        ],
+        "facing": "NORTH"
+      },
+      {
+        "id": "dining_5",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          15,
+          2,
+          16
+        ],
+        "table": [
+          15,
+          2,
+          17
+        ],
+        "approach": [
+          15,
+          1,
+          15
+        ],
+        "egress": [
+          15,
+          1,
+          15
+        ],
+        "facing": "SOUTH"
+      },
+      {
+        "id": "dining_6",
+        "zone": "dining",
+        "kind": "HANDCRAFTED_CHAIR",
+        "chairBlock": "handcrafted:spruce_chair",
+        "tableBlock": "handcrafted:spruce_table",
+        "chair": [
+          17,
+          2,
+          16
+        ],
+        "table": [
+          17,
+          2,
+          17
+        ],
+        "approach": [
+          17,
+          1,
+          15
+        ],
+        "egress": [
+          17,
+          1,
+          15
+        ],
+        "facing": "SOUTH"
+      }
     ]
   },
   {

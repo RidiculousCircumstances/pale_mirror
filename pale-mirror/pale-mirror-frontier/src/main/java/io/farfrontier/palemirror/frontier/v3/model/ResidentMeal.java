@@ -187,6 +187,13 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Residen
                 Optional.empty(), Optional.empty(), Optional.empty(), executionId);
     }
 
+    public ResidentMeal reselectSeat(MealDestination.Seat destination) {
+        if (phase != Phase.CONSUME || pendingPhysicalStep.isPresent() || coldTravel.isPresent())
+            throw new IllegalArgumentException("seat reselection requires an unbegun acquired meal");
+        return new ResidentMeal(residentId, settlementId, source, clearingSurface, destination, actorAccountId,
+                portion, claimId, retainedWorkOwner, Phase.MOVE_TO_DINING, startedAtTick,
+                Optional.empty(), Optional.empty(), Optional.empty(), executionId);
+    }
     public ResidentMeal clearWait() {
         return waitReason.isEmpty() ? this : new ResidentMeal(residentId, settlementId, source, clearingSurface, destination,
                 actorAccountId, portion, claimId, retainedWorkOwner, phase,

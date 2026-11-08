@@ -25,6 +25,7 @@ public record BuildingDefinition(
         Optional<String> primaryWorkplace,
         Map<String, BlockPosition> anchors,
         Map<String, Bed> beds,
+        Map<String, BuildingSeat> seats,
         Map<BlockPosition, Block> blocks) {
     public enum Representation {
         GRAYBOX,
@@ -190,7 +191,22 @@ public record BuildingDefinition(
         workplaces = ordered(workplaces, 32);
         anchors = ordered(anchors, 128);
         beds = ordered(beds, 96);
+        seats = ordered(seats, 64);
         blocks = Map.copyOf(blocks);
+        var seatCells = new HashSet<BlockPosition>();
+        for (var entry : seats.entrySet()) {
+            var seat = entry.getValue();
+            var chair = blocks.get(seat.chair());
+            var table = blocks.get(seat.table());
+            var zone = zones.get(seat.zoneId());
+            if (!entry.getKey().equals(seat.id()) || !seatCells.add(seat.chair())
+                    || chair == null || !chair.state().kind().equals(seat.chairBlock())
+                    || !seat.facing().name().toLowerCase(Locale.ROOT).equals(chair.state().properties().get("facing"))
+                    || table == null || !table.state().kind().equals(seat.tableBlock())
+                    || zone == null || zone.use() != ZoneUse.DINING || !zone.volume().contains(seat.chair())
+                    || !parcel.contains(seat.approach()) || !parcel.contains(seat.egress()))
+                throw new IllegalArgumentException("invalid authored seating declaration " + entry.getKey());
+        }
         if (version < 1
                 || sha256 == null
                 || !sha256.matches("[a-f0-9]{64}")

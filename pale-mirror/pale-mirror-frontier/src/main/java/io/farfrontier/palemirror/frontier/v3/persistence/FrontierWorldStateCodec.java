@@ -108,7 +108,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 ExtractionSiteStateCodec.write(output, state.extractionSites());
                 ForestStateCodec.write(output, state.forest());
                 SiteUseStateCodec.write(output, state.siteUses());
-                SecurityStateCodec.write(output, state.security());CombatStateCodec.write(output,state.combat());
+                SecurityStateCodec.write(output, state.security());CombatStateCodec.write(output,state.combat());ResidentRoutineStateCodec.write(output,state.routines());
                 SettlementEconomicPlanCodec.writeStates(output, state.companies().goodsTrade().participants().planning());
             }
             return bytes.toByteArray();
@@ -157,7 +157,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             var extraction = ExtractionSiteStateCodec.read(input);
             var forest = ForestStateCodec.read(input);
             var siteUses = SiteUseStateCodec.read(input);
-            var security = SecurityStateCodec.read(input);var combat=CombatStateCodec.read(input);
+            var security = SecurityStateCodec.read(input);var combat=CombatStateCodec.read(input);var routines=ResidentRoutineStateCodec.read(input);
             var trade = companies.goodsTrade();
             var economicParties = new GoodsParticipantState(trade.participants().participants(), SettlementEconomicPlanCodec.readStates(input));
             for (var entry : economicParties.planning().entrySet()) if (entry.getValue().accepted().isPresent())
@@ -168,7 +168,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     infection, inventory, jobs, serviceWorks, intents, observations, scenes, colony, structureDamage,
                     physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies,
                     sites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents, actorMovements,
-                    executions, shipments, groups, fleet, extraction, productionStations, navigationGeometry, forest, siteUses, security, combat);
+                    executions, shipments, groups, fleet, extraction, productionStations, navigationGeometry, forest, siteUses, security, combat, routines);
             FrontierWorldStateCodecValidation.validate(input, state);
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

@@ -122,6 +122,7 @@ final class HumanPopulationStateCodec {
             output.writeLong(obligation.retiredAtTick());
         }
         ClinicalStateCodec.write(output,population.clinical(),population.restPlaces());
+        SeatStateCodec.write(output,population.seats());
     }
 
     static HumanPopulation read(DataInputStream input, boolean hasHealth, boolean hasMigrations, boolean hasProvisions, boolean hasNutrition,
@@ -286,7 +287,7 @@ final class HumanPopulationStateCodec {
         }
         var clinical=ClinicalStateCodec.read(input);
         return new HumanPopulation(households, residents, birthJobs, health, quarantines, migrations,
-                provisions, nutrition, medicalOperations, schedules, meals, obligations,clinical.clinical(),clinical.rest());
+                provisions, nutrition, medicalOperations, schedules, meals, obligations,clinical.clinical(),clinical.rest(),SeatStateCodec.read(input));
     }
 
     static void writeMeal(DataOutputStream output, ResidentMeal meal) throws IOException {

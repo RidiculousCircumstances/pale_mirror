@@ -14,6 +14,11 @@ import static io.farfrontier.palemirror.frontier.v3.model.FungibleResourceValida
  * Vanilla layout.  No map here is a derived stock counter.
  */
 public final class FungibleResourceLedger {
+    private static final ImmutableGroupView<SubjectId, PhysicalStackBinding, SubjectId> BINDINGS_BY_ACCOUNT = new ImmutableGroupView<>();
+    /** Exact current rows by their producer-declared account, with sparse immutable-input invalidation. */
+    public java.util.List<PhysicalStackBinding> bindingsAtAccount(SubjectId account) {
+        return BINDINGS_BY_ACCOUNT.rows(FungibleResourceLedger.class, bindings, row -> java.util.Set.of(row.accountId()), account);
+    }
     private final Map<SubjectId, ResourceLot> lots;
     private final Map<SubjectId, ClaimAllocation> claims;
     private final Map<SubjectId, CustodyAccount> accounts;

@@ -246,12 +246,12 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             return new CommandPlan.Accepted(List.of(new ProposedEvent(arrived.residentId(), arrived)));
         }
         if (command.payload() instanceof ResidentMealHotEffectCancelled cancelled) {
-            try { ResidentMealProcess.reduceHotCancelled(state, cancelled.body().actorId(), cancelled); }
+            try { ResidentMealProcess.reduceHotCancelled(state, cancelled.body().actorId(), cancelled, command.submittedAt().ticks()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(cancelled.body().actorId(), cancelled)));
         }
         if (command.payload() instanceof ResidentMealHotEffectPrepared prepared) {
-            try { ResidentMealProcess.reduceHotPrepared(state, prepared.residentId(), prepared); }
+            try { ResidentMealProcess.reduceHotPrepared(state, prepared.residentId(), prepared, command.submittedAt().ticks()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(prepared.residentId(), prepared)));
         }
@@ -282,6 +282,15 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             try { ResidentMealProcess.reduceHotAccessCleared(state, cleared.residentId(), cleared); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(cleared.residentId(), cleared)));
+        }
+        if (command.payload() instanceof ResidentMealEntranceRequested requested) {
+            try { return new CommandPlan.Accepted(ActorMovementProcess.planStart(MealEntranceMovementProvider.requested(state, requested, command.submittedAt().ticks()))); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof ResidentMealSeatReselected selected) {
+            try { ResidentMealSeating.reselect(state, selected, command.submittedAt().ticks()); }
+            catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+            return new CommandPlan.Accepted(List.of(new ProposedEvent(selected.actor().body().actorId(), selected)));
         }
         if (command.payload() instanceof ResidentMealDiningRequired required) {
             try { ResidentMealProcess.reduceDiningRequired(state, required.execution().actorId(), required); }
@@ -341,8 +350,8 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                     ResidentMealProcess.reduceColdStep(state, event.subject(), step), event.subject(), event.instant().ticks());
             case ResidentMealHotArrived arrived -> ResidentActivityProcess.retargetHotResident(
                     ResidentMealProcess.reduceHotArrived(state, event.subject(), arrived), event.subject(), event.instant().ticks());
-            case ResidentMealHotEffectCancelled cancelled -> ResidentMealProcess.reduceHotCancelled(state, event.subject(), cancelled);
-            case ResidentMealHotEffectPrepared prepared -> ResidentMealProcess.reduceHotPrepared(state, event.subject(), prepared);
+            case ResidentMealHotEffectCancelled cancelled -> ResidentMealProcess.reduceHotCancelled(state, event.subject(), cancelled, event.instant().ticks());
+            case ResidentMealHotEffectPrepared prepared -> ResidentMealProcess.reduceHotPrepared(state, event.subject(), prepared, event.instant().ticks());
             case ResidentMealHotEffectObserved observed -> ResidentActivityProcess.reduceMealEffectObserved(state, event.subject(), observed, event.instant().ticks());
             case ResidentMealResourceEffectObserved observed -> ResidentMealResourceProcess.reduce(state, event.subject(), observed);
             case ResidentMealPortionDispositionObserved observed -> ResidentMealResourceProcess.reduceDisposition(state, event.subject(), observed);
@@ -350,6 +359,8 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentMealHotHandReleased observed -> ResidentMealProcess.reduceHotHandReleased(state, event.subject(), observed);
             case ResidentMealHotAccessCleared cleared -> ResidentActivityProcess.retargetHotResident(
                     ResidentMealProcess.reduceHotAccessCleared(state, event.subject(), cleared), event.subject(), event.instant().ticks());
+            case ResidentMealSeatReselected selected -> ResidentActivityProcess.retargetHotResident(
+                    ResidentMealSeating.reselect(state, selected, event.instant().ticks()), event.subject(), event.instant().ticks());
             case ResidentMealDiningRequired required -> ResidentActivityProcess.retargetHotResident(
                     ResidentMealProcess.reduceDiningRequired(state, event.subject(), required), event.subject(), event.instant().ticks());
             case ResidentMealClearanceRequired required -> ResidentActivityProcess.retargetHotResident(

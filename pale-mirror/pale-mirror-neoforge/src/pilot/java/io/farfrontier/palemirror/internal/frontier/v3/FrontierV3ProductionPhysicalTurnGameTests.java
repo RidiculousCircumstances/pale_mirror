@@ -189,7 +189,7 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
     private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime(ServerLevel level) {
         WorldId world = new WorldId("frontier:production-physical-turn-" + level.getSeed());
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> configuration =
-                FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(world, 91L);
+                FrontierV3FixtureCatalog.coldBomberAftermathConfiguration(world, 41L);
         FrontierStore store = new FrontierFileStore(level.getServer().getWorldPath(LevelResource.ROOT), FrontierWorldRuntimeDefinition.payloadCodecs());
         return FrontierV3ServerRuntime.start(configuration, store, 10_000);
     }

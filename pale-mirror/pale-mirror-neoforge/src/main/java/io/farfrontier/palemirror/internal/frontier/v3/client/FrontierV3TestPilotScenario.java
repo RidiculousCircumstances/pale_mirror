@@ -375,7 +375,12 @@ final class FrontierV3TestPilotScenario {
 
     /** A visual assertion may inspect only a locally rendered ordinary entity and its visible name. */
     private static boolean validVisibleEntity(JsonObject action) {
-        return (!action.has("pose") || java.util.Set.of("STANDING","SLEEPING").contains(action.get("pose").getAsString())) && action.has("entityType") && action.get("entityType").isJsonPrimitive()
+        return (!action.has("routineKind") || java.util.Set.of("STROLL","LOOK_AROUND","GREET","STRETCH").contains(action.get("routineKind").getAsString()))
+                && (!action.has("vehicleType") || action.get("vehicleType").isJsonPrimitive()
+                && action.get("vehicleType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+"))
+                && (!action.has("mealItem") || action.get("mealItem").isJsonPrimitive()
+                && action.get("mealItem").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+"))
+                && (!action.has("pose") || java.util.Set.of("STANDING","SLEEPING").contains(action.get("pose").getAsString())) && action.has("entityType") && action.get("entityType").isJsonPrimitive()
                 && action.get("entityType").getAsString().matches("[a-z0-9_.-]+:[a-z0-9_./-]+")
                 && validEntityName(action.get("nameContains")) && validWorkerSelector(action)
                 && timeout(action, 120_000L) && boundedOptionalNumber(action, "maxDistance", 1.0D, 128.0D)

@@ -527,7 +527,14 @@ public final class FrontierV3TestPilotClient {
                     || !(entity instanceof Display.TextDisplay || entity.isCustomNameVisible())
                     || entity.getCustomName() == null || !entity.getCustomName().getString().contains(expectedName)
                     || !minecraft.player.hasLineOfSight(entity)
-                    || action.has("pose")&&!entity.getPose().name().equals(action.get("pose").getAsString())) return false;
+                    || action.has("pose")&&!entity.getPose().name().equals(action.get("pose").getAsString())
+                    || action.has("vehicleType") && (entity.getVehicle() == null || !BuiltInRegistries.ENTITY_TYPE.getKey(entity.getVehicle().getType())
+                        .toString().equals(action.get("vehicleType").getAsString()))
+                    || action.has("mealItem") && (!(entity instanceof net.minecraft.world.entity.npc.Villager villager)
+                        || !io.farfrontier.palemirror.internal.client.PaleMirrorResidentMealClient.displayedFood(villager)
+                            .map(value -> value.toString().equals(action.get("mealItem").getAsString())).orElse(false))
+                    || action.has("routineKind") && (!(entity instanceof net.minecraft.world.entity.npc.Villager resident)
+                        || !io.farfrontier.palemirror.internal.client.PaleMirrorResidentRoutineClient.displayedKind(resident).equals(action.get("routineKind").getAsString()))) return false;
             Vec3 delta = entity.position().subtract(eye); double distance = delta.length();
             return distance > 0.0D && distance <= maxDistance && view.dot(delta.scale(1.0D / distance)) >= maxAngle;
         }).stream().findFirst().isPresent();

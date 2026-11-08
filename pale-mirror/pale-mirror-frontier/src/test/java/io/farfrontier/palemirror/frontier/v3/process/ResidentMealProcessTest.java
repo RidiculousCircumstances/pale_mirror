@@ -567,7 +567,7 @@ class ResidentMealProcessTest {
         assertTrue(preparation.requiresDurableBeforeEffect(), "the executor may act immediately after acceptance");
         var beforePreparation = state;
         var preparedBody = ActorBodyAuthority.current(state, resident);
-        state = ResidentMealProcess.reduceHotPrepared(state, resident, preparation);
+        state = ResidentMealProcess.reduceHotPrepared(state, resident, preparation, 48_001L);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         var cancelled = new ResidentMealHotEffectCancelled(preparedBody, preparation.step());
         assertTrue(cancelled.requiresDurableBeforeEffect(), "saved cancellation closes the native operation through its durable owner command");
@@ -576,18 +576,18 @@ class ResidentMealProcessTest {
         var pendingTake = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotCancelled(pendingTake, resident,
                 new ResidentMealHotEffectCancelled(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(
-                        resident, preparedBody.physicalEpoch() + 1), preparation.step())));
-        var unused = ResidentMealProcess.reduceHotCancelled(state, resident, cancelled);
+                        resident, preparedBody.physicalEpoch() + 1), preparation.step()), 48_001L));
+        var unused = ResidentMealProcess.reduceHotCancelled(state, resident, cancelled, 48_001L);
         assertEquals(state.inventory(), unused.inventory(), "cancellation cannot fabricate or consume a portion");
         assertEquals(state.humanPopulation().nutrition(), unused.humanPopulation().nutrition());
         assertEquals(meal.claimId(), unused.humanPopulation().meals().get(resident).claimId());
         assertEquals(ResidentMeal.Phase.TAKE, unused.humanPopulation().meals().get(resident).phase());
         assertTrue(unused.humanPopulation().meals().get(resident).pendingPhysicalStep().isEmpty());
-        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotCancelled(unused, resident, cancelled));
+        assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotCancelled(unused, resident, cancelled, 48_001L));
         var retired = ActorBodyAuthority.released(beforePreparation, preparedBody);
         var stranded = retired.withHumanPopulation(retired.humanPopulation().advanceMeal(
                 retired.humanPopulation().meals().get(resident), state.humanPopulation().meals().get(resident)));
-        assertTrue(ResidentMealProcess.reduceHotCancelled(stranded, resident, cancelled)
+        assertTrue(ResidentMealProcess.reduceHotCancelled(stranded, resident, cancelled, 48_001L)
                 .humanPopulation().meals().get(resident).pendingPhysicalStep().isEmpty());
         assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.demand(stranded, resident),
                 "pending food effect cannot migrate to a new physical incarnation");
@@ -662,7 +662,7 @@ class ResidentMealProcessTest {
         assertEquals(ResidentMeal.Phase.CONSUME, state.humanPopulation().meals().get(resident).phase());
         state = ResidentMealProcess.reduceHotPrepared(state, resident,
                 new ResidentMealHotEffectPrepared(resident,
-                        new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 1, 1L, 0L, 1L, meal.executionId())));
+                        new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 1, 1L, 0L, 1L, meal.executionId())), 48_001L);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         BodyPosition displaced = dining.standingBody();
         assertTrue(ResidentMealProcess.atDiningDestination(state, diningMeal, displaced));

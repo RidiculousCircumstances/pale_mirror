@@ -324,7 +324,18 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                                FoodCatalog foods, int satietyCapacityUnits,
                                int metabolismDefaultPermille, int metabolismMinPermille,
                                int metabolismMaxPermille, int metabolismBaselineSpreadPermille,
-                               StarvationPolicy starvation) {
+                               StarvationPolicy starvation, io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutineRules routines) {
+        public ResidentLife(int dayTicks,int workTicks,long satietyUnitTicks,int eatBelowUnits,int mealTargetUnits,
+                FoodCatalog foods,int satietyCapacityUnits,int metabolismDefaultPermille,int metabolismMinPermille,
+                int metabolismMaxPermille,int metabolismBaselineSpreadPermille,StarvationPolicy starvation) {
+            this(dayTicks,workTicks,satietyUnitTicks,eatBelowUnits,mealTargetUnits,foods,satietyCapacityUnits,
+                    metabolismDefaultPermille,metabolismMinPermille,metabolismMaxPermille,metabolismBaselineSpreadPermille,starvation,
+                    io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutineRules.disabled());
+        }
+        public ResidentLife withRoutines(io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutineRules value) {
+            return new ResidentLife(dayTicks,workTicks,satietyUnitTicks,eatBelowUnits,mealTargetUnits,foods,satietyCapacityUnits,
+                    metabolismDefaultPermille,metabolismMinPermille,metabolismMaxPermille,metabolismBaselineSpreadPermille,starvation,value);
+        }
         public ResidentLife(int dayTicks, int workTicks, long satietyUnitTicks,
                             int eatBelowUnits, int mealTargetUnits, int breadNutritionUnits, int satietyCapacityUnits,
                             int metabolismDefaultPermille, int metabolismMinPermille, int metabolismMaxPermille,
@@ -364,6 +375,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         public ResidentLife {
             Objects.requireNonNull(foods, "edible catalog");
             Objects.requireNonNull(starvation, "starvation policy");
+            Objects.requireNonNull(routines, "resident routine policy");
             if (dayTicks < 2 || workTicks < 1 || workTicks >= dayTicks || satietyUnitTicks < 1
                     || eatBelowUnits < 1 || mealTargetUnits <= eatBelowUnits
                     || satietyCapacityUnits < mealTargetUnits
@@ -394,7 +406,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                     + "," + mealTargetUnits + ",foods[" + foods.canonicalText() + "]," + satietyCapacityUnits
                     + "," + metabolismDefaultPermille + "," + metabolismMinPermille + "," + metabolismMaxPermille
                     + "," + metabolismBaselineSpreadPermille + "," + starvation.gainTicksPerUnit()
-                    + "," + starvation.recoveryTicksPerUnit() + "," + starvation.recoverAtOrAboveUnits();
+                    + "," + starvation.recoveryTicksPerUnit() + "," + starvation.recoverAtOrAboveUnits()
+                    + ",routines[" + routines.canonicalText() + "]";
         }
     }
 

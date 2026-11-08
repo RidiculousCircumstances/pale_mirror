@@ -1,16 +1,11 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
-import io.farfrontier.palemirror.frontier.v3.process.*;
-import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
-import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
-
 import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
+import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
 import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
@@ -19,9 +14,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.kernel.EngineLimits;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
-import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionCommitter;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.process.*;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,8 +39,13 @@ import java.util.function.BiFunction;
  */
 public final class FrontierV3FixtureCatalog {
     private static final String RESOURCE = "frontier-v3-pilot-profiles.properties";
-    /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
-    private static final Map<String, FrontierRuleset> RULESETS = Map.ofEntries(Map.entry("clinical-r35", FrontierRulesets.installed("frontier-v3-clinical-care-r35")),Map.entry("wood-production-r29",
+
+  /**
+   * Test-only catalog: an alternate immutable ruleset must be named here and in the profile file.
+   */
+  private static final Map<String, FrontierRuleset> RULESETS = Map.ofEntries(
+          Map.entry("living-r36", FrontierRulesets.installed("frontier-v3-living-residents-r36")),
+          Map.entry("clinical-r35", FrontierRulesets.installed("frontier-v3-clinical-care-r35")),Map.entry("wood-production-r29",
         FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29")),
             Map.entry("textiles-r32", FrontierRulesets.installed("frontier-v3-textiles-terrain-r32")),
             Map.entry("simulation-baseline-r31", FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")),
@@ -62,6 +65,10 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("northwatchWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("clinical-r35"))),
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("northwatchAccess", NorthwatchAccessFixture::configuration),
+              Map.entry("northwatchDining", NorthwatchDiningFixture::configuration),
+              Map.entry(
+                  "northwatchRoutines",
+                  (world, seed) -> NorthwatchDiningFixture.configuration(world, seed, true)),
             Map.entry("clinicalCare", ClinicalCareFixture::configuration),
             Map.entry("authoredBuildingsWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("simulation-terrain-r31"))),
             Map.entry("peacefulGuards", PeacefulGuardFixture::configuration),

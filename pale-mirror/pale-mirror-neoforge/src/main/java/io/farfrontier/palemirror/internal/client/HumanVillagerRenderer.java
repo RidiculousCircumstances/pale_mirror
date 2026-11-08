@@ -22,7 +22,7 @@ final class HumanVillagerRenderer extends VillagerRenderer {
             @Override public void render(PoseStack pose,MultiBufferSource buffer,int light,Villager actor,float swing,float amount,float partial,float age,float yaw,float pitch){
                 var rig=HumanEraVisuals.current(HumanVillagerRenderer.this.root).orElse(null);if(rig==null)return;
                 for(var hand:HumanoidArm.values()){
-                    var stack=hand==actor.getMainArm()?actor.getMainHandItem():actor.getOffhandItem();if(stack.isEmpty())continue;
+                    var stack=PaleMirrorResidentMealClient.display(actor,hand,hand==actor.getMainArm()?actor.getMainHandItem():actor.getOffhandItem());if(stack.isEmpty())continue;
                     pose.pushPose();rig.hand(hand,pose);pose.mulPose(Axis.XP.rotationDegrees(-90));pose.mulPose(Axis.YP.rotationDegrees(180));
                     boolean left=hand==HumanoidArm.LEFT;// Human Era arm boxes point inward from the shoulder, unlike vanilla player arms.
                     pose.translate((left?1:-1)/16f,0.125,-0.625);

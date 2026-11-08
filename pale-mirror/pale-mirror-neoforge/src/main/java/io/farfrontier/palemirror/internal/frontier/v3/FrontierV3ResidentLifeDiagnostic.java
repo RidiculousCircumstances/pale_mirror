@@ -30,6 +30,7 @@ final class FrontierV3ResidentLifeDiagnostic {
         SettlementDailySchedule schedule = state.humanPopulation().schedule(resident.settlementId());
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(subject);
         ResidentMeal meal = state.humanPopulation().meals().get(subject);
+        var seat = state.humanPopulation().seats().uses().get(subject);
         var mealResources = state.humanPopulation().mealResourceObligations().get(subject);
         String activity, pending = "", activityError = "", workYield = "";
         String activityAdmission = "UNAVAILABLE", activityWait = "", activityWakeKeys = "[]";
@@ -105,6 +106,12 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + "\",\"activityAdmission\":\"" + activityAdmission
                 + "\",\"activityWait\":\"" + activityWait + "\",\"activityWakeKeys\":" + activityWakeKeys
                 + ",\"initialFoodStorageId\":\"" + quote(pantry.value()) + "\""
+                + routineFields(state,subject)
+                + ",\"seatPhase\":\"" + (seat == null ? "NONE" : seat.phase().name()) + "\""
+                + ",\"seatLocalId\":\"" + (seat == null ? "" : quote(seat.place().id().localId())) + "\""
+                + ",\"seatRevision\":" + (seat == null ? 0 : seat.revision())
+                + ",\"seatPending\":" + (seat != null && seat.pendingBody().isPresent())
+                + ",\"seatCheckpointed\":" + (seat != null && seat.pendingObservation().isPresent())
                 + ",\"mealPhase\":\"" + (meal == null ? "NONE" : meal.phase().name())
                 + "\",\"mealWait\":\"" + (meal == null ? "" : meal.waitReason().map(Enum::name).orElse(""))
                 + "\",\"mealClaim\":\"" + (meal == null ? "" : quote(meal.claimId().value()))
@@ -157,12 +164,23 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + mealObligation(state,subject)+"}";
     }
 
+    private static String routineFields(FrontierWorldState state,SubjectId actor){
+        var row=state.routines().rows().get(actor);
+        return ",\"routineKind\":\""+(row==null?"NONE":row.kind().name())+"\",\"routinePhase\":\""+(row==null?"NONE":row.phase().name())
+                +"\",\"routineOrdinal\":"+(row==null?0:row.sequence())+",\"routineEligibleAt\":"+(row==null?0:row.eligibleAt())
+                +",\"routineWalkArrived\":"+(row!=null&&row.kind()==io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutine.Kind.STROLL&&
+                        row.phase()!=io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutine.Phase.WALKING&&row.phaseAt()>row.startedAt());
+    }
     private static String mealObligation(FrontierWorldState state,SubjectId actor) {
         var o=io.farfrontier.palemirror.frontier.v3.process.ResidentMealProgressObligation.describe(state,actor);
+        var r=io.farfrontier.palemirror.frontier.v3.process.ResidentRoutineProgressObligation.describe(state,actor);
         return ",\"progressObligations\":[{\"schema\":1,\"rule\":\"frontier.resident-meal.progress.v1\",\"subject\":\""+quote(actor.value())
                 +"\",\"worker\":\""+quote(actor.value())+"\",\"generation\":"+o.generation()+",\"revision\":"+o.generation()
                 +",\"fingerprint\":\""+quote(o.fingerprint())+"\",\"budgetTicks\":"+o.budgetTicks()
-                +",\"disposition\":\""+o.disposition()+"\",\"next\":\""+o.next()+"\"}]";
+                +",\"disposition\":\""+o.disposition()+"\",\"next\":\""+o.next()+"\"},"
+                +"{\"schema\":1,\"rule\":\"frontier.resident-routine.progress.v1\",\"subject\":\""+quote(actor.value())+"\",\"worker\":\""+quote(actor.value())
+                +"\",\"generation\":"+r.generation()+",\"revision\":"+r.generation()+",\"fingerprint\":\""+quote(r.fingerprint())+"\",\"budgetTicks\":"+r.budgetTicks()
+                +",\"disposition\":\""+r.disposition()+"\",\"next\":\""+r.next()+"\"}]";
     }
 
     /** Operator-only retained evidence; a diagnostic must not initialize a route search. */

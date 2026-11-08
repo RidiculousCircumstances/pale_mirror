@@ -24,3 +24,65 @@ gradle.projectsEvaluated {
         }
     }
 }
+
+// Optional installed-pack consumer of the SAME prepared pilot/client, with pinned
+// client/server compositions and the managed resident archives. No live state is copied.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject.findProject(':pale-mirror-neoforge')
+    def clientInput = System.getenv('FRONTIER_V3_NATIVE_PACK_CLIENT_DIRECTORY')
+    if (project == null || clientInput == null) return
+    def packBuildDirectory = project.buildDir
+    def packLaunchManifest = new File(packBuildDirectory, 'moddev/frontierV3PilotPreparedLaunch.json')
+    def serverInput = System.getenv('FRONTIER_V3_NATIVE_PACK_SERVER_DIRECTORY')
+    def javaInput = System.getenv('FRONTIER_V3_NATIVE_PACK_JAVA')
+    def catalog = new groovy.json.JsonSlurper().parse(new File(gradle.rootProject.projectDir,
+            'tools/frontier-v3-test-pilot/fixtures/northwatch-access/fullpack.json'))
+    def digest = { File value -> java.security.MessageDigest.getInstance('SHA-512').digest(value.bytes).encodeHex().toString() }
+    def inputs = ['client': new File(clientInput), 'server': new File(serverInput ?: '')]
+    inputs.each { role, input ->
+        if (!input.isAbsolute() || !new File(input, 'mods').isDirectory() || java.nio.file.Files.isSymbolicLink(input.toPath()))
+            throw new GradleException('Installed-pack pilot needs materialized absolute ' + role + ' input')
+    }
+    def launcher = new File(javaInput ?: '')
+    if (!launcher.isAbsolute() || !launcher.isFile() || digest(launcher) != catalog.java.sha512)
+        throw new GradleException('Installed-pack pilot needs its pinned Java22 launcher')
+    ['client': 'prepareFrontierV3PilotClientRun', 'server': 'prepareFrontierV3PilotServerWorld'].each { role, taskName ->
+        project.tasks.named(taskName) {
+            doLast {
+                def run = new File(packBuildDirectory, 'runs/frontier-v3-pilot-' + role)
+                def destination = new File(run, 'mods'); destination.mkdirs()
+                catalog[role].each { entry ->
+                    def jar = new File(inputs[role], 'mods/' + entry.filename)
+                    if (!jar.isFile() || digest(jar) != entry.sha512)
+                        throw new GradleException('Changed installed-pack pilot dependency: ' + entry.filename)
+                    java.nio.file.Files.copy(jar.toPath(), new File(destination, entry.filename).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                }
+                catalog.grayboxAssets.each { entry ->
+                    if (entry.path != 'config/pale-mirror-visuals-server.toml') throw new GradleException('Unscoped graybox configuration input')
+                    def file = new File(inputs.server, entry.path)
+                    if (!file.isFile() || digest(file) != entry.sha512) throw new GradleException('Changed installed graybox configuration')
+                    def target = new File(run, entry.path); target.parentFile.mkdirs()
+                    java.nio.file.Files.copy(file.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                }
+                if (role == 'client') catalog.residentAssets.each { entry ->
+                    if (!entry.path.startsWith('config/pale_mirror/resident-packs/') || entry.path.contains('..'))
+                        throw new GradleException('Unscoped resident resource input')
+                    def file = new File(inputs.client, entry.path)
+                    if (!file.isFile() || digest(file) != entry.sha512) throw new GradleException('Changed resident resource: ' + entry.path)
+                    def target = new File(run, entry.path); target.parentFile.mkdirs()
+                    java.nio.file.Files.copy(file.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+        }
+    }
+    project.extensions.getByName('neoForge').runs.getByName('frontierV3PilotClient').systemProperty(
+            'pale_mirror.frontier_v3.test_pilot.required_mods', 'create,geckolib,pale_mirror,pale_mirror_visuals,supplementaries,entity_model_features,entity_texture_features,handcrafted')
+    project.tasks.named('writeFrontierV3PilotPreparedLaunchManifest') {
+        doLast {
+            def output = packLaunchManifest
+            def manifest = new groovy.json.JsonSlurper().parse(output)
+            manifest.java = launcher.absolutePath
+            output.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(manifest)) + '\n'
+        }
+    }
+}

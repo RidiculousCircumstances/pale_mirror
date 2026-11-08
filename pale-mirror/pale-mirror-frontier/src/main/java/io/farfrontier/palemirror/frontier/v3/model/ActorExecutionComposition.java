@@ -14,14 +14,14 @@ public final class ActorExecutionComposition {
             new ActorPresencePolicies.Registration(ActorKind.PACK_ANIMAL,
                     (state, actorId) -> state.transportFleet().assets().containsKey(actorId))));
     public static final ActorActivityCapabilities CAPABILITIES = new ActorActivityCapabilities(
-            Set.of(ActorActivityKind.PRESENCE, ActorActivityKind.MEAL, ActorActivityKind.SERVICE_EXIT,
+            Set.of(ActorActivityKind.PRESENCE, ActorActivityKind.LEISURE, ActorActivityKind.MEAL, ActorActivityKind.SERVICE_EXIT,
                     ActorActivityKind.FIELD_HARVEST, ActorActivityKind.PRODUCTION, ActorActivityKind.TRANSIT,
                     ActorActivityKind.SCOUT_PATROL,
                     ActorActivityKind.ROUTE_PATROL, ActorActivityKind.HIVE_TASK_ASSEMBLY, ActorActivityKind.HIVE_TASK_RETURN,
                     ActorActivityKind.SETTLEMENT_ASSAULT, ActorActivityKind.ENGINEERING_ASSEMBLY, ActorActivityKind.ENGINEERING_WORK,
                     ActorActivityKind.SETTLEMENT_SERVICE, ActorActivityKind.MEDICAL_TREATMENT, ActorActivityKind.COURIER, ActorActivityKind.GROUP_MEMBER, ActorActivityKind.EXTRACTION, ActorActivityKind.EQUIPMENT_SERVICE,
                             ActorActivityKind.FORESTRY, ActorActivityKind.GUARD, ActorActivityKind.SAFETY,ActorActivityKind.CLINICAL_CARE),
-            List.of(new PresenceActivityCapability(PRESENCE_POLICIES), new MealActivityCapability(), new ServiceExitActivityCapability(),
+            List.of(new PresenceActivityCapability(PRESENCE_POLICIES), new RoutineActivityCapability(), new MealActivityCapability(), new ServiceExitActivityCapability(),
                     new HarvestActivityCapability(), new ProductionActivityCapability(), new TransitActivityCapability(),
                     new ScoutPatrolActivityCapability(), RoutePatrolExecutionAuthority.capability(),
                     HiveAssemblyExecutionAuthority.capability(), HiveReturnExecutionAuthority.capability(),

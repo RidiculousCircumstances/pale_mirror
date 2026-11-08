@@ -33,6 +33,11 @@ final class FrontierV3ResidentMealNavigation {
         }
         var actuation = FrontierV3AmbientActuation.capture(state, runtime, body, lease, meal.executionId()).orElse(null);
         if (actuation == null || !actuation.current(body)) return;
+        if (ResidentMealSeating.use(state, meal).filter(use -> use.phase() == io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse.Phase.SEATED
+                || use.pendingBody().isPresent()).isPresent()) {
+            ROUTES.remove(body); BLOCKED.remove(body); FrontierV3ServiceApproachNavigation.forget(body);
+            FrontierV3GoalNavigation.stop(body, actuation); return;
+        }
         // A prepared consumption retains its fence while ordinary physics may move the body.
         // Clear the passage through the same navigator; never cancel/replay the resource effect.
         if (meal.phase() == ResidentMeal.Phase.CONSUME && !meal.portable()
@@ -54,7 +59,7 @@ final class FrontierV3ResidentMealNavigation {
             var stations = ResidentMealKnownNavigation.diningStations(state, meal, knowledge);
             if (stations.isEmpty()) { blocked(body, meal, "no_available_dining_station"); return; }
             var order = new MovementOrder(meal.claimId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
-                    meal.startedAtTick() + 1L, stations, TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
+                    ResidentMealSeating.goalRevision(state, meal), stations, TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
             var result = FrontierV3GoalNavigation.pursue(level, body,
                     FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
             if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED || result.status() == FrontierV3GoalNavigation.Status.WAITING) blocked(body, meal, "dining:" + result.reason());
@@ -81,10 +86,19 @@ final class FrontierV3ResidentMealNavigation {
                 .contains(ResidentMealProcess.serviceSurface(state, meal))) {
             ROUTES.remove(body);
             var result = FrontierV3ServiceApproachNavigation.waitOutside(level, body, state, meal.depotId(),
-                    meal.residentId(), FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, actuation);
+                    meal.residentId(), FrontierWireTags.tag(meal.phase()), ResidentMealSeating.goalRevision(state, meal), actuation);
             if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED || result.status() == FrontierV3GoalNavigation.Status.WAITING)
                 blocked(body, meal, "native_approach:" + result.reason());
             else BLOCKED.remove(body);
+            return;
+        }
+        if (FrontierV3SemanticMovement.arrived(level, body, ResidentMealProcess.serviceSurface(state, meal))) {
+            ROUTES.remove(body); FrontierV3ServiceApproachNavigation.forget(body);
+            FrontierV3GoalNavigation.stop(body, actuation); return;
+        }
+        if (ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId())) {
+            ROUTES.remove(body); FrontierV3ServiceApproachNavigation.forget(body);
+            FrontierV3CommandSubmission.propose(runtime, "resident-meal-entrance", meal.residentId().value(), new ResidentMealEntranceRequested(actuation.id()));
             return;
         }
         Route route = ROUTES.get(body);
@@ -124,7 +138,7 @@ final class FrontierV3ResidentMealNavigation {
             return;
         }
         MovementOrder order = new MovementOrder(meal.claimId(), meal.residentId(),
-                FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, List.of(route.waypoints().getLast()),
+                FrontierWireTags.tag(meal.phase()), ResidentMealSeating.goalRevision(state, meal), List.of(route.waypoints().getLast()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
                 FrontierV3GoalNavigation.Goal.routed(order, route.physicalOnly() ? List.of() : route.waypoints(), state.bootstrap().bounds()), actuation);
@@ -141,7 +155,7 @@ final class FrontierV3ResidentMealNavigation {
         FrontierV3ServiceApproachNavigation.forget(body);
         var result = FrontierV3ServiceClearanceNavigation.pursue(level, body, state, meal.settlementId(),
                 meal.depotId(), meal.claimId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
-                meal.startedAtTick() + 1L, actuation);
+                ResidentMealSeating.goalRevision(state, meal), actuation);
         if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED || result.status() == FrontierV3GoalNavigation.Status.WAITING)
             blocked(body, meal, "service_exit:" + result.reason());
         else BLOCKED.remove(body);

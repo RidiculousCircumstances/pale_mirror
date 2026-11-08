@@ -105,8 +105,8 @@ class ResidentFoodPortionTest {
                 new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, Map.of(7, 3, 19, 8), 0, 1, 1, 1, started.meal().executionId())));
         var before = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(before, resident,
-                new ResidentMealHotEffectPrepared(resident, new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 7, 3, 1, 1, 1, started.meal().executionId()))));
-        state = ResidentMealProcess.reduceHotPrepared(state, resident, prepared);
+                new ResidentMealHotEffectPrepared(resident, new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 7, 3, 1, 1, 1, started.meal().executionId())), 96_001L));
+        state = ResidentMealProcess.reduceHotPrepared(state, resident, prepared, 96_001L);
         assertTrue(ContainerPhysicalAuthorityComposition.pending(state, fixture.depot()));
         assertFalse(ContainerPhysicalAuthorityComposition.pending(state, new SubjectId("container:other")));
         var isolatedInventory = state.inventory();
@@ -138,13 +138,13 @@ class ResidentFoodPortionTest {
         var atService = state;
         assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.reduceHotPrepared(atService, resident,
                 new ResidentMealHotEffectPrepared(resident,
-                        new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1, started.meal().executionId()))));
+                        new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1, started.meal().executionId())), 96_001L));
         state = ModeledActorBodyFacts.inspected(state, resident, eating);
         state = ResidentMealProcess.reduceHotAccessCleared(state, resident,
                 roundtrip(new ResidentMealHotAccessCleared(resident, 1, eating,
                         ModeledActorBodyFacts.hotObservation(state, started.meal().executionId(), 1))));
         state = ResidentMealProcess.reduceHotPrepared(state, resident, roundtrip(new ResidentMealHotEffectPrepared(resident,
-                new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1, started.meal().executionId()))));
+                new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1, started.meal().executionId()))), 96_001L);
         var consumed = new ResidentMealHotEffectObserved(resident, ResidentMeal.Phase.CONSUME, 1,
                 eating, List.of(), List.of(), started.meal().executionId());
         var events = ResidentMealProcess.planHotObserved(state, consumed, 96_002, 1L);

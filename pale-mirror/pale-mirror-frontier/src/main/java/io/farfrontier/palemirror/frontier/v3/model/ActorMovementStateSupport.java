@@ -1,10 +1,10 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState;
 import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import java.util.Map;
 
 /** Shared identity/authority closure; nominal family contexts own their retained relationships. */
@@ -17,14 +17,15 @@ final class ActorMovementStateSupport {
     static void validate(FrontierWorldState state) {
         validate(state.bootstrap(), state.actorMovements(), state.actorLocations(), state.humanPopulation(), state.inventory(),
                 state.actorExecutions(), state.shipments(), state.unitGroups(), state.extractionSites(), state.strategicPlans(),
-                state.forest(), state.productionJobs(),state.combat());
+                state.forest(), state.productionJobs(),state.combat(),state.routines());
     }
     static void validate(FrontierBootstrap bootstrap, Map<SubjectId, ActorMovement> movements, Map<SubjectId, ActorLocation> actors,
                          HumanPopulation people, ExactInventory inventory, ActorExecutionState executions,
                          ShipmentState shipments, UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,
-                         io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest, Map<SubjectId, ProductionJob> productionJobs,io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat) {
+                         io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest, Map<SubjectId, ProductionJob> productionJobs,io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat,
+      io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutineState routines) {
         if (movements.size() > SimulationCapacity.MAX_ACTORS) throw new IllegalArgumentException("actor movement retention bound exceeded");
-        var references = new ActorMovementReferences(people, inventory, shipments, groups, extractionSites, strategicPlans, forest, productionJobs, actors, executions,combat);
+        var references = new ActorMovementReferences(people, inventory, shipments, groups, extractionSites, strategicPlans, forest, productionJobs, actors, executions,combat,routines);
         for (var id : executions.current(ActorActivityKind.SERVICE_EXIT).values()) {
             var movement = movements.get(id.actorId());
             if (movement == null || !movement.executionId().equals(id))

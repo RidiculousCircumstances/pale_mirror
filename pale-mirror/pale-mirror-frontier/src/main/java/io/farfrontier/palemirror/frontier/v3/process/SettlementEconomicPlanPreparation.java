@@ -104,7 +104,9 @@ final class SettlementEconomicPlanPreparation {
         }
         return new SettlementEconomicPlan(revision,
                 input.inputRevision(), now, next, domestic.view().supplyPlan().orElseThrow(), complete, ceilings, buyers, affected,
-                CultivationEconomicEvaluation.evaluate(state, participant.party().id(), now), domestic.facts().orElseThrow().basis().needs(), completion.quotes());
+                // This option is freshly collected from the current snapshot, unlike the
+                // retained domestic draft. Its date must not precede current nutrition.
+                CultivationEconomicEvaluation.evaluate(state, participant.party().id(), marketAt), domestic.facts().orElseThrow().basis().needs(), completion.quotes());
     }
     private SettlementEconomicPlanPreparation() { }
 }

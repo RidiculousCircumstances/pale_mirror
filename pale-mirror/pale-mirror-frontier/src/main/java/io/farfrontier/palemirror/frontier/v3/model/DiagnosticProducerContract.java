@@ -50,6 +50,9 @@ public final class DiagnosticProducerContract {
             diagnostic("frontier.physical_intent_transition", DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, Admission.OWNER_STAMPS_TRANSITION));
 
     private static final Set<String> ORDINARY = Set.of(
+        "frontier.resident_routine_requested","frontier.resident_routine_started","frontier.resident_routine_arrived","frontier.resident_routine_ended",
+        "frontier.resident_meal_entrance_requested", "frontier.resident_meal_seat_reselected", "frontier.seat_reserved", "frontier.seat_prepared", "frontier.seat_checkpointed",
+        "frontier.seat_application_checkpointed", "frontier.seat_changed", "frontier.seat_released",
         "frontier.clinical_vitality", "frontier.clinical_started", "frontier.clinical_destination", "frontier.clinical_ended", "frontier.clinical_source_selected", "frontier.clinical_supply_prepared", "frontier.clinical_supplied",
             "frontier.clinical_supply_aborted", "frontier.clinical_tend_prepared", "frontier.clinical_tended", "frontier.clinical_healing_prepared", "frontier.clinical_recovered", "frontier.rest_availability",
                 "frontier.rest_reserved", "frontier.rest_prepared", "frontier.rest_changed", "frontier.rest_released",

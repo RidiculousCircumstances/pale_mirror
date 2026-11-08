@@ -9,12 +9,12 @@ import net.minecraft.world.entity.npc.Villager;
 
 /** Vanilla fallback with articulated arms for held items and explicit server combat cues. */
 final class CombatVillagerModel extends VillagerModel<Villager> implements ArmedModel,ResidentPoseRig {
-    private final ModelPart right,left,rightForearm,leftForearm,folded,body,rightLeg;
+    private final ModelPart right,left,rightForearm,leftForearm,folded,body,rightLeg,leftLeg;
     private boolean combat;
     CombatVillagerModel(ModelPart root){
         super(root);right=root.getChild("right_arm");left=root.getChild("left_arm");
         rightForearm=right.getChild("forearm");leftForearm=left.getChild("forearm");
-        rightLeg=root.getChild("right_leg");folded=root.getChild("arms");body=root.getChild("body");
+        rightLeg=root.getChild("right_leg");leftLeg=root.getChild("left_leg");folded=root.getChild("arms");body=root.getChild("body");
     }
     static LayerDefinition layer(){
         var mesh=VillagerModel.createBodyModel();var root=mesh.getRoot();
@@ -38,7 +38,7 @@ final class CombatVillagerModel extends VillagerModel<Villager> implements Armed
         var arm=side==HumanoidArm.RIGHT?right:left;var forearm=side==HumanoidArm.RIGHT?rightForearm:leftForearm;
         arm.xRot=shoulder;arm.yRot=yaw;arm.zRot=roll;forearm.xRot=elbow;
     }
-    public void leg(boolean right,float pitch){if(right && pitch!=0)rightLeg.xRot=pitch;}
+    public void leg(boolean right,float pitch){if(pitch!=0)(right?rightLeg:leftLeg).xRot=pitch;}
     public void torso(float yaw,float lean){body.yRot=yaw;body.xRot=lean;right.z-=2*lean;left.z-=2*lean;}
     public void look(float yaw,float pitch){getHead().yRot=yaw;getHead().xRot=pitch;}
     @Override public void translateToHand(HumanoidArm arm,PoseStack poses){

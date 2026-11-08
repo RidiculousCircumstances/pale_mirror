@@ -62,7 +62,12 @@ final class FrontierV3ResidentMealDeathResources {
         var actor = FrontierV3OperationEntityParticipant.current(body, id.physicalEpoch());
         if (step.phase() == ResidentMeal.Phase.CONSUME) {
             var held = FrontierV3ResidentMealItems.heldPortion(state, meal);
-            var declaration = FrontierV3ResidentMealNativeOperation.consume(meal, step, held, actor);
+            var seat = ResidentMealSeating.use(state, meal);
+            var ports = seat.isPresent() ? FrontierV3SeatExecutor.participants(level, seat.orElseThrow(), body,
+                    seat.orElseThrow().pendingBody().orElseThrow(), io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse.Action.EXIT)
+                    : Optional.of(List.of(actor));
+            if (ports.isEmpty()) return Optional.empty();
+            var declaration = FrontierV3ResidentMealNativeOperation.consume(meal, step, held, ports.orElseThrow());
             var actual = FrontierV3ActorResourceSlots.get(body, meal.inventorySlot());
             boolean before = FrontierV3ResidentMealItems.matches(actual, held);
             int remainingCount = before ? held.quantity() : held.quantity() - meal.portion().quantity();
@@ -75,7 +80,7 @@ final class FrontierV3ResidentMealDeathResources {
                     before ? ResidentMealResourceEffectObserved.Outcome.CONSUMPTION_UNAPPLIED
                             : ResidentMealResourceEffectObserved.Outcome.CONSUMPTION_APPLIED, remainder, List.of());
             var snapshot = actual.copy();
-            return FrontierV3OperationAftermath.capture(level, declaration, List.of(actor), receipt, !before,
+            return FrontierV3OperationAftermath.capture(level, declaration, ports.orElseThrow(), receipt, !before,
                     () -> ItemStack.matches(snapshot, FrontierV3ActorResourceSlots.get(body, meal.inventorySlot())));
         }
         var surface = state.inventory().surfaces().get(meal.depotId());

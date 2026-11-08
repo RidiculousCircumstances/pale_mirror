@@ -58,7 +58,7 @@ public final class FrontierWorldStateUpdate {
         EXTRACTION_SITES,
         PRODUCTION_STATIONS,
         NAVIGATION_GEOMETRY,
-        FOREST, SITE_USES, SECURITY, COMBAT
+        FOREST, SITE_USES, SECURITY, COMBAT, RESIDENT_ROUTINES
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -117,6 +117,11 @@ public final class FrontierWorldStateUpdate {
         mark(Component.SECURITY); security=require(next,"security"); return this;
     }
     io.farfrontier.palemirror.frontier.v3.model.security.SecurityState security(FrontierWorldState state) {return changed(Component.SECURITY,security,state.security());}
+    private io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutineState routines;
+    public FrontierWorldStateUpdate routines(io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutineState next) {
+        mark(Component.RESIDENT_ROUTINES);routines=require(next,"resident routines");return this;
+    }
+    io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutineState routines(FrontierWorldState state){return changed(Component.RESIDENT_ROUTINES,routines,state.routines());}
     private FrontierWorldStateUpdate() { }
 
     public static FrontierWorldStateUpdate begin() { return new FrontierWorldStateUpdate(); }
@@ -182,6 +187,7 @@ public final class FrontierWorldStateUpdate {
                 case SITE_USES -> siteUses(contribution.siteUses);
                 case SECURITY -> security(contribution.security);
                 case COMBAT -> combat(contribution.combat);
+                case RESIDENT_ROUTINES -> routines(contribution.routines);
             }
         }
         return this;
@@ -363,6 +369,7 @@ public final class FrontierWorldStateUpdate {
                 case SITE_USES -> siteUses != state.siteUses();
                 case SECURITY -> security != state.security();
                 case COMBAT -> combat != state.combat();
+                case RESIDENT_ROUTINES -> routines != state.routines();
             };
             if (replaced) return true;
         }

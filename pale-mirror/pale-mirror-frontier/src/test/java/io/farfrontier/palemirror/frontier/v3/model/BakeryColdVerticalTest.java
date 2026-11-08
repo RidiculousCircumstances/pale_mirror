@@ -206,19 +206,14 @@ class BakeryColdVerticalTest {
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
                 held.getFirst().payload());
         long mealTick = 27_002L;
+        var mealDriver = new ModelEventDriver();
         for (int turn = 0; turn < 24 && state.humanPopulation().meals().containsKey(resident); turn++) {
             var currentMeal = state.humanPopulation().meals().get(resident);
-            if (currentMeal.coldTravel().isPresent())
-                mealTick = Math.max(mealTick, currentMeal.coldTravel().orElseThrow().arrivalTick());
-            FrontierWorldState beforeMealStep = state;
-            long atMealTick = mealTick;
-            ResidentMealColdStep step = ResidentMealProcess.planColdStep(state, resident, mealTick)
-                    .orElseThrow(() -> new AssertionError("meal=" + beforeMealStep.humanPopulation().meals().get(resident)
-                            + " body=" + beforeMealStep.actorLocations().get(resident).body()
-                            + " at=" + atMealTick + " depotAvailable="
-                            + ResidentMealServiceAccess.available(beforeMealStep, depot, resident)));
-            state = ResidentMealProcess.reduceColdStep(state, resident, step);
-            mealTick++;
+            var events = ResidentMealProcess.planProgress(state, ResidentMealProcess.progress(currentMeal, mealTick), mealTick);
+            state = mealDriver.apply(state, events, mealTick);
+            for (var event : events) if (event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled scheduled
+                    && scheduled.replacement().kind().equals(ResidentMealProcess.PROGRESS))
+                mealTick = Math.max(mealTick, scheduled.replacement().dueAt().ticks());
         }
         assertFalse(state.humanPopulation().meals().containsKey(resident));
         if (state.actorMovements().containsKey(resident)) {
@@ -249,8 +244,9 @@ class BakeryColdVerticalTest {
         assertEquals(3, state.inventory().fungibleResources().totalQuantity(job.settlementId(), "minecraft:bread"));
         assertTrue(state.actorExecutions().actors().get(resident).current().isEmpty(),
                 "confirmed food does not itself select a work successor");
+        long workTick = Math.max(27_300L, mealTick + 1);
         var review = io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.plan(state,
-                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(resident, 27_300L));
+                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(resident, workTick));
         var resumed = review.stream().map(ProposedEvent::payload)
                 .filter(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed.class::isInstance)
                 .map(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed.class::cast).findFirst().orElseThrow();
@@ -263,8 +259,8 @@ class BakeryColdVerticalTest {
                         io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(
                                 new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:baker-selected-resume")), resumed));
         assertTrue(ProductionServiceAccess.available(state, job));
-        state = BakeryTestClock.arrive(state, job, 27_300L);
-        assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 27_300L))
+        state = BakeryTestClock.arrive(state, job, workTick);
+        assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, workTick))
                 .stream().anyMatch(event -> event.payload() instanceof BakeryColdStep));
     }
 

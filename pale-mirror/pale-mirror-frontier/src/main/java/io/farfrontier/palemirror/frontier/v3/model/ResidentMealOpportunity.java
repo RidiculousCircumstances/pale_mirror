@@ -105,13 +105,13 @@ public final class ResidentMealOpportunity {
             var endpoint = state.inventory().containers().get(storage.containerId()).storage().orElseThrow().endpoint();
             if (!(endpoint instanceof ShipmentEndpoint.Storage declared)) return Optional.empty();
             return areas.stream().filter(place -> declared.facilityId().filter(place.facilityId()::equals).isPresent())
-                    .map(MealDestination.class::cast).findFirst();
+                    .flatMap(place -> ResidentDiningPlaces.available(state, actor, home, place).stream()).findFirst();
         }
         var origin = state.actorLocations().get(actor).supportingSurface();
         return areas.stream().sorted(java.util.Comparator.comparingLong(place -> {
             var p = ResidentDiningPlaces.facility(state, home, place).anchor();
             return Math.abs((long) p.x() - origin.x()) + Math.abs((long) p.z() - origin.z());
-        })).map(MealDestination.class::cast).findFirst();
+        })).flatMap(place -> ResidentDiningPlaces.available(state, actor, home, place).stream()).findFirst();
     }
 
     /** Validate the producer's exact stock/slot, not whichever source wins a new ranking. */

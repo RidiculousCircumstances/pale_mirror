@@ -26,6 +26,8 @@ public final class PaleMirrorAtlasClientEvents {
         PaleMirrorStationWorkGestureClient.tick();
         PaleMirrorCombatClient.tick();
         PaleMirrorResidentWorkClient.tick();
+        PaleMirrorResidentMealClient.tick();
+        PaleMirrorResidentRoutineClient.tick();
         ResidentVisuals.tick();
         while (OPEN_ATLAS.consumeClick()) {
             if (Minecraft.getInstance().player != null) PaleMirrorNetwork.requestAtlas();
@@ -44,6 +46,8 @@ public final class PaleMirrorAtlasClientEvents {
         PaleMirrorStationWorkGestureClient.clear();
         PaleMirrorCombatClient.clear();
         PaleMirrorResidentWorkClient.clear();
+        PaleMirrorResidentMealClient.clear();
+        PaleMirrorResidentRoutineClient.clear();
         ResidentVisuals.clear();
     }
 

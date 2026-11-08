@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "id": "live_northwatch_living_preflight",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode spectator"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 300 0 true"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "summary",
+          "id": "",
+          "expect": {
+            "status": "ok",
+            "settlements": 12,
+            "requiredConflicts": 0,
+            "sceneConflicts": 0,
+            "inventoryConflicts": 0
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1439,
+        "y": 64,
+        "z": -1418
+      },
+      "settleMs": 1500
+    },
+    {
+      "type": "look",
+      "position": {
+        "x": -1436,
+        "y": 65,
+        "z": -1418
+      }
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -1436,
+        "y": 64,
+        "z": -1418
+      },
+      "block": "handcrafted:spruce_chair",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -1436,
+        "y": 64,
+        "z": -1417
+      },
+      "block": "handcrafted:spruce_table",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1440,
+        "y": 65,
+        "z": -1424
+      },
+      "settleMs": 1500
+    },
+    {
+      "type": "look",
+      "position": {
+        "x": -1444,
+        "y": 65,
+        "z": -1416
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 7,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "settlements": 12,
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "northwatch-max-kitchen-real-furniture"
+    },
+    {
+      "after": 6,
+      "name": "northwatch-max-kitchen-open-interior"
+    }
+  ]
+}

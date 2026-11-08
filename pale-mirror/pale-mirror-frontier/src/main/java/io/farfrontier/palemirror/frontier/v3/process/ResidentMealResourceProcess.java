@@ -125,6 +125,9 @@ public final class ResidentMealResourceProcess {
                 people = people.settleMealResources(retained, Optional.of(portion));
             }
         }
+        if (observed.step().phase() == ResidentMeal.Phase.CONSUME) people = people.withSeats(
+                io.farfrontier.palemirror.frontier.v3.model.seating.SeatContacts.retireDeadComposed(state,
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(retained.body(), retained.executionId())));
         // No nutrition, route, pose, body permission, execution or resident-clock mutation.
         return state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(people)
                 .inventory(state.inventory().withFungibleResources(ledger)));

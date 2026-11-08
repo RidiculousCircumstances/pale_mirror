@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.buildings.*;
+import io.farfrontier.palemirror.frontier.v3.model.seating.*;
 import java.util.*;
 
 /** Dining policy and declared-area geometry; no food, actor, movement or table authority. */
@@ -25,17 +26,46 @@ public final class ResidentDiningPlaces {
     }
     public static List<KnownPedestrianRouteKnowledge.SettlementPassage> passages(FrontierWorldState state,
             SubjectId home, MealDestination place) {
-        return place instanceof MealDestination.DiningArea area ? List.of(new KnownPedestrianRouteKnowledge.SettlementPassage(home,
-                new KnownPedestrianRouteKnowledge.Passage(facility(state, home, area), KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS))) : List.of();
+        if (place instanceof MealDestination.Here) return List.of();
+        return List.of(new KnownPedestrianRouteKnowledge.SettlementPassage(home,
+                new KnownPedestrianRouteKnowledge.Passage(facility(state, home, area(state, home, place)), KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
+    }
+    public static MealDestination.DiningArea area(FrontierWorldState state, SubjectId home, MealDestination place) {
+        if (place instanceof MealDestination.DiningArea area) return area;
+        if (!(place instanceof MealDestination.Seat seat)) throw new IllegalArgumentException("in-place meal has no dining facility");
+        var exact = SeatContacts.place(state, home, seat.id());
+        var building = FrontierWorldStateSupport.settlement(state.bootstrap(), home).structures().stream()
+                .filter(s -> s.id().equals(exact.id().buildingId())).findFirst().orElseThrow();
+        return new MealDestination.DiningArea(exact.id().buildingId(), building.definition().seats().get(exact.id().localId()).zoneId());
+    }
+    /** Choose a free authored seat at admission. Buildings without seats retain their declared standing dining policy. */
+    public static Optional<MealDestination> available(FrontierWorldState state, SubjectId actor, SubjectId home, MealDestination.DiningArea area) {
+        var building = facility(state, home, area);
+        var declared = building.definition().seats().values().stream().filter(s -> s.zoneId().equals(area.zoneId()))
+                .sorted(Comparator.comparing(BuildingSeat::id)).toList();
+        if (declared.isEmpty()) return Optional.of(area);
+        var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, home, passages(state, home, area)).forActor(state, actor);
+        return declared.stream().map(s -> SeatPlace.authored(home, building, s))
+                .filter(s -> state.humanPopulation().seats().free(s.id()))
+                .filter(s -> knowledge.clearStation(s.approach()) && knowledge.clearStation(s.egress()))
+                .map(s -> (MealDestination) new MealDestination.Seat(s.id())).findFirst();
     }
     public static boolean contains(FrontierWorldState state, SubjectId home, MealDestination place, SurfaceAnchor station) {
         if (place instanceof MealDestination.Here) return true; // Portable food follows its independently inspected eater, not its historical origin.
+        if (place instanceof MealDestination.Seat seat) {
+            var exact = SeatContacts.place(state, home, seat.id());
+            return station.equals(exact.approach()) || station.equals(exact.contact());
+        }
         var area = (MealDestination.DiningArea) place; var building = facility(state, home, area);
         return BuildingSpatialPlan.of(building).inZone(building.definition().zones().get(area.zoneId()), station.support().offset(0, 1, 0));
     }
     public static List<SurfaceAnchor> stations(FrontierWorldState state, SubjectId home, MealDestination place,
             KnownPedestrianRouteKnowledge knowledge) {
         if (place instanceof MealDestination.Here here) return knowledge.clearStation(here.station()) ? List.of(here.station()) : List.of();
+        if (place instanceof MealDestination.Seat seat) {
+            var exact = SeatContacts.place(state, home, seat.id());
+            return knowledge.clearStation(exact.approach()) ? List.of(exact.approach()) : List.of();
+        }
         var area = (MealDestination.DiningArea) place; var building = facility(state, home, area);
         var plan = BuildingSpatialPlan.of(building);
         return plan.authoredFloors().stream().filter(s -> contains(state, home, place, s))
@@ -51,7 +81,7 @@ public final class ResidentDiningPlaces {
                 HumanAssignmentProjection.compile(state).assignment(meal.residentId()));
         if (meal.destination() instanceof MealDestination.Here here)
             return !homeFood && meal.portable() && here.station().equals(meal.clearingSurface());
-        var area = (MealDestination.DiningArea) meal.destination();
+        var area = area(state, meal.settlementId(), meal.destination());
         var building = facility(state, meal.settlementId(), area);
         if (!homeFood) return false;
         if (meal.source() instanceof ResidentFoodSource.Storage source) {
@@ -65,6 +95,7 @@ public final class ResidentDiningPlaces {
     /** Stable semantic hint for the lease; the navigator can select any legal point in this area. */
     public static SurfaceAnchor hint(FrontierWorldState state, SubjectId home, MealDestination place) {
         if (place instanceof MealDestination.Here here) return here.station();
+        if (place instanceof MealDestination.Seat seat) return SeatContacts.place(state, home, seat.id()).approach();
         var area = (MealDestination.DiningArea) place;
         var building = facility(state, home, area);
         var zone = building.definition().zones().get(area.zoneId());

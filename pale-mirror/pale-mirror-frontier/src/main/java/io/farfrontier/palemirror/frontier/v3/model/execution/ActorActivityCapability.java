@@ -6,6 +6,25 @@ import io.farfrontier.palemirror.frontier.v3.model.AmbientActorLease;
 /** A declared owner strategy; the common lifecycle cannot inspect family progress or custody. */
 public interface ActorActivityCapability {
     ActorActivityKind kind();
+    default void validateSeatReference(FrontierWorldState state, ActorExecutionId execution,
+            io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse use) {
+        throw new IllegalArgumentException("activity does not own a seat reservation");
+    }
+    default java.util.List<io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace> seatAlternatives(
+            FrontierWorldState state, ActorExecutionId execution, io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse use) { return java.util.List.of(); }
+    default java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.FrontierPayload> seatReselection(
+            FrontierWorldState state, ActorActuationId actor, io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse use,
+            io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace destination) { return java.util.Optional.empty(); }
+    /** Explicit activity policy for the shared furniture interaction owner. */
+    default boolean permitsSeat(FrontierWorldState state, ActorExecutionId execution,
+            io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse use) { return false; }
+    default boolean permitsSeatRelease(FrontierWorldState state, ActorExecutionId execution,
+            io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse use) { return false; }
+    default boolean permitsComposedSeatExit(FrontierWorldState state, ActorExecutionId execution,
+            io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse use, long tick) { return false; }
+    default java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse.Action> seatAction(
+            FrontierWorldState state, ActorExecutionId execution,
+            io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse use, long tick) { return java.util.Optional.empty(); }
     /** Explicit family movement input; absence preserves another owner's declared physical pace. */
     default java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TravelPace> navigationPace(
             FrontierWorldState state, ActorExecutionId execution) { return java.util.Optional.empty(); }

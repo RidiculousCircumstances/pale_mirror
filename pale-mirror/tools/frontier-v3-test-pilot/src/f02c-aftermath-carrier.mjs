@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { validateLifecycleBarrierRecords } from './lifecycle-barrier.mjs';
 
-const CAUSE = 'cause:development-settlement-assault-epoch-4-attacker-bioform-west-19';
+const CAUSE = 'cause:development-settlement-assault-epoch-2-attacker-bioform-west-7';
 const PROVENANCE = 'captive-bomber-strike:assault:development-settlement-assault';
 const OWNER = 'structure:1-hall';
-const PART = 'FOUNDATION';
-const MATERIAL = 'HALL';
+const PART = 'PUBLIC_ACCESS_SURFACE';
+const MATERIAL = 'Authored[block=NavigationBlockState[kind=minecraft:stone_bricks, properties={}], repairItemKind=minecraft:stone_bricks, data=Optional.empty]';
 const SELECTOR = CAUSE;
 
 /** The final persistent-client manifest is authority; raw diagnostics are trace only. */
@@ -131,12 +131,12 @@ function assertionObservation(manifest, declaration, phase) {
 }
 
 function pendingExpectation(value) {
-  return value?.cause === CAUSE && value.epoch === 4 && value.expectedOwner === OWNER && value.expectedPart === PART
+  return value?.cause === CAUSE && value.epoch === 2 && value.expectedOwner === OWNER && value.expectedPart === PART
     && value.expectedMaterial === MATERIAL && value.provenance === PROVENANCE && value.authorityRevision === -1
     && value.cellStatus === 'PENDING' && value.nextStatus === 'PENDING' && value.terminal === false;
 }
 function terminalExpectation(value) {
-  return value?.cause === CAUSE && value.epoch === 4 && value.expectedOwner === OWNER && value.expectedPart === PART
+  return value?.cause === CAUSE && value.epoch === 2 && value.expectedOwner === OWNER && value.expectedPart === PART
     && value.expectedMaterial === MATERIAL && value.provenance === PROVENANCE && value.cellStatus === 'REALIZED'
     && value.nextStatus === 'NONE' && value.terminal === true;
 }
@@ -157,7 +157,7 @@ function realized(value) {
 function sameIdentity(left, right) {
   return left?.kind === 'aftermath' && left.id === SELECTOR && left.status === 'ok' && left.aftermathId
     && left.aftermathId === right?.aftermathId && left.cause === CAUSE && left.cause === right?.cause
-    && left.provenance === PROVENANCE && left.provenance === right?.provenance && left.epoch === 4 && left.epoch === right?.epoch
+    && left.provenance === PROVENANCE && left.provenance === right?.provenance && left.epoch === 2 && left.epoch === right?.epoch
     && left.expectedOwner === OWNER && left.expectedOwner === right?.expectedOwner && left.expectedPart === PART && left.expectedPart === right?.expectedPart
     && left.expectedMaterial === MATERIAL && left.expectedMaterial === right?.expectedMaterial && samePosition(left.position, right?.position)
     && Number.isSafeInteger(left.eventAt) && left.eventAt >= 0 && left.eventAt === right?.eventAt;

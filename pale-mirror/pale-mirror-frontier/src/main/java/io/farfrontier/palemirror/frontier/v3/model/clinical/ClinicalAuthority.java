@@ -79,9 +79,16 @@ public final class ClinicalAuthority {
         if(task.actor().equals(task.patient()))return from.equals(target);
         var rest=s.humanPopulation().restPlaces().uses().get(task.patient());
         if(rest!=null&&rest.phase()==RestUse.Phase.RESTING){
-            if(from.support().equals(rest.place().head())||from.support().equals(rest.place().foot()))return false;
-            target=new SurfaceAnchor(rest.place().head().offset(0,-1,0));
+            var head=rest.place().head();var foot=rest.place().foot();
+            if(from.x()==head.x()&&from.z()==head.z()||from.x()==foot.x()&&from.z()==foot.z())return false;
+            // The retained bed occupies two cells. A clinician may stand beside either
+            // half; never on the bed or across an intervening cell/wall.
+            return adjacent(from,new SurfaceAnchor(head.offset(0,-1,0)))
+                    ||adjacent(from,new SurfaceAnchor(foot.offset(0,-1,0)));
         }
+        return adjacent(from,target);
+    }
+    private static boolean adjacent(SurfaceAnchor from,SurfaceAnchor target){
         return Math.abs((long)from.x()-target.x())+Math.abs((long)from.z()-target.z())==1&&Math.abs((long)from.y()-target.y())<=1;
     }
     private ClinicalAuthority(){}

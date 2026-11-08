@@ -15,6 +15,8 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse;
 
 /** Loaded executor for the resident's retained meal; only a WAL-prepared step may mutate stacks. */
 final class FrontierV3ResidentMealPhysicalEffect {
@@ -26,8 +28,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
         if (meal == null) return true;
         if (meal.pendingPhysicalStep().isPresent()) return false;
         if (!meal.carriesFood()) return true;
-        var bindings = state.inventory().fungibleResources().bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(meal.actorAccountId())).toList();
+        var bindings = state.inventory().fungibleResources().bindingsAtAccount(meal.actorAccountId());
         if (bindings.isEmpty()) return true;
         var address = FrontierV3ActorResourceSlots.address(actorId, body, meal.inventorySlot());
         if (bindings.size() != 1 || !bindings.getFirst().address().equals(address)
@@ -46,8 +47,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                         SceneLease.deterministicEntityId(state.bootstrap().worldId(), residentId))) return false;
         // A COLD-held portion acquires exact HOT hand custody before either walking or eating.
         if (meal.carriesFood() && meal.pendingPhysicalStep().isEmpty()
-                && state.inventory().fungibleResources().bindings().values().stream()
-                    .noneMatch(binding -> binding.accountId().equals(meal.actorAccountId()))
+                && state.inventory().fungibleResources().bindingsAtAccount(meal.actorAccountId()).isEmpty()
                 && FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker,
                         meal.inventorySlot()), FrontierV3ResidentMealItems.heldPortion(state, meal)))
             return accepted(level, runtime, meal.residentId(), "resident-meal-hand-materialized",
@@ -66,13 +66,21 @@ final class FrontierV3ResidentMealPhysicalEffect {
         var currentMeal = state.humanPopulation().meals().get(residentId);
         if (currentMeal == null || !currentMeal.equals(meal)) return false;
         if (meal.phase() == ResidentMeal.Phase.CONSUME) {
+            var seat = ResidentMealSeating.use(state, meal);
+            var actualFood = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot());
+            if (seat.isPresent() && seat.orElseThrow().phase() == SeatUse.Phase.SEATED && FrontierV3SeatExecutor.seated(state, seat.orElseThrow(), worker)
+                    && FrontierV3ResidentMealItems.matches(actualFood, FrontierV3ResidentMealItems.heldPortion(state, meal))) {
+                int phase = (int) Math.floorMod(runtime.executionView().orElseThrow().instant().ticks() - seat.orElseThrow().changedAt(), 40);
+                FrontierV3MealPresentation.eating(worker, actuation.id(), actualFood, phase);
+            } else FrontierV3MealPresentation.clear(worker);
             if (meal.pendingPhysicalStep().isEmpty() && ResidentMealProcess.requiresClearance(state, meal, observedBody.orElseThrow()))
                 return accepted(level, runtime, residentId, "resident-meal-clearance-required",
                         new ResidentMealClearanceRequired(meal.executionId(), observedBody.orElseThrow()));
             if (meal.pendingPhysicalStep().isEmpty() && ResidentMealProcess.requiresDining(state, meal, observedBody.orElseThrow()))
                 return accepted(level, runtime, residentId, "resident-meal-dining-required",
                         new ResidentMealDiningRequired(meal.executionId(), observedBody.orElseThrow()));
-            if (!ResidentMealProcess.mayConsumeAt(state, meal, observedBody.orElseThrow())) return false;
+            if (meal.pendingPhysicalStep().isEmpty() && (!ResidentMealProcess.mayConsumeAt(state, meal, observedBody.orElseThrow())
+                    || !ResidentMealSeating.ready(state, meal, runtime.executionView().orElseThrow().instant().ticks()))) return false;
             return consume(level, runtime, state, meal, worker, lease);
         }
         if (!FrontierV3SurfaceObservation.at(body, ResidentMealProcess.goalSurface(state, meal))) return false;
@@ -144,8 +152,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
     private static boolean consume(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                    FrontierWorldState state, ResidentMeal meal, Villager worker, AmbientActorLease lease) {
         var ledger = state.inventory().fungibleResources();
-        List<PhysicalStackBinding> bindings = ledger.bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(meal.actorAccountId())).toList();
+        List<PhysicalStackBinding> bindings = ledger.bindingsAtAccount(meal.actorAccountId());
         var held = FrontierV3ResidentMealItems.heldPortion(state, meal);
         int remainingCount = held.quantity() - meal.portion().quantity();
         ItemStack actual = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot());
@@ -155,14 +162,22 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 || !bindings.getFirst().address().equals(FrontierV3ActorResourceSlots.address(
                         meal.residentId(), worker, meal.inventorySlot()))) return false;
         ResidentMealPhysicalStep pending = meal.pendingPhysicalStep().orElse(null);
+        var seat = ResidentMealSeating.use(state, meal);
+        var authority = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                ActorBodyAuthority.current(state, meal.residentId()), meal.executionId());
+        Optional<List<FrontierV3MinecraftOperation.Participant>> ports = seat.isPresent()
+                ? FrontierV3SeatExecutor.participants(level, seat.orElseThrow(), worker, authority, SeatUse.Action.EXIT)
+                : Optional.of(List.of(FrontierV3OperationEntityParticipant.current(worker, authority.body().physicalEpoch())));
+        if (ports.isEmpty()) return false; // Warm native entity-column evidence before the domain's food preparation.
         if (pending == null) {
             if(state.combat().evasions().containsKey(meal.residentId()))return false;
             if (!before) return false;
+            if (seat.filter(use -> use.pendingBody().isPresent() || !FrontierV3SeatExecutor.seated(state, use, worker)).isPresent()) return false;
             var step = new ResidentMealPhysicalStep(
                             ResidentMeal.Phase.CONSUME, -1, meal.portion().quantity(), bindings.getFirst().authorityEpoch(),
                             0L, lease.revision(), meal.executionId());
             if (!accepted(level, runtime, meal.residentId(), "resident-meal-consume-prepare",
-                    new ResidentMealHotEffectPrepared(meal.residentId(), step))) return false;
+                    new ResidentMealHotEffectPrepared(meal.residentId(), step, seat.isPresent() ? Optional.of(authority) : Optional.empty()))) return false;
             var prepared = runtime.decodedState().orElseThrow();
             var next = prepared.humanPopulation().meals().get(meal.residentId());
             if (next == null || !next.pendingPhysicalStep().equals(java.util.Optional.of(step)))
@@ -172,31 +187,54 @@ final class FrontierV3ResidentMealPhysicalEffect {
         if (pending.phase() != ResidentMeal.Phase.CONSUME || pending.ambientRevision() != lease.revision()
                 || pending.consumptionQuantity() != meal.portion().quantity()
                 || pending.sourceEpoch() != bindings.getFirst().authorityEpoch()) return false;
-        var participant = FrontierV3OperationEntityParticipant.current(worker,
-                ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
-        var declaration = FrontierV3ResidentMealNativeOperation.consume(meal, pending, held, participant);
-        var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, List.of(participant),
+        if (seat.filter(use -> !use.pendingBody().equals(Optional.of(authority))
+                || !use.pendingAction().equals(Optional.of(SeatUse.Action.EXIT))
+                || !use.pendingMode().equals(Optional.of(SeatUse.ExecutionMode.COMPOSED_ACTIVITY_EFFECT))).isPresent()) return false;
+        var carrier = seat.flatMap(use -> FrontierV3SeatExecutor.contact(level, state, use, worker, authority, SeatUse.Action.EXIT));
+        var declaration = FrontierV3ResidentMealNativeOperation.consume(meal, pending, held, ports.orElseThrow());
+        var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, ports.orElseThrow(),
                 () -> FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()), held)
                         && FrontierV3SupportedBodyCapture.observe(level, worker)
-                            .filter(position -> ResidentMealProcess.mayConsumeAt(runtime.decodedState().orElseThrow(), meal, position)).isPresent(),
-                FrontierV3NativeEffect.observed(() -> {
+                            .filter(position -> ResidentMealProcess.mayConsumeAt(runtime.decodedState().orElseThrow(), meal, position)).isPresent()
+                        && (seat.isEmpty() || carrier.filter(value -> value.ready().getAsBoolean()).isPresent()),
+                new FrontierV3NativeEffect(() -> FrontierV3NativeEffect.Admission.READY, () -> {
+                    if (seat.isPresent()) {
+                        var exited = FrontierV3SeatExecutor.changePose(worker, seat.orElseThrow(), authority, carrier.orElseThrow());
+                        if (exited != FrontierV3NativeEffect.Outcome.APPLIED) return exited;
+                    }
                     var remainder = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()).copy(); remainder.shrink(meal.portion().quantity());
                     FrontierV3ActorResourceSlots.set(worker, meal.inventorySlot(), remainder);
                     level.playSound(null, worker.blockPosition(), SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 0.8F, 1.0F);
-                    return true;
+                    return FrontierV3NativeEffect.Outcome.APPLIED;
                 }), () -> {
                     var remaining = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot());
                     return remainingCount == 0 ? remaining.isEmpty() : remaining.getCount() == remainingCount
                             && ItemStack.isSameItemSameComponents(remaining, FrontierV3ResidentMealItems.stack(held));
                 });
-        if (!operation.complete()) return false;
+        if (!operation.complete()) {
+            if ((operation.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED || operation.status() == FrontierV3MinecraftOperation.Status.SOURCE_CHANGED)
+                    && FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()), held))
+                return FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
+                        new ResidentMealHotEffectCancelled(authority.body(), pending));
+            return false;
+        }
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker)) return false;
+        var observed = FrontierV3SupportedBodyCapture.observe(level, worker).orElseThrow();
+        if (seat.isPresent()) {
+            var checkpoint = FrontierV3SeatExecutor.checkpoint(level, runtime, seat.orElseThrow(), worker, operation.ticket(), declaration);
+            if (checkpoint.isEmpty()) return false;
+            observed = checkpoint.orElseThrow();
+        }
         var remaining = remainingCount == 0 ? List.<FungiblePhysicalObservation.Stack>of()
                 : List.of(new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
                         meal.residentId(), worker, meal.inventorySlot()), meal.portion().itemKind(), remainingCount));
         return FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
                 new ResidentMealHotEffectObserved(meal.residentId(), ResidentMeal.Phase.CONSUME,
-                        lease.revision(), FrontierV3SupportedBodyCapture.observe(level, worker).orElseThrow(), remaining, List.of(), meal.executionId()),
-                () -> FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), meal.residentId(), worker));
+                        lease.revision(), observed, remaining, List.of(), meal.executionId()),
+                () -> {
+                    FrontierV3MealPresentation.clear(worker);
+                    FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), meal.residentId(), worker);
+                });
     }
 
     private static boolean accepted(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

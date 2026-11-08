@@ -24,6 +24,13 @@ if (!process.env.DISPLAY) throw new Error('a native visible pilot requires DISPL
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const packPilot = process.env.FRONTIER_V3_PILOT_PROFILE === 'pack';
 const PACK_PILOT_REQUIRED_MOD_IDS = Object.freeze(['create', 'geckolib', 'pale_mirror', 'pale_mirror_visuals', 'supplementaries']);
+// The installed-pack consumer uses the ordinary prepared client and the same
+// inventory barrier, with its additional resident-rendering/furniture closure.
+const installedPackPilot = process.env.FRONTIER_V3_NATIVE_PACK_CLIENT_DIRECTORY !== undefined;
+const requiredClientMods = installedPackPilot
+  ? [...PACK_PILOT_REQUIRED_MOD_IDS, 'entity_model_features', 'entity_texture_features', 'handcrafted'].sort()
+  : PACK_PILOT_REQUIRED_MOD_IDS;
+const requiresModInventory = packPilot || installedPackPilot;
 const configuredPackPilotDirectory = process.env.FRONTIER_V3_PILOT_PACK_DIRECTORY;
 if (packPilot && (configuredPackPilotDirectory === undefined || !isAbsolute(configuredPackPilotDirectory))) {
   throw new Error('FRONTIER_V3_PILOT_PACK_DIRECTORY must name an absolute materialized full-pack directory');
@@ -190,9 +197,9 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
         const actual = Array.isArray(value.loaded) ? value.loaded : [];
         const required = Array.isArray(value.required) ? value.required : [];
         const missing = Array.isArray(value.missing) ? value.missing : [];
-        if (!packPilot || value.status !== 'PASS'
-            || JSON.stringify(required) !== JSON.stringify(PACK_PILOT_REQUIRED_MOD_IDS)
-            || missing.length !== 0 || !PACK_PILOT_REQUIRED_MOD_IDS.every((id) => actual.includes(id))) {
+        if (!requiresModInventory || value.status !== 'PASS'
+            || JSON.stringify(required) !== JSON.stringify(requiredClientMods)
+            || missing.length !== 0 || !requiredClientMods.every((id) => actual.includes(id))) {
           throw new Error('runtime full-pack loaded-mod inventory does not prove the required client closure');
         }
         loadedModInventory = value;
@@ -273,7 +280,7 @@ for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on
 });
 
 try {
-  await waitForPilot(child, () => failure || ((!packPilot || loadedModInventory !== null)
+  await waitForPilot(child, () => failure || ((!requiresModInventory || loadedModInventory !== null)
     && (complete || completedActionStep === (scenario.actions ?? []).length)
     && hasDiagnosticResponses(diagnostics, scenario.assertions ?? [])
     && manifest.frames.length === (scenario.frames ?? []).length), () => pilotStartedAt,
