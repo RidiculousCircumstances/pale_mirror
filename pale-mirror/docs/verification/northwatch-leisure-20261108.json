@@ -1,0 +1,258 @@
+{
+  "schema": 1,
+  "date": "2026-11-08",
+  "change": "Two authored Northwatch leisure places using shared typed seating and bounded LEISURE routines",
+  "sourceCommit": "a26414bebf351a48dc694c197c7e1207a3f85fd9",
+  "release": {
+    "source": "/home/rd/proj/pm-leisure-release-20261108/pale-mirror",
+    "artifact": "/home/rd/proj/pm-leisure-release-20261108/pale-mirror/pale-mirror-neoforge/build/libs/pale_mirror-0.3.0-SNAPSHOT.jar",
+    "sha512": "c10930d9e0c25617b124ee725b157bfc88e3b9f35b33d9a60430a971057cc9c3d3a95f5fd5ba3211fec95486c86796d93f1249f7555f4f5198f841ed61f35e1a",
+    "ref": "a26414bebf351a48dc694c197c7e1207a3f85fd9",
+    "target": "/home/rd/far-frontier-server",
+    "world": "northwatch-leisure-seed139-20261108",
+    "java": "/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java",
+    "entryDifferences": [
+      "META-INF/pale-mirror-runtime-identity.properties"
+    ],
+    "notBefore": 1794129263
+  },
+  "feature": {
+    "ruleset": "frontier-v3-leisure-seats-r37",
+    "stateSchema": 351,
+    "network": 10,
+    "places": [
+      "kitchen REST bay: two connected spruce bench/table sections",
+      "hall courtyard: pinned smallwell3 and two connected spruce bench/table sections"
+    ],
+    "scope": "Only explicit r37 Northwatch style changes; legacy hall/kitchen and all other settlements preserved",
+    "ownership": "Shared seat state/effect owner, UAE and movement; settled receipt starts interval; shared exit precedes purpose release",
+    "performance": "Existing cohort12/candidate16/admission20 unchanged; cached authored seats; no new pathfinder/tick owner/population census/raised mob limit"
+  },
+  "verification": {
+    "affectedJvm": "PASS 28 Frontier +2 repaired NeoForge diagnostics; /tmp/pm-leisure-isolated-style.log",
+    "authoring": "PASS10 native all-rotation and focused catalog/layout isolation/snapshot; /tmp/pm-leisure-layout-authoring.log",
+    "terrain": "PASS4 affected native block-extraction; /tmp/pm-leisure-terrain-regression.log",
+    "node": "PASS59 scenario contract; /tmp/pm-leisure-node-final3.log",
+    "broadGate": "Earlier gate477/479native;2terrain regressions repaired with style isolation and fresh affected4PASS. NeoForge927/9failed;2new diagnostics repaired/freshPASS,7baseline failures remain. Unaffected477native evidence reused. No blanket whole-suite green claim.",
+    "independentBaseline": "ActorMovement9 failures reproduced unchangedHEAD27fab; baseline-movement.json and /tmp/pm-leisure-baseline-movement.log",
+    "detachedBuild": "PASS build excluding NeoForge test task with classified baseline debt +verifyPackagedJar; /tmp/pm-leisure-detached-build.log",
+    "binaryComparison": "Tested source and detached JAR entries differ only META-INF/pale-mirror-runtime-identity.properties",
+    "finalGovernanceGuardrails": "PASS /tmp/pm-leisure-governance-final.log"
+  },
+  "nativePositive": {
+    "status": "ok",
+    "runId": "c9a5a56a-907d-42e6-aa8d-3c575403ee27",
+    "manifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/northwatch-leisure-20261108/final-positive/pilot.json",
+    "manifestSha256": "fda665743cdec8726753d321b780c2cdd635ea66fe35d53b781b5c42cd874c92",
+    "frames": [
+      {
+        "after": 5,
+        "name": "kitchen-real-seated-rest",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_leisure_seats-c9a5a56a-907d-42e6-aa8d-3c575403ee27-kitchen-real-seated-rest.png"
+      },
+      {
+        "after": 10,
+        "name": "kitchen-rest-restored-with-attached-legs",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_leisure_seats-c9a5a56a-907d-42e6-aa8d-3c575403ee27-kitchen-rest-restored-with-attached-legs.png"
+      },
+      {
+        "after": 16,
+        "name": "well-real-bench-rest",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_leisure_seats-c9a5a56a-907d-42e6-aa8d-3c575403ee27-well-real-bench-rest.png"
+      },
+      {
+        "after": 20,
+        "name": "well-standing-after-rest",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_leisure_seats-c9a5a56a-907d-42e6-aa8d-3c575403ee27-well-standing-after-rest.png"
+      },
+      {
+        "after": 25,
+        "name": "kitchen-standing-after-rest",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_leisure_seats-c9a5a56a-907d-42e6-aa8d-3c575403ee27-kitchen-standing-after-rest.png"
+      }
+    ],
+    "semanticProgress": [
+      {
+        "rule": "frontier.resident-meal.progress.v1",
+        "verdict": "SATISFIED"
+      },
+      {
+        "rule": "frontier.resident-routine.progress.v1",
+        "verdict": "SATISFIED"
+      },
+      {
+        "rule": "frontier.clinical-care.progress.v1",
+        "verdict": "SATISFIED"
+      },
+      {
+        "rule": "frontier.resident-meal.progress.v1",
+        "verdict": "SATISFIED"
+      },
+      {
+        "rule": "frontier.resident-routine.progress.v1",
+        "verdict": "SATISFIED"
+      },
+      {
+        "rule": "frontier.clinical-care.progress.v1",
+        "verdict": "SATISFIED"
+      }
+    ]
+  },
+  "nativeIntervention": {
+    "status": "ok",
+    "runId": "998213ee-1bf4-4686-b5d9-4aceec033fab",
+    "manifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/northwatch-leisure-20261108/final-negative2/pilot.json",
+    "manifestSha256": "fcf769117261daddf213cf39f82c7ae53e3349b5427a3c6c4444f2d6487b616c",
+    "frames": [
+      {
+        "after": 5,
+        "name": "bench-before-player-removal",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_leisure_removed_bench-998213ee-1bf4-4686-b5d9-4aceec033fab-bench-before-player-removal.png"
+      },
+      {
+        "after": 10,
+        "name": "resident-standing-after-bench-removal",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_leisure_removed_bench-998213ee-1bf4-4686-b5d9-4aceec033fab-resident-standing-after-bench-removal.png"
+      }
+    ],
+    "semanticProgress": [
+      {
+        "rule": "frontier.resident-meal.progress.v1",
+        "verdict": "SATISFIED"
+      },
+      {
+        "rule": "frontier.resident-routine.progress.v1",
+        "verdict": "SATISFIED"
+      },
+      {
+        "rule": "frontier.clinical-care.progress.v1",
+        "verdict": "SATISFIED"
+      }
+    ]
+  },
+  "nativeScope": "Actual ordinary approach/mount,40rendered HumanEra ticks each,graceful saved restart with same client,terminal standing/release; actual player removal of occupied exact bench -> standing/release. Reviewed real clean images. Not formal M3 human acceptance.",
+  "mcpScan": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/northwatch-leisure-20261108/final-positive/mcp/receipt.json",
+  "deployment": {
+    "preflightBeforeStop": "/tmp/pm-leisure-preflight-current.log",
+    "freshPreflight": "/tmp/pm-leisure-preflight-fresh.log",
+    "install": "/tmp/pm-leisure-install.log",
+    "postverify": "/tmp/pm-leisure-postverify.log",
+    "service": "far-frontier-v3-live.service",
+    "invocation": "52bfb9f681a0489a984cf564e0c3507d",
+    "wrapperPid": 2461725,
+    "javaPid": 2461762,
+    "seed": 139,
+    "oldWorld": "northwatch-max-living-seed139-20261108 preserved; graceful All dimensions saved and actual JVM/port exit before install",
+    "shutdownObservation": "Old combat capture index limit16 refused optional capture shutdown save; canonical terrain/dimensions saved, JVM exited. No claim this preexisting capture retention issue was fixed.",
+    "finalSummary": {
+      "schema": 1,
+      "kind": "summary",
+      "id": "",
+      "world": "frontier:graybox",
+      "revision": 4259,
+      "instant": 3276,
+      "status": "ok",
+      "diagnosticVerdict": "green",
+      "requiredConflicts": 0,
+      "diagnosticScope": "RETAINED_CONFLICTS",
+      "progressVerdict": "NOT_ASSESSED",
+      "preparingReplicaScopes": 1,
+      "settlements": 12,
+      "residents": 319,
+      "bioforms": 48,
+      "sites": 24,
+      "intents": 5,
+      "ambientLeases": 23,
+      "sceneLeases": 0,
+      "sceneConflicts": 0,
+      "items": 72,
+      "inventoryConflicts": 0,
+      "replicaCustodyDiagnostics": 0,
+      "incidentIndexSize": 0,
+      "optionalDiagnosticDrops": 0
+    }
+  },
+  "liveFullPack": {
+    "status": "PASS",
+    "manifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/northwatch-leisure-20261108/live-fullpack.json",
+    "runId": "5c0c755b-6f42-4782-aaa9-41e029843034",
+    "scope": "Ordinary full-pack creative client actual loaded inventory includes Handcrafted/EMF/ETF/Visuals; active pantry receipt; actual bench blocks and visible geometry in both zones; both clean client images individually inspected. Full routine/restart/intervention claims use independent native receipts above.",
+    "frames": [
+      {
+        "after": 6,
+        "name": "northwatch-kitchen-leisure-bench",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/live_northwatch_leisure_preflight-5c0c755b-6f42-4782-aaa9-41e029843034-northwatch-kitchen-leisure-bench.png"
+      },
+      {
+        "after": 10,
+        "name": "northwatch-well-leisure-bench",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/live_northwatch_leisure_preflight-5c0c755b-6f42-4782-aaa9-41e029843034-northwatch-well-leisure-bench.png"
+      }
+    ],
+    "loadedMods": {
+      "status": "PASS",
+      "required": [
+        "create",
+        "geckolib",
+        "pale_mirror",
+        "pale_mirror_visuals",
+        "supplementaries"
+      ],
+      "loaded": [
+        "architectury",
+        "biolith",
+        "blockui",
+        "codecui",
+        "create",
+        "domum_ornamentum",
+        "entity_model_features",
+        "entity_texture_features",
+        "fabric_api_base",
+        "fabric_block_view_api_v2",
+        "fabric_renderer_api_v1",
+        "fabric_rendering_data_attachment_v1",
+        "farmersdelight",
+        "ferritecore",
+        "flywheel",
+        "fzzy_config",
+        "geckolib",
+        "handcrafted",
+        "kotlinforforge",
+        "minecolonies",
+        "minecraft",
+        "moonlight",
+        "multipiston",
+        "neoforge",
+        "pale_mirror",
+        "pale_mirror_visuals",
+        "ponder",
+        "quark",
+        "resourcefullib",
+        "sablecompanion",
+        "simplytooltips",
+        "sodium",
+        "structurize",
+        "supplementaries",
+        "towntalk",
+        "zeta"
+      ],
+      "missing": []
+    },
+    "cleanup": "Runner/private Xvfb exited; no remaining task Minecraft process. Live service remains active."
+  },
+  "clientAction": "Run ordinary pack updater and fully restart Minecraft for network10",
+  "repositoryState": {
+    "implementation": "Task committed; unrelated .serena retained",
+    "pack": "Tracked clean; unrelated .f0v-baseline retained",
+    "governance": "Own receipt/ledger/archive/one architecture line only; unrelated extensive WIP preserved"
+  }
+}
