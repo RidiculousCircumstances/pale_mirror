@@ -20,8 +20,10 @@ public final class ServiceAccessCoordinator {
             if(claims.contains(station))return false;
             for(var point:ServiceBoundaryComposition.nearbyDeclarations(state,new TerrainColumn(station.x(),station.z()))){
                 if(point.boundary().occupied(station.standingBody()))return false;
+                if(!ServiceClearanceTargets.egressMayContainColumn(point.boundary(),new TerrainColumn(station.x(),station.z()))
+                        || ServiceAccessCapabilities.current(state,point.pointId()).isEmpty())continue;
                 var geometry=ServiceBoundaryComposition.geometry(state,point.identity());
-                if(geometry.egressSurfaces().contains(station) && !ServiceAccessCapabilities.current(state,point.pointId()).isEmpty())return false;
+                if(geometry.egressSurfaces().contains(station))return false;
             }
             return true;
         };

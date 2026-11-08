@@ -7,6 +7,21 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ServicePointGeometryCacheTest {
+    @Test void egressBroadPhaseRetainsEveryActualExitWithoutTreatingWaitingApronsAsImmediateExits() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:egress-broad-phase"), 41));
+        var home = state.bootstrap().settlements().getFirst();
+        var depot = home.structures().stream().filter(s -> s.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        var point = SettlementServiceAccessPoints.forDepot(state, home, depot);
+        assertFalse(point.egressSurfaces().isEmpty());
+        for (var exit : point.egressSurfaces())
+            assertTrue(ServiceClearanceTargets.egressMayContainColumn(point.boundary(), new TerrainColumn(exit.x(), exit.z())));
+        var elevated = new ServiceAccessBoundary(Set.of(point.station().offset(0, 20, 0)));
+        assertTrue(ServiceClearanceTargets.egressMayContainColumn(elevated,
+                new TerrainColumn(point.station().x() + 1, point.station().z())), "height is not a broad-phase exclusion");
+        assertFalse(ServiceClearanceTargets.egressMayContainColumn(point.boundary(),
+                new TerrainColumn(point.station().x() + 100, point.station().z())));
+    }
+
     @Test void storageBufferUsesTheDeclaredExteriorAndOnlyItsConnectedSurface() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:indoor-storage-buffer"),139));
         var home = state.bootstrap().settlements().getFirst();

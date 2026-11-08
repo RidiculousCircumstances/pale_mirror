@@ -75,6 +75,10 @@ class ServiceAccessCapabilitiesTest {
                 .thenComparingInt(SurfaceAnchor::z)).findFirst().orElseThrow();
         var actor = state.humanPopulation().residents().values().stream()
                 .filter(resident -> !resident.id().equals(job.workerId())).findFirst().orElseThrow().id();
+        var claims = ServiceDestinationClaims.excludedFor(state, actor);
+        var unclaimedExit = point.egressSurfaces().stream().filter(p -> !claims.contains(p)).findFirst().orElseThrow();
+        assertFalse(ServiceAccessCoordinator.transientDestinations(state, actor).test(unclaimedExit),
+                "active service still excludes an unclaimed immediate exit from finite maneuvers");
         state = state.withActorBody(job.workerId(), exit.standingBody());
         assertTrue(ServiceAccessCapabilities.current(state, pointId).stream().anyMatch(demand ->
                 demand.identity().actorId().equals(job.workerId()) && demand.presence() == ServiceAccessDemand.Presence.APPROACH));

@@ -39,6 +39,13 @@ public final class ServiceClearanceTargets {
                 .thenComparingInt(SurfaceAnchor::y)).toList();
     }
 
+    /** Declaration-only negative proof: egressRegion visits only cardinal neighbour columns.
+     * Height, support and reachability still require its ordinary geometry calculation. */
+    public static boolean egressMayContainColumn(ServiceAccessBoundary boundary, TerrainColumn column) {
+        return boundary.occupiedSurfaces().stream().anyMatch(occupied ->
+                Math.abs((long) occupied.x() - column.x()) + Math.abs((long) occupied.z() - column.z()) == 1);
+    }
+
     /** Immediate escape capacity is passage space, never a waiting/parking reservation. */
     public static Set<SurfaceAnchor> egressRegion(ServiceAccessBoundary boundary,
             KnownPedestrianRouteKnowledge knowledge) {
