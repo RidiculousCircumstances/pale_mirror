@@ -317,6 +317,7 @@ export function validateScenario(scenario) {
           || (action.minimumAngularTravelDeg !== undefined && (!Number.isFinite(action.minimumAngularTravelDeg) || action.minimumAngularTravelDeg<0 || action.minimumAngularTravelDeg>360))
           || (action.minimumTravelBlocks !== undefined && (!Number.isFinite(action.minimumTravelBlocks) || action.minimumTravelBlocks<0 || action.minimumTravelBlocks>128))
           || (action.requiredModelRig !== undefined && !['human_era', 'vanilla_articulated'].includes(action.requiredModelRig))
+          || (action.workFacingTarget !== undefined && (action.requiredWorkGestures === undefined || !validResolvablePosition(action.workFacingTarget)))
           || (action.requiredWorkGestures !== undefined && (!Array.isArray(action.requiredWorkGestures)
             || action.requiredWorkGestures.length < 1 || action.requiredWorkGestures.length > 3
             || new Set(action.requiredWorkGestures).size !== action.requiredWorkGestures.length

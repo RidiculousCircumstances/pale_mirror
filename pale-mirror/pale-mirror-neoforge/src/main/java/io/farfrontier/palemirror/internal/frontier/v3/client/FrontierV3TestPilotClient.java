@@ -836,7 +836,7 @@ public final class FrontierV3TestPilotClient {
         advance("look");
     }
     /** Resolves a narrow immutable plan anchor from a read-only diagnostic. */
-    private static BlockPos resolvedPosition(Minecraft minecraft, JsonObject action, String field) {
+    static BlockPos resolvedPosition(Minecraft minecraft, JsonObject action, String field) {
         JsonObject value = Objects.requireNonNull(action.getAsJsonObject(field), field + " position");
         if (value.has("x") && value.has("y") && value.has("z")) {
             return new BlockPos(value.get("x").getAsInt(), value.get("y").getAsInt(), value.get("z").getAsInt());

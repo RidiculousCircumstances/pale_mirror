@@ -16,6 +16,16 @@ class FrontierV3TestPilotScenarioTest {
             assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(declaration.replace("crossbowName","undeclaredGuardName")));
         }
     }
+    @Test void actualStationFacingCarrierRequiresAResolvableTargetAndRealWorkSamples() throws java.io.IOException {
+        var source=java.nio.file.Files.readString(java.nio.file.Path.of("..","tools","frontier-v3-test-pilot",
+                "scenarios","disposable-station-work-facing.json"));
+        assertEquals(18,FrontierV3TestPilotScenario.parse(source).actionCount());
+        var declaration=JsonParser.parseString(source).getAsJsonObject();
+        var motion=declaration.getAsJsonArray("actions").get(9).getAsJsonObject();
+        motion.remove("requiredWorkGestures");
+        assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(declaration.toString()));
+        assertThrows(IllegalArgumentException.class,()->FrontierV3TestPilotScenario.parse(source.replace("\"field\": \"position\"","\"field\": \"foreignTarget\"")));
+    }
     @Test void actualDiningPoseCarrierAndItsRecoverySegmentAreAcceptedBeforeClientLaunch() throws java.io.IOException {
         var source=java.nio.file.Files.readString(java.nio.file.Path.of("..","tools","frontier-v3-test-pilot",
                 "scenarios","disposable-northwatch-dining-pose-cycle.json"));

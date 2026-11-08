@@ -11,7 +11,7 @@ public final class PaleMirrorResidentWorkClient {
     private static final Map<UUID,Cue> CUES=new HashMap<>();
     private static final Map<UUID,Rendered> RENDERED=new HashMap<>();
     private static long clock;
-    public record Rendered(String gesture,float age,float shoulder,float elbow,long atTick){}
+    public record Rendered(String gesture,float age,float shoulder,float elbow,float bodyYaw,long atTick){}
     record Frame(ResidentWorkGesture kind,float age,int duration){}
     public static void receive(ResidentWorkGesturePayload p){
         var old=CUES.get(p.body());
@@ -29,8 +29,8 @@ public final class PaleMirrorResidentWorkClient {
                 || c.settled()<2 || actor instanceof LivingEntity living && !living.isAlive())return null;
         float age=clock-c.received()+partial;return age>=c.payload().duration()?null:new Frame(c.payload().gesture(),age,c.payload().duration());
     }
-    static void rendered(Entity actor,Frame frame,ResidentWorkAnimation.Pose pose){
-        RENDERED.put(actor.getUUID(),new Rendered(frame.kind().name(),frame.age(),pose.shoulder(),pose.elbow(),clock));
+    static void rendered(Entity actor,Frame frame,ResidentWorkAnimation.Pose pose,float bodyYaw){
+        RENDERED.put(actor.getUUID(),new Rendered(frame.kind().name(),frame.age(),pose.shoulder(),pose.elbow(),bodyYaw,clock));
     }
     public static Rendered rendered(Entity actor){var p=RENDERED.get(actor.getUUID());return p!=null && clock-p.atTick()<=2?p:null;}
     public static void tick(){

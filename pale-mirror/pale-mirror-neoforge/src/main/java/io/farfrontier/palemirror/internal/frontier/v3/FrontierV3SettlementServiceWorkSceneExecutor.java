@@ -181,6 +181,8 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
             return;
         }
         if (work.phase() != SettlementServiceWorkPhase.WORKING) { conflict(level, runtime, lease, "unsupported-work-phase"); return; }
+        var target=work.target().effectPosition(work.workStation().y()+1);
+        FrontierV3WorkPresentation.face(worker,new net.minecraft.world.phys.Vec3(target.x()+.5,target.y()+.5,target.z()+.5));
         SettlementServiceWorkPhase next = work.completedWorkTicks() + 1 == SettlementServiceWork.REQUIRED_WORK_TICKS
                 ? SettlementServiceWorkPhase.EFFECT_READY : SettlementServiceWorkPhase.WORKING;
         int ticks = next == SettlementServiceWorkPhase.EFFECT_READY ? 0 : work.completedWorkTicks() + 1;

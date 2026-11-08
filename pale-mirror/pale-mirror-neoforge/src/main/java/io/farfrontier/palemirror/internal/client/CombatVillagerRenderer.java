@@ -33,8 +33,7 @@ final class CombatVillagerRenderer extends MobRenderer<Villager,CombatVillagerMo
         });
     }
     @Override protected void setupRotations(Villager actor,PoseStack pose,float age,float yaw,float partial,float scale){
-        var frame=PaleMirrorCombatClient.frame(actor,partial);
-        super.setupRotations(actor,pose,age,frame==null?yaw:MeleeAnimation.facingYaw(frame,yaw),partial,scale);
+        super.setupRotations(actor,pose,age,ResidentVisuals.facingYaw(actor,partial,yaw),partial,scale);
     }
     public ResourceLocation getTextureLocation(Villager actor){return SKIN;}
     @Override protected void scale(Villager actor,PoseStack pose,float partial){float factor=0.9375f*actor.getAgeScale();pose.scale(factor,factor,factor);}

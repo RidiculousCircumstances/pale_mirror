@@ -219,6 +219,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
             return;
         }
         if (job.workProgress().stage() == ProductionWorkProgress.Stage.APPROACH && job.traversalCursor() == inputCursor) {
+            faceWorkplace(worker,workshop);
             FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.HANDLE);
             submit(runtime, "production-work-input-ready", lease.id().value(), new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), ProductionWorkProgress.inputReady(), observation));
             return;
@@ -242,6 +243,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
                     ? ProductionWorkProgress.outputReady() : ProductionWorkProgress.processing(job.workProgress().completedTicks() + 1);
             case OUTPUT_READY -> throw new IllegalStateException("terminal work may not continue");
         };
+        faceWorkplace(worker,workshop);
         FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.HANDLE);
         FrontierV3CommandSubmission.submitBound(runtime, "production-work-progress", lease.id().value(),
                 new ProductionWorkProgressed(job.id(), lease.id(), FrontierV3SurfaceObservation.observedAt(worker, current), next, observation), binding);
@@ -338,4 +340,10 @@ final class FrontierV3ProductionWorkSceneExecutor {
     private static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, String id, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload payload) {
         return FrontierV3CommandSubmission.submit(runtime, phase, id, payload);
     }
+    private static void faceWorkplace(Mob worker,SettlementStructure facility) {
+        var socket=ProductionFacilityLayout.station(facility,new ProductionStationSpec.WorkplaceId(
+                facility.definition().primaryWorkplaceDefinition().id())).socketSurface();
+        FrontierV3WorkPresentation.face(worker,new Vec3(socket.x()+.5,socket.y()+1.5,socket.z()+.5));
+    }
+
 }

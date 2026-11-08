@@ -11,7 +11,7 @@ final class FrontierV3BlockWorkGesture {
     static void present(Mob worker, BlockPosition target) {
         var position = new BlockPos(target.x(), target.y(), target.z());
         if (!FrontierV3LoadedWorld.ready((net.minecraft.server.level.ServerLevel) worker.level(), position)) return;
-        worker.getLookControl().setLookAt(Vec3.atCenterOf(position));
+        FrontierV3WorkPresentation.face(worker,Vec3.atCenterOf(position));
         if (FrontierV3WorkPresentation.pulse(worker,io.farfrontier.palemirror.internal.network.ResidentWorkGesture.STRIKE)) {
             var sound = worker.level().getBlockState(position).getSoundType(worker.level(), position, worker);
             worker.playSound(sound.getHitSound(), sound.getVolume() * 0.5F, sound.getPitch());

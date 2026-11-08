@@ -606,3 +606,12 @@ test('player-only camera rendezvous stays bounded before and between semantic ob
   assert.throws(()=>validateScenario({...camera,actions:[{...action,standOff:2.1}]}));
   assert.throws(()=>validateScenario({...camera,actions:[{...action,workerId:'container:foreign'}]}));
 });
+
+test('station work facing carrier requires actual work and a resolvable declared target', async () => {
+  const value=JSON.parse(await readFile(new URL('../scenarios/disposable-station-work-facing.json', import.meta.url),'utf8'));
+  assert.doesNotThrow(()=>validateScenario(value));
+  const missingWork=structuredClone(value);delete missingWork.actions[9].requiredWorkGestures;
+  assert.throws(()=>validateScenario(missingWork));
+  const foreign=structuredClone(value);foreign.actions[9].workFacingTarget.diagnostic.field='foreignTarget';
+  assert.throws(()=>validateScenario(foreign));
+});

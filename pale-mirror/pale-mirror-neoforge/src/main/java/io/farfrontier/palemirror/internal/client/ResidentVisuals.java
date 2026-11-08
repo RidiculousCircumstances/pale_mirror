@@ -9,6 +9,18 @@ public final class ResidentVisuals {
     private record Seen(String rig,long tick){}
     private static final Map<UUID,Seen> SEEN=new HashMap<>();
     private static long clock;
+    /** Station work uses the owner's replicated entity heading, rather than vanilla's delayed idle body turn. */
+    static float facingYaw(Villager actor,float partial,float nativeYaw){
+        var combat=PaleMirrorCombatClient.frame(actor,partial);
+        if(combat!=null)return MeleeAnimation.facingYaw(combat,nativeYaw);
+        return workFrame(actor,partial)==null?nativeYaw:Mth.rotLerp(partial,actor.yRotO,actor.getYRot());
+    }
+    private static PaleMirrorResidentWorkClient.Frame workFrame(Villager actor,float partial){
+        if(PaleMirrorResidentMealClient.frame(actor,partial)!=null || PaleMirrorResidentRoutineClient.frame(actor,partial)!=null
+                || actor.getMainHandItem().getItem() instanceof net.minecraft.world.item.CrossbowItem
+                    && (actor.isUsingItem() || net.minecraft.world.item.CrossbowItem.isCharged(actor.getMainHandItem())))return null;
+        return PaleMirrorResidentWorkClient.frame(actor,partial);
+    }
     static boolean apply(Villager actor,float partial,ResidentPoseRig rig){
         boolean seated=io.farfrontier.palemirror.internal.frontier.v3.PaleMirrorSeatEntities.isResidentSeat(actor.getVehicle())
                 && rig.seatedPose();
@@ -55,13 +67,17 @@ public final class ResidentVisuals {
         for(var hand:HumanoidArm.values())if(!actor.getItemInHand(hand==actor.getMainArm()?net.minecraft.world.InteractionHand.MAIN_HAND:net.minecraft.world.InteractionHand.OFF_HAND).isEmpty()){
             rig.arm(hand,-0.8f,-0.35f,0,hand==HumanoidArm.RIGHT?0.08f:-0.08f);held=true;
         }
-        var work=PaleMirrorResidentWorkClient.frame(actor,partial);
+        var work=workFrame(actor,partial);
         if(work!=null){
             var pose=ResidentWorkAnimation.sample(work.kind(),work.age()/work.duration());
             var hand=actor.getMainArm();float mirror=hand==HumanoidArm.RIGHT?1:-1;
             rig.arm(hand,pose.shoulder(),pose.elbow(),mirror*pose.yaw(),mirror*pose.roll());
             if(pose.twoHands())rig.arm(hand.getOpposite(),pose.shoulder(),pose.elbow(),-mirror*pose.yaw(),-mirror*pose.roll());
-            rig.torso(mirror*pose.torso(),pose.lean());PaleMirrorResidentWorkClient.rendered(actor,work,pose);return true;
+            rig.torso(mirror*pose.torso(),pose.lean());
+            float bodyYaw=facingYaw(actor,partial,Mth.rotLerp(partial,actor.yBodyRotO,actor.yBodyRot));
+            rig.look(Mth.wrapDegrees(Mth.rotLerp(partial,actor.yHeadRotO,actor.yHeadRot)-bodyYaw)*Mth.DEG_TO_RAD,
+                    Mth.lerp(partial,actor.xRotO,actor.getXRot())*Mth.DEG_TO_RAD);
+            PaleMirrorResidentWorkClient.rendered(actor,work,pose,bodyYaw);return true;
         }
         return held || seated;
     }

@@ -11,6 +11,12 @@ final class FrontierV3WorkPresentation {
     static final int DURATION=6;
     private record Stamp(long epoch,long sequence,long until,ResidentWorkGesture gesture){}
     private static final Map<Mob,Stamp> STAMPS=new WeakHashMap<>();
+    /** Rotation only, at the work owner's exact target; never movement or work credit. */
+    static void face(Mob worker,net.minecraft.world.phys.Vec3 target){
+        worker.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,target);
+        worker.setYBodyRot(worker.getYRot());worker.setYHeadRot(worker.getYRot());
+        worker.getLookControl().setLookAt(target);
+    }
     static boolean active(Mob worker){var p=STAMPS.get(worker);return p!=null && p.gesture()!=ResidentWorkGesture.CLEAR && worker.level().getGameTime()<p.until();}
     static boolean pulse(Mob worker,ResidentWorkGesture gesture){
         if(gesture==ResidentWorkGesture.CLEAR)throw new IllegalArgumentException("use explicit work gesture retirement");

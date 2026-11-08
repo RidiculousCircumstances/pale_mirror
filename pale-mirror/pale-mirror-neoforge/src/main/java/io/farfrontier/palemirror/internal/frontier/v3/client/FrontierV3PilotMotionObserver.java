@@ -48,6 +48,12 @@ final class FrontierV3PilotMotionObserver {
             }
             return false;
         }
+        Vec3 workTarget=null;
+        if(action.has("workFacingTarget")){
+            var position=FrontierV3TestPilotClient.resolvedPosition(minecraft,action,"workFacingTarget");
+            if(position==null)return false;
+            workTarget=Vec3.atCenterOf(position);
+        }
         double maximum = action.has("maxDistance") ? action.get("maxDistance").getAsDouble() : 64.0D;
         Vec3 anchor = action.has("anchor") ? position(action.getAsJsonObject("anchor")) : null;
         UUID expectedUuid = FrontierV3PilotEntityIdentity.expectedEntityUuid(worker);
@@ -123,7 +129,9 @@ final class FrontierV3PilotMotionObserver {
                     workAnimation, semanticPhase(action, body.getId()),
                     body instanceof net.minecraft.world.entity.npc.Villager resident
                         ? io.farfrontier.palemirror.internal.client.ResidentVisuals.renderedRig(resident) : "unobserved",
-                    io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.rendered(body),renderedWork));
+                    io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.rendered(body),renderedWork,
+                    renderedWork==null || workTarget==null?null:(double)Math.abs(net.minecraft.util.Mth.wrapDegrees(
+                            (float)Math.toDegrees(Math.atan2(body.getX()-workTarget.x,workTarget.z-body.getZ()))-renderedWork.bodyYaw()))));
         }
         if (clientTick < action.get("durationTicks").getAsLong()) return false;
         try{
@@ -188,6 +196,12 @@ final class FrontierV3PilotMotionObserver {
     /** Work proof reads only poses actually applied by the shared renderer, not an arm event flag. */
     private static void requireWork(JsonObject action){
         if(!action.has("requiredWorkGestures"))return;
+        if(action.has("workFacingTarget")){
+            var work=samples.stream().filter(p->p.work()!=null).toList();
+            if(work.isEmpty() || work.stream().anyMatch(p->p.workFacingError()==null || p.workFacingError()>20))
+                throw new IllegalStateException("rendered work body faces away from its declared station; errors="
+                        +work.stream().map(Pose::workFacingError).toList());
+        }
         for(var required:action.getAsJsonArray("requiredWorkGestures")){
             var poses=samples.stream().filter(p->p.work()!=null && p.work().gesture().equals(required.getAsString())).toList();
             double min=poses.stream().mapToDouble(p->p.work().shoulder()).min().orElse(0);
@@ -313,7 +327,8 @@ final class FrontierV3PilotMotionObserver {
                 rendered.addProperty("attempt",combat.attempt());rendered.addProperty("age",combat.age());rendered.addProperty("preparation",combat.preparation());
                 rendered.addProperty("shoulder",combat.shoulder());rendered.addProperty("elbow",combat.elbow());sample.add("combat",rendered);}
             if(pose.work()!=null){var work=pose.work();var rendered=new JsonObject();rendered.addProperty("gesture",work.gesture());
-                rendered.addProperty("age",work.age());rendered.addProperty("shoulder",work.shoulder());rendered.addProperty("elbow",work.elbow());sample.add("work",rendered);}
+                rendered.addProperty("age",work.age());rendered.addProperty("shoulder",work.shoulder());rendered.addProperty("elbow",work.elbow());rendered.addProperty("bodyYaw",work.bodyYaw());
+                if(pose.workFacingError()!=null)rendered.addProperty("facingErrorDeg",pose.workFacingError());sample.add("work",rendered);}
             sample.addProperty("modelRig", pose.rig()); sample.addProperty("semanticPhase", pose.semanticPhase()); values.add(sample); }
         value.add("samples", values); FrontierV3PilotSessionControl.stampDiagnostic(value, actionStep, milestone);
         PaleMirrorMod.LOGGER.info("PMV3_PILOT_DIAGNOSTIC {}", value);
@@ -325,5 +340,5 @@ final class FrontierV3PilotMotionObserver {
     private record Pose(long tick, long serverTick, double x, double y, double z, double observerX, double observerZ, double velocityX, double velocityZ,
                         Double authoritativeX, Double authoritativeZ, boolean workAnimation, String semanticPhase, String rig,
                         io.farfrontier.palemirror.internal.client.PaleMirrorCombatClient.Rendered combat,
-                        io.farfrontier.palemirror.internal.client.PaleMirrorResidentWorkClient.Rendered work) { }
+                        io.farfrontier.palemirror.internal.client.PaleMirrorResidentWorkClient.Rendered work,Double workFacingError) { }
 }

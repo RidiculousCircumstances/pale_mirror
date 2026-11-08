@@ -62,6 +62,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("forestry-r28", FrontierRulesets.installed("frontier-v3-forestry-graybox-r28")),
             Map.entry("quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22")));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
+            Map.entry("northwatchStationWork", (world, seed) -> fungibleProductionWorkConfiguration(world, seed, false, true, RULESETS.get("clinical-r35"))),
             Map.entry("northwatchWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("clinical-r35"))),
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("northwatchAccess", NorthwatchAccessFixture::configuration),
@@ -400,17 +401,44 @@ public final class FrontierV3FixtureCatalog {
 
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> fungibleProductionWorkConfiguration(WorldId worldId, long seed,
                                                                                                                                     boolean twoLots, boolean freshJob) {
-        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
+        return fungibleProductionWorkConfiguration(worldId, seed, twoLots, freshJob, FrontierRulesets.production());
+    }
+    private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> fungibleProductionWorkConfiguration(WorldId worldId, long seed,
+            boolean twoLots, boolean freshJob, FrontierRuleset rules) {
+        FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed, rules));
         if (twoLots) state = splitFixtureWheat(state);
         SubjectId settlement = new SubjectId("settlement:1");
+        var starts=new ArrayList<ScheduledAction>();
+        if(rules.goodsTrade().supplyPlanning().economics().isPresent()) {
+            // A current-world economic plan, unlike the legacy profile, must first publish demand.
+            // Low initial pantry stock is a prerequisite, never a manufactured work/output receipt.
+            var pantry=CommunalDiningPlan.initialFoodStorage(state.bootstrap(),settlement);
+            var ledger=state.inventory().fungibleResources();
+            var account=FungibleResourceCustodySupport.accountAtContainer(state,pantry).orElseThrow();
+            var bread=new LinkedHashMap<SubjectId,Integer>();
+            for(var entry:account.lotQuantities().entrySet())
+                if(ledger.lots().get(entry.getKey()).itemKind().equals("minecraft:bread"))bread.put(entry.getKey(),entry.getValue());
+            state=state.withInventory(state.inventory().withFungibleResources(ledger.destroy(account.id(),bread,Map.of())));
+            var machine=ProductionStationDirectory.require(state.inventory(),new SubjectId("station:structure-1-workshop-bakery"));
+            var fuel=FungibleResourceCustodySupport.accountAtContainer(state,machine.id(),ContainerSectionId.FUEL);
+            var coal=new SubjectId("lot:station-facing-initial-fuel");
+            var staging=new SubjectId("custody:station-facing-initial-fuel");
+            ledger=state.inventory().fungibleResources().issue(new ResourceLot(coal,settlement,"minecraft:coal",64,
+                    "fixture:finite-station-fuel",List.of()),new CustodyAccount(staging,
+                    new ResourceCustody.Container(machine.id(),ContainerSectionId.FUEL),Map.of(coal,64),Map.of()));
+            if(fuel.isPresent())ledger=ledger.transfer(staging,fuel.orElseThrow().id(),Map.of(coal,64),Map.of());
+            state=state.withInventory(state.inventory().withFungibleResources(ledger));
+            starts.add(GoodsParticipantProcess.review(settlement,1L));
+        }
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-fungible-production"), settlement,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:development-fungible-production"), objective.id(), settlement,
                 StrategicTaskKind.PRODUCE_AT_STATION, java.util.Optional.empty(),
                 List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT), List.of(), StrategicTaskStatus.PENDING);
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
+        starts.add(ProductionProcess.start(task,200L));
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(
-                configured(worldId, state, SimInstant.ZERO, List.of(ProductionProcess.start(task, 200L))));
+                configured(worldId, state, SimInstant.ZERO, starts));
         for (int step = 0; step < 300; step++) {
             var checkpoint = engine.checkpoint();
             if (checkpoint.schedules().isEmpty()) break;
@@ -418,10 +446,11 @@ public final class FrontierV3FixtureCatalog {
             engine.advanceTo(new SimInstant(Math.max(checkpoint.instant().ticks(), due.ticks())),
                     new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(100, 100));
             var current = engine.canonicalState().state();
-            if (current.productionJobs().size() == 1 && current.productionJobs().values().iterator().next()
+            var selected=current.productionJobs().get(new SubjectId("job:production-development-fungible-production"));
+            if (selected != null && selected
                     .stationWork().filter(work -> freshJob ? work.phase() == StationWorkState.Phase.DEPOT_PICKUP
                             : work.phase() == StationWorkState.Phase.PROCESSING
-                            && StationWorkLabour.progress(current, current.productionJobs().values().iterator().next())
+                            && StationWorkLabour.progress(current, selected)
                                 .filter(progress -> progress.running() && !progress.complete()).isPresent()).isPresent()) {
                 var boundary = engine.checkpoint();
                 return configured(worldId, current, boundary.instant(), boundary.schedules());

@@ -41,8 +41,7 @@ final class HumanVillagerRenderer extends VillagerRenderer {
             pose.translate(0,-6.0/16.0,0);
     }
     @Override protected void setupRotations(Villager actor,PoseStack pose,float age,float yaw,float partial,float scale){
-        var frame=PaleMirrorCombatClient.frame(actor,partial);
-        super.setupRotations(actor,pose,age,frame==null?yaw:MeleeAnimation.facingYaw(frame,yaw),partial,scale);
+        super.setupRotations(actor,pose,age,ResidentVisuals.facingYaw(actor,partial,yaw),partial,scale);
     }
     static EntityRenderer<Villager> create(EntityRendererProvider.Context context){
         return new HumanVillagerRenderer(context);

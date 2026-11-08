@@ -37,6 +37,17 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(2, EquipmentStockProjection.units(state, home).stream()
                 .filter(tool -> tool.kind().equals("minecraft:iron_axe")).count());
     }
+    @Test void authoredStationFacingProfileAdmitsRealColdWorkBeforeNativeLaunch() {
+        var configuration=FrontierV3FixtureCatalog.configuration("northwatch-station-work",new WorldId("frontier:station-facing"),139L);
+        var state=configuration.initialState();var job=state.productionJobs().get(new SubjectId("job:production-development-fungible-production"));
+        assertTrue(state.bootstrap().ruleset().fields().agriculture().isPresent());
+        assertEquals(StationWorkState.Phase.DEPOT_PICKUP,job.stationWork().orElseThrow().phase());
+        assertEquals("minecraft:bread",job.outputItemKind());assertTrue(state.sceneLeases().isEmpty());
+        assertEquals(21,job.outputCount());
+        var fuel=FungibleResourceCustodySupport.accountAtContainer(state,
+                ProductionStationDirectory.require(state.inventory(),job.stationWork().orElseThrow().stationId()).id(),ContainerSectionId.FUEL).orElseThrow();
+        assertEquals(64,fuel.lotQuantities().values().stream().mapToInt(Integer::intValue).sum());
+    }
     @Test void freshBakeryProfileStartsBeforeTheFirstWheatTransfer() {
         var configuration = FrontierV3FixtureCatalog.configuration("bakery-fresh-job",
                 new WorldId("frontier:bakery-fresh-profile"), 41L);

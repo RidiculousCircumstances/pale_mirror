@@ -150,6 +150,11 @@ final class FrontierV3StationWorkExecutor {
                 return;
             }
             StationWorkState work = job.stationWork().orElseThrow();
+            if (work.phase() == StationWorkState.Phase.PROCESSING) {
+                var socket = ProductionStationDirectory.require(state.inventory(), work.stationId())
+                        .productionStation().orElseThrow().socketSurface();
+                FrontierV3WorkPresentation.face(worker,new net.minecraft.world.phys.Vec3(socket.x()+.5,socket.y()+1.5,socket.z()+.5));
+            }
             if (work.phase() == StationWorkState.Phase.PROCESSING && !StationWorkLabour.complete(state, job)) {
                 if (!StationWorkLabour.attended(state, job)) return;
                 long tick = runtime.canonicalState().orElseThrow().instant().ticks();

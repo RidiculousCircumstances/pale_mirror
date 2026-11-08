@@ -1,0 +1,378 @@
+{
+  "schema": 1,
+  "id": "disposable_station_work_facing",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 139
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25599,
+    "profile": "northwatch-station-work",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "process",
+          "id": "job:production-development-fungible-production",
+          "expect": {
+            "status": "ok",
+            "family": "frontier.production-work",
+            "result": {
+              "workStage": "DEPOT_PICKUP"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/pale_mirror v3 release_advance_hold"
+    }
+  ],
+  "actions": [
+    {
+      "type": "inspect",
+      "view": "resource",
+      "id": "custody:container-authored-25650174-8b8d-3795-8635-2f7fa8b98ae5",
+      "causalMilestone": "output_storage_empty_before_baking"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 0,
+      "causalMilestone": "ordinary_player_depot_ingress"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workStage": "STATION_LOAD"
+        }
+      },
+      "timeoutMs": 90000,
+      "causalMilestone": "wheat_taken_into_baker_hand"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workStage": "PROCESSING"
+        }
+      },
+      "timeoutMs": 90000,
+      "causalMilestone": "wheat_placed_in_bakery_station"
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "workerId": "resident:1-15",
+      "nameContains": {
+        "diagnostic": {
+          "view": "scene",
+          "id": "job:production-development-fungible-production",
+          "field": "primaryActorName"
+        }
+      },
+      "maxDistance": 64,
+      "standOff": 1.5,
+      "timeoutMs": 30000,
+      "causalMilestone": "ordinary_supported_workstation_camera"
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "causalMilestone": "look_at_baker_workstation"
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "scene",
+          "id": "job:production-development-fungible-production",
+          "field": "primaryActorName"
+        }
+      },
+      "maxDistance": 32,
+      "maxAngleDeg": 55,
+      "timeoutMs": 30000,
+      "causalMilestone": "baker_visible_operating_station"
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000,
+      "causalMilestone": "physical_station_visible_with_working_baker"
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "scene",
+          "id": "job:production-development-fungible-production",
+          "field": "primaryActorName"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "job:production-development-fungible-production",
+      "entityType": "minecraft:villager",
+      "durationTicks": 160,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 30000,
+      "maxDistance": 48,
+      "requiredModelRig": "human_era",
+      "requiredWorkGestures": [
+        "HANDLE"
+      ],
+      "workFacingTarget": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "workerId": "resident:1-15"
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "scene",
+          "id": "job:production-development-fungible-production",
+          "field": "primaryActorName"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "job:production-development-fungible-production",
+      "entityType": "minecraft:villager",
+      "durationTicks": 160,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 30000,
+      "maxDistance": 48,
+      "requiredModelRig": "human_era",
+      "requiredWorkGestures": [
+        "HANDLE"
+      ],
+      "workFacingTarget": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-workshop-bakery-station",
+          "field": "position"
+        }
+      },
+      "workerId": "resident:1-15"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workStage": "DEPOT_DELIVERY"
+        }
+      },
+      "timeoutMs": 120000,
+      "causalMilestone": "bread_processed_at_station_and_taken_into_baker_hand"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -8,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 0,
+      "causalMilestone": "ordinary_player_depot_delivery_ingress"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "not_found"
+      },
+      "timeoutMs": 120000,
+      "causalMilestone": "bread_deposited_and_job_completed"
+    },
+    {
+      "type": "inspect",
+      "view": "resource",
+      "id": "custody:container-authored-25650174-8b8d-3795-8635-2f7fa8b98ae5",
+      "causalMilestone": "canonical_bread_in_depot"
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:1-depot",
+      "causalMilestone": "physical_depot_receipt_current"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 10,
+    "resumeSetup": [
+      {
+        "type": "command",
+        "command": "/pale_mirror v3 release_advance_hold"
+      },
+      {
+        "type": "visit_nearest_entity",
+        "entityType": "minecraft:villager",
+        "workerId": "resident:1-15",
+        "nameContains": {
+          "diagnostic": {
+            "view": "scene",
+            "id": "job:production-development-fungible-production",
+            "field": "primaryActorName"
+          }
+        },
+        "maxDistance": 64,
+        "standOff": 1.5,
+        "timeoutMs": 30000
+      }
+    ]
+  },
+  "assertions": [
+    {
+      "after": 4,
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workStage": "PROCESSING"
+        }
+      }
+    },
+    {
+      "after": 15,
+      "view": "process",
+      "id": "job:production-development-fungible-production",
+      "expect": {
+        "status": "not_found"
+      }
+    },
+    {
+      "after": 16,
+      "view": "resource",
+      "id": "custody:container-authored-25650174-8b8d-3795-8635-2f7fa8b98ae5",
+      "expect": {
+        "status": "ok",
+        "quantity": 21,
+        "claims": []
+      }
+    },
+    {
+      "after": 17,
+      "view": "container",
+      "id": "container:1-depot",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        },
+        "custody": {
+          "status": "ACQUIRED",
+          "unresolvedReason": ""
+        }
+      }
+    },
+    {
+      "after": 1,
+      "view": "resource",
+      "id": "custody:container-authored-25650174-8b8d-3795-8635-2f7fa8b98ae5",
+      "expect": {
+        "status": "not_found"
+      }
+    },
+    {
+      "after": 18,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 10,
+      "name": "human-era-facing-workstation-before-restart"
+    },
+    {
+      "after": 12,
+      "name": "human-era-facing-workstation-after-restart"
+    }
+  ]
+}
