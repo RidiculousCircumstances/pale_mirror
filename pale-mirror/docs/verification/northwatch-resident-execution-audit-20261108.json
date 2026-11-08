@@ -1,0 +1,860 @@
+{
+  "schema": 1,
+  "date": "2026-11-08",
+  "scope": "Resident-wide statistical diagnosis and repair of clinical deadlock, physical continuation starvation, melee cue admission and pathological service-clearance planning. Same live Northwatch world retained.",
+  "status": "TECHNICAL_DELIVERY_COMPLETE_WITH_LIMITS",
+  "sourceCommits": [
+    "d6b60aefd4a132c5de735a85f552a2cff865f85a",
+    "057488d6c6d32829c04f9510b43f0493a3968c9d",
+    "cb015a7be79c30f80a77bd31ad533237c2872618",
+    "a4a4615f8aebc8bacee6785dc13cd12895f81cb7",
+    "c07451a8090c71e6b551df060cb1f7347d5ee68f",
+    "5b090bff2688c74a6d13b6ecb4c601b3cd26c7cd",
+    "f32840caef49d49fe0c0e3f6abd4cddb10e8c3ba",
+    "3ea9e57352eb1eeb1e9cfa6d969430e1294ca10a",
+    "0fdaa3e387947b2ef5018ab94a2b7a338fcf0af3",
+    "47d5f4b5fea51e01d683bdd577e3234f97301bd1",
+    "fa26d3ea526bd4123b440d8f78a70276f26c0fc4",
+    "df8c1da5122d8550a017d51a97f31eede5dba021",
+    "73bd9b475a499a0747f2b9eb130517af27fe7e5f",
+    "a2c345e9c88be9e7f204eb693192c78945e08e95",
+    "f7bca4e95012fa9325d51e64c19ad84f85782486",
+    "4f864f71a633318ddaf8d2965dd0a8289bd10edc",
+    "6391187f5a6ce5c8c6cf6fc9665fae2faff865fd"
+  ],
+  "evidenceRoot": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/resident-execution-audit-20261108",
+  "populationAudit": {
+    "settlements": 12,
+    "originalLivingResidents": 335,
+    "snapshotRevisions": [
+      343417,
+      446291
+    ],
+    "simulationTicksBetween": 17600,
+    "persistentNoRouteClinicalMovements": [
+      "resident:1-16",
+      "resident:1-22"
+    ],
+    "confirmedFraction": 0.005970149253731343,
+    "coldRoutes": 65,
+    "expiredColdRoutes": 0,
+    "unheldOverdueResidentSchedulesAtBaseline": 0,
+    "interpretation": "Movement issue age alone does not establish blockage; COLD arrivals remained future, intentional idle assignments were excluded. Both patients had full20HP, RESTING and an incompatible clinical APPROACH leg. One became STARVING.",
+    "sameWorldRecovery": {
+      "revision": 488452,
+      "instant": 95142,
+      "bothClinical": "NONE",
+      "bothRest": "NONE",
+      "bothNutrition": "NOURISHED",
+      "activities": "WORK/GUARD",
+      "healthGift": false
+    },
+    "release7": {
+      "revision": 722911,
+      "instant": 160693,
+      "living": 340,
+      "nutrition": {
+        "NOURISHED": 324,
+        "HUNGRY": 16,
+        "STARVING": 0
+      },
+      "movements": 83,
+      "futureColdRoutes": 82,
+      "noRouteMovement": "resident:1-22 only, native custody retained",
+      "unheldOverdueResidentSchedules": 0,
+      "previousCouriers": "1-12,1-6,3-6 all left original crowded cell;1-12 field work,1-6 meal,3-6 delivery return tosettlement3. Bound production1-15 now travelswithCOLDroute.",
+      "remainingContradiction": "Patient1-22 native saved departure repeatedly rejected by suspended guard movement checkpoint. Exact copied snapshot oldfailure/fixedunloadproof retained; final live recovery pending."
+    },
+    "mealOwnerFinding": {
+      "snapshot": "final-after.bin",
+      "revision": 802305,
+      "instant": 179127,
+      "living": 341,
+      "nutrition": {
+        "NOURISHED": 330,
+        "HUNGRY": 11,
+        "STARVING": 0
+      },
+      "actorMovements": "No unclocked/expired COLD legs or unheld overdue resident schedules. This alone missed separately owned meal clocks.",
+      "stalls": [
+        {
+          "eater": "resident:1-6",
+          "mealAgeTicks": 21241,
+          "blocker": "resident:1-2",
+          "approach": [
+            -1437,
+            63,
+            -1416
+          ]
+        },
+        {
+          "eater": "resident:1-10",
+          "mealAgeTicks": 5321,
+          "blocker": "resident:1-7",
+          "approach": [
+            -1437,
+            63,
+            -1414
+          ]
+        }
+      ],
+      "cause": "Reserved chair approach occupied by nourished COLD IDLE body. Meal cannot route to exclusive occupied destination, repeats finite timer without wake for incumbent. Native-only optional routines cannot evacuate an unobserved resident. Whole kitchen idle buffer made ordinary outward parking impossible while pantry boundary demanded.",
+      "repairStatus": "COMMITTED_47d5_DEPLOYED10_IDLE_YIELD_CONFIRMED",
+      "probe": "meal-turnover-final-probe.txt"
+    },
+    "release10": {
+      "revision": 974053,
+      "instant": 214703,
+      "living": 345,
+      "nutrition": {
+        "NOURISHED": 327,
+        "HUNGRY": 18,
+        "STARVING": 0
+      },
+      "observed": "1-6meal completed/nourished;1-7yielded onto floor.1-2stillwaited at a seat now occupied by1-5 whose body retained native custody UNKNOWN_AFTER_RESTART, so a COLD courtesy probe correctly refused movement.",
+      "remainingBodyFinding": "1-5Leon laternativeunloaded atpantry with current exact epoch10/residence16 receipt butsaved=false for>10minutes; BodyStoredRecovery excludedanyexistingreceipt, suppressing its own positive disk proof. fa26 repairs this eligibility, pendinglive11proof.",
+      "limit": "The failed meal-active-courtesy-probe.txt is a hard physical custody refusal, not evidence of successful COLD detour."
+    },
+    "release12": {
+      "firstRevision": 1115462,
+      "finalRevision": 1142071,
+      "firstTick": 232062,
+      "finalTick": 234662,
+      "simulationTicks": 2600,
+      "settlements": 12,
+      "livingResidents": 347,
+      "nutrition": {
+        "HUNGRY": 20,
+        "NOURISHED": 327
+      },
+      "activities": {
+        "EAT": 18,
+        "WORK": 110,
+        "IDLE": 219
+      },
+      "movementCount": 87,
+      "futureMovementClocks": 86,
+      "expiredMovementClocks": [],
+      "unclockedMovements": [
+        {
+          "id": "resident:10-27",
+          "age": 732,
+          "nativeCustody": false
+        }
+      ],
+      "expiredMealClocks": [],
+      "oldMealsRemaining": [],
+      "unheldOverdueResidentSchedules": [],
+      "clinicalRestOverlap": [],
+      "originalDelayedMealCohort": [
+        {
+          "id": "resident:1-17",
+          "nutrition": "NOURISHED",
+          "satiety": 990,
+          "meal": null,
+          "mealAge": null,
+          "clinical": "NONE",
+          "rest": "NONE",
+          "activity": "WORK",
+          "nativeCustody": false
+        },
+        {
+          "id": "resident:1-18",
+          "nutrition": "NOURISHED",
+          "satiety": 995,
+          "meal": null,
+          "mealAge": null,
+          "clinical": "NONE",
+          "rest": "NONE",
+          "activity": "IDLE",
+          "nativeCustody": false
+        },
+        {
+          "id": "resident:1-19",
+          "nutrition": "NOURISHED",
+          "satiety": 983,
+          "meal": null,
+          "mealAge": null,
+          "clinical": "NONE",
+          "rest": "NONE",
+          "activity": "WORK",
+          "nativeCustody": false
+        },
+        {
+          "id": "resident:1-20",
+          "nutrition": "NOURISHED",
+          "satiety": 978,
+          "meal": null,
+          "mealAge": null,
+          "clinical": "NONE",
+          "rest": "NONE",
+          "activity": "WORK",
+          "nativeCustody": false
+        },
+        {
+          "id": "resident:1-22",
+          "nutrition": "NOURISHED",
+          "satiety": 985,
+          "meal": null,
+          "mealAge": null,
+          "clinical": "NONE",
+          "rest": "NONE",
+          "activity": "WORK",
+          "nativeCustody": false
+        },
+        {
+          "id": "resident:1-5",
+          "nutrition": "NOURISHED",
+          "satiety": 974,
+          "meal": null,
+          "mealAge": null,
+          "clinical": "NONE",
+          "rest": "NONE",
+          "activity": "IDLE",
+          "nativeCustody": false
+        }
+      ]
+    },
+    "release16": {
+      "snapshot": "release16-final.bin",
+      "instant": 300777,
+      "living": 347,
+      "nourished": 329,
+      "hungry": 17,
+      "starving": 1,
+      "oldMealsOver3000Ticks": 0,
+      "unclockedColdMoves": 0,
+      "unheldOverdue": 0,
+      "starvationCause": "3-9 actual mixed-profile group return; repaired by6391187f5 and ordinary live17 recovery confirmed below."
+    },
+    "release17": {
+      "firstRevision": 1548570,
+      "lastRevision": 1565711,
+      "firstInstant": 305103,
+      "lastInstant": 308503,
+      "simulationTicksBetween": 3400,
+      "settlements": 12,
+      "living": 347,
+      "nutrition": {
+        "NOURISHED": 341,
+        "HUNGRY": 6
+      },
+      "oldMealsOver3000Ticks": 0,
+      "unclockedColdMoves": 0,
+      "expiredTravel": 0,
+      "unheldOverdueResidentSchedules": 0,
+      "restingMovingOverlap": 0,
+      "guideFinal": {
+        "id": "resident:3-9",
+        "home": "settlement:3",
+        "life": "ALIVE",
+        "assignment": "IDLE",
+        "body": "BodyPosition[x=400, y=64, z=-1360]",
+        "clinical": "NONE",
+        "rest": "NONE",
+        "nativeCustody": false,
+        "coldAvailable": true,
+        "nutrition": "NOURISHED",
+        "satiety": 990,
+        "activity": "IDLE",
+        "interactionFence": "",
+        "schedules": [
+          {
+            "kind": "frontier.resident.activity.review",
+            "due": 312000,
+            "lag": 0,
+            "held": false
+          },
+          {
+            "kind": "frontier.resident.need.review",
+            "due": 332581,
+            "lag": 0,
+            "held": false
+          }
+        ]
+      }
+    }
+  },
+  "repairs": [
+    "Clinical occupied rest cannot fall through into walking for dressing/supplies. Legacy overlap interrupts through exact owner checkpoint, exits bed and ends care.",
+    "Bootstrap exit directory replaces repeated whole-settlement scans without caching permissions. Birth connectivity expands only through the existing finite4096node scoped block-only search.",
+    "Physical pass fills current native tick after finishing prior suffix, one stage invocation per tick; rotating preparation budget no longer suppresses bounded critical effects. Canonical predecessor and capacity fences remain hard.",
+    "Native melee warning begins after canonical impact admission, retaining full native preparation and finite active window. No cue restart, wider reach/window or late-hit grant.",
+    "Bounded immutable authored-cell/column memo; current observations and unknown damage retain precedence.",
+    "Optional service parking uses shared KnownLocalAccess positive local proof: radius32 and4096 edge checks, stopping at first permitted route. Global per-exterior-target requests removed. Unknown/exhausted is no global NO_PATH. Ready or physically admitted demanded unheld throats constrain shared search and journey; resource wait alone owns no exclusive entrance. Original declared private outward/no-reentry split preserved.",
+    "Bound production source without operational native custody reports SOURCE_PHYSICAL_BINDING resource wait, retaining actual job, stock and claims while allowing safe yield.",
+    "COLD chair exit consumes actual body authority: exact retired native chair-feet can stand locally; already-vacated supported body remains in place. Unknown support, motion, pending interaction still block.",
+    "Guard checkpoint refuses ordinary care/meal handoff once security response is assigned, including before patrol mission redirection; security withdrawal permits it again.",
+    "Body departure notifies all retained owners, but suspended owner ignores only a movement proven to belong to the exact current execution; stale/unowned execution rejected. No inventory/health/arrival gift.",
+    "Reserved seat approaches address actual idle incumbents through existing resident review and bounded ordinary SeatClearance movement, stable context tag18. Destination is actual authored floor/public ground, excluding furniture, circulation, workstations, claims and actual service throats; short courtesy may remain within a broad kitchen idle buffer.",
+    "Unclocked moving meal can yield a reserved seat approach under explicit MealSeatClearance contexttag19, retaining exact MEAL execution, portion and claim. Current registered movement owns navigation/permission/knowledge; original meal continuation resumes. No pending/body/handbinding/evasion/food-effect bypass.",
+    "Body stored recovery now accepts current observed but not saved departure, rather than excluding all observed receipts. Existing positive stamped native census/snapshot must match original physical receipt exactly; no restamping with current activity. Saved marker uses transactional publish/rollback and existing bounded batch/rearm.",
+    "Completed bounded optional local exploration reuses walking parents/visited order under exact geometry identity+origin/radius. Every opportunity reevaluates current suitability and route permission. Exact exclusion-set geometry views are reused only under their immutable owner. No TTL, negative domain decision or globalNO_PATH.",
+    "Vacant work admission now assesses the same exact current owner and physical-effect checkpoint as actual release; RELEASE policy is not an acknowledgement that seated leisure or another passive owner is finished."
+  ],
+  "sameInputClinicalProbe": {
+    "old": "Both remain stuck after four steps.",
+    "new": "Both end in3 owner transitions: Interrupted -> RestChanged(EXIT) -> ClinicalEnded, health20 unchanged. Registered planner and validation used.",
+    "logs": [
+      "clinical-old-snapshot.txt",
+      "clinical-registered-fixed-snapshot.txt"
+    ]
+  },
+  "sameInputClearanceProbe": {
+    "snapshot": "release5-census.bin",
+    "revision": 579964,
+    "instant": 120013,
+    "owners": [
+      "resident:1-21",
+      "resident:11-18"
+    ],
+    "old": "250 cooperative requests per owner without schedule completion in bounded probe. Actual live replay stalled canonical580107/t120069 for minutes while host accumulated3339 ticks.",
+    "new": "Both registered preparations finish on first preparation, zero calculation waits. Final bounded-positive probe1.46s first cold JVM (bootstrap/JIT included),21.5ms second. Not a whole-server TPS factor.",
+    "logs": [
+      "turnover-probe.txt",
+      "turnover-final-probe.txt",
+      "release5-held-performance.txt",
+      "release5-held-planning.txt",
+      "turnover-positive-probe.txt"
+    ]
+  },
+  "verification": {
+    "clinicalAndCadence": "41 focused PASS; clinical registered emissions12PASS; exact351 compatibility/recovery17PASS; critical cadence13+architecture10PASS. Guardrails and packaged JAR checks PASS.",
+    "nativeLocalNavigation": {
+      "passed": 71,
+      "log": "/tmp/pm-resident-cadence-native-navigation.log"
+    },
+    "nativeStrikeBoundary": {
+      "passed": 27,
+      "log": "/tmp/pm-resident-canonical-cue-native.log",
+      "scope": "Actual durable native effect journal, canonical delay30native ticks, full warning, hit/retreat miss and exactly-once effects."
+    },
+    "geometryMemo": {
+      "passed": 25,
+      "log": "/tmp/pm-resident-authored-facts2.log"
+    },
+    "baselineDebt": {
+      "knownRouteKnowledge": "7 identical old-ca5 failures retained.",
+      "mealNavigation": {
+        "baseline": {
+          "waitingApproachCannotOccupyAnotherMealsReservedClearanceAndHotCanRejectOccupiedPockets()": "io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation$RouteUnavailable",
+          "sixthSettlementResidentHasKnownRouteToItsDepot()": "io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation$RouteUnavailable",
+          "distantReturnedCourierGetsADeferredRouteAndReplayNeedsNoPlannerCache()": "org.opentest4j.AssertionFailedError",
+          "idleResidentAndWorkshopWorkerUseSameKnownDepotGoal()": "io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation$RouteUnavailable",
+          "concurrentFutureMealReservationsCannotHoldTheServiceExitHostage()": "org.opentest4j.AssertionFailedError",
+          "admittedShortEntranceStillRespectsAChangedPhysicalServiceCell()": "org.opentest4j.AssertionFailedError",
+          "authoredThresholdAndProtectedExitReplaceStaleWaitingPocketInBothModes()": "org.opentest4j.AssertionFailedError",
+          "capturedChestDepartureUsesTheSameBodyGeometryDuringPlanningAndReplay()": "java.util.NoSuchElementException",
+          "occupiedExitIsNotTheOnlyGoalAndParkingDoesNotOwnClearance()": "org.opentest4j.AssertionFailedError",
+          "residentReleasedAtDepotSideStationCanCompleteColdMealApproach()": "org.opentest4j.AssertionFailedError",
+          "courtesyDepartureFromPrivateDepotStationHasTheSamePlanningAndReplayPermissions()": "org.opentest4j.AssertionFailedError"
+        },
+        "candidate": {
+          "waitingApproachCannotOccupyAnotherMealsReservedClearanceAndHotCanRejectOccupiedPockets()": "io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation$RouteUnavailable",
+          "sixthSettlementResidentHasKnownRouteToItsDepot()": "io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation$RouteUnavailable",
+          "distantReturnedCourierGetsADeferredRouteAndReplayNeedsNoPlannerCache()": "org.opentest4j.AssertionFailedError",
+          "idleResidentAndWorkshopWorkerUseSameKnownDepotGoal()": "io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation$RouteUnavailable",
+          "concurrentFutureMealReservationsCannotHoldTheServiceExitHostage()": "org.opentest4j.AssertionFailedError",
+          "admittedShortEntranceStillRespectsAChangedPhysicalServiceCell()": "org.opentest4j.AssertionFailedError",
+          "authoredThresholdAndProtectedExitReplaceStaleWaitingPocketInBothModes()": "org.opentest4j.AssertionFailedError",
+          "capturedChestDepartureUsesTheSameBodyGeometryDuringPlanningAndReplay()": "java.util.NoSuchElementException",
+          "occupiedExitIsNotTheOnlyGoalAndParkingDoesNotOwnClearance()": "org.opentest4j.AssertionFailedError",
+          "residentReleasedAtDepotSideStationCanCompleteColdMealApproach()": "org.opentest4j.AssertionFailedError",
+          "courtesyDepartureFromPrivateDepotStationHasTheSamePlanningAndReplayPermissions()": "org.opentest4j.AssertionFailedError"
+        },
+        "identical": true
+      },
+      "wholeSuiteGreen": false,
+      "guardMeal": {
+        "test": "GuardDutyTest.guardEatsFromPocketAndResumesTheSameAppointmentWithTheSameSword",
+        "failure": "Meal remains after32 modeled transitions; assertionfalse vs true",
+        "reproducedOn": "f32840caef49d49fe0c0e3f6abd4cddb10e8c3ba",
+        "baselineLog": "/tmp/pm-resident-guard-meal-baseline.log",
+        "candidateLog": "/tmp/pm-resident-guard-handoff.log",
+        "interpretation": "Same failure on prior exact release before guard checkpoint change; not a new green guard class claim."
+      },
+      "actorMovement": {
+        "baseline": "0fdaa3e387947b2ef5018ab94a2b7a338fcf0af3",
+        "baselineLog": "/tmp/pm-resident-seat-movement-baseline.log",
+        "candidateLog": "/tmp/pm-resident-seat-clearance-tests.log",
+        "failedCases": 9,
+        "identicalNamesAndExceptionTypes": true,
+        "comparison": "seat-movement-baseline-comparison.json"
+      }
+    },
+    "serviceClearance": {
+      "passed": 79,
+      "log": "/tmp/pm-resident-final-connected-fixes2.log",
+      "scope": "service/access9,wakeindex27,servicearea6,architecture10,bound production11,seated leisure9,seated meal5,service isolation2",
+      "negativeRecovery": "Bounded unknown/sealed/reopen proof; ready/admitted demand vs resource wait; actual bound source custody loss/recovery preserves stock/claim. Seat chairfeet/unknown vacancy negatives. No global per-target search retained."
+    },
+    "guardHandoff": {
+      "passed": 48,
+      "log": "/tmp/pm-resident-guard-handoff2.log",
+      "recovery": "Assigned response blocks care before patrol projection. Exact snapshot roundtrip preserves refusal; actual response retirement restores admission."
+    },
+    "bodyDeparture": {
+      "passed": 36,
+      "logs": [
+        "/tmp/pm-resident-body-departure.log",
+        "/tmp/pm-resident-body-departure2.log"
+      ],
+      "scope": "35neighbor+corrected registered guard/clinical/native unload recovery negative test. Exact copied snapshot oldfailure/newproof unchanged stock/health/executions/goal."
+    },
+    "furnitureCourtesy": {
+      "focusedPassed": 23,
+      "logs": [
+        "/tmp/pm-resident-meal-courtesy-tests.log",
+        "/tmp/pm-resident-meal-courtesy-final.log"
+      ],
+      "scope": "Idle+active-meal complete canonical flows over actual maxlevel kitchen, exact portions/claims unchanged until consumption, explicit nominal context roundtrip, foreignhome/damagedroute/current-navigation permission negatives.21unchangedneighbors+2newcases; finalfocusedMEAL rerunPASS."
+    },
+    "bodyStoredProof": {
+      "focusedPassed": 35,
+      "log": "/tmp/pm-resident-body-stored-proof-tests.log",
+      "negativeRecovery": "Recorded unsaved receipt re-enters proof after ledger roundtrip; independent exact saved row preserves original execution at capture even after current activity changes. Wrong position/new epoch/return read reject. Existing saved-publication rollback and stamped census/inspection tests preserved."
+    },
+    "localClearanceReuse": {
+      "passed": 60,
+      "log": "/tmp/pm-resident-clearance-frontier-tests.log",
+      "checks": "Changed destination availability and current owner permission are re-evaluated over retained walking facts; changed geometry with equal version label cannot reuse the old frontier. Existing unknown/damaged geometry, profile, shape, door, meal and furniture checks pass.",
+      "sameInput": "release12-final.bin",
+      "comparison": "clearance-frontier-comparison.json",
+      "eligibleActors": 22,
+      "identicalChoicesAllThreeRounds": true,
+      "warmTotalsMs": {
+        "baseline": [
+          957,
+          1176
+        ],
+        "candidate": [
+          106,
+          95
+        ]
+      },
+      "scope": "Same frozen canonical state in separate JVMs; not a whole-server speed factor. Capacity64 complete bounded optional explorations plus16 exact exclusion-set views per immutable source; no globalNO_PATH or held domain decision."
+    },
+    "governance": {
+      "guardrails": "PASS",
+      "log": "/tmp/pm-resident-governance-guardrails.log",
+      "scope": "Only own resident_execution_latency_boundary line, continuity and this receipt staged. Unrelated governance WIP preserved."
+    }
+  },
+  "deliveryRegression": {
+    "cause": "First d6 clinical repair emitted actor_movement_interrupted without declaring producer emission; protective stop saved all dimensions. Exact declaration correction changed descriptor fingerprint; next startup rejected old inventory safely. Neither incident was hidden by resetting world.",
+    "repair": "Add exact registered emission and single wire-compatible schema351 descriptor edge. Full copied canonical prefix +256 WAL records replayed through473836/t90342 and roundtripped. All unknown/future fingerprints, other schemas and changed physical lifecycle remain rejected.",
+    "retainedRequiredIncident": {
+      "firstRevision": 14991,
+      "lastRevision": 1497409,
+      "occurrences": 5,
+      "scope": "Historical required incident retained, diagnosticVerdict remains blocked; no new quarantine after4f864f71a."
+    },
+    "logs": [
+      "registered-full-recovery.txt",
+      "detached-full-recovery.txt"
+    ],
+    "seat": {
+      "cause": "Logical standing chair contactY65 differed from actual retired native passenger feetY64; old COLDexit triggered nearbycontact invariant.",
+      "snapshot": "release6-recovered-state.bin",
+      "replay": "release6-seat-recovery.txt",
+      "old": "seat-old-prefix-probe.txt",
+      "fixed": "seat-fixed-prefix-probe.txt",
+      "worldReset": false
+    }
+  },
+  "intermediateNativeChecks": {
+    "cb": "Actual health loss/circling3HIT; overall failed obsolete incidentIndexSize1 assertion;4 optional production waits are retained separately. Assertion corrected to requiredConflicts1.",
+    "a4": "ScenarioPASS b71c1864; raw6eade6f4 shows1HIT/3WINDOW_CLOSED and cue preceding canonical admission. Final acceptance requires later c074+ run.",
+    "release5": "c3473f61 failed setup9 before combat; diagnosed actual service planning delay, not a successful fight.",
+    "release6": "87c42ead failed health action4 while full4096node component scans repeated per global candidate. Replaced by bounded early-exit positive opportunity. Later required seat exit failure retained at673414/t146093; exact stopped prefix124WAL replay and2step closure PASS with finalf328.",
+    "release7": {
+      "scenario": "f2ef8e72-fb1e-4ecc-a978-af6048f3f6d7",
+      "capture": "1788b025-512f-4537-b112-30c367799106",
+      "events": 1084,
+      "actualHits": 4,
+      "windowClosedMisses": 0,
+      "result": "FAILEDcircling action5. Target already CLINICAL_CARE at scenario entry; old fixture only required living melee method. Scenario now requires currentGUARD and clinicalNONE, chooses healthy dutyresident1-16. Separate source-proven guard handoff gap fixed. Native carrier activity tag was stale and is not execution authority."
+    },
+    "release9": {
+      "manifest": "release9-live-melee.json",
+      "run": "95eb2e14-fdab-450b-97a7-0f618c7ddf0e",
+      "status": "ok",
+      "capture": "cfeaa00b-6d3d-4a32-a56d-c40cbf2cfaf5",
+      "completeEvents": 871,
+      "hits": 1,
+      "misses": {
+        "OUT_OF_REACH": 3,
+        "OUTSIDE_ARC": 1
+      },
+      "firstResponseHitMs": 7212.568,
+      "simTicks": 97,
+      "hostTicks": 368
+    },
+    "release9Warm": {
+      "manifest": "release9-warm-melee.json",
+      "run": "4a7881a4-ab4e-49a8-b0a2-934b3ffbaf74",
+      "status": "ok",
+      "capture": "230df50b-97ef-473b-b05d-78b3743c8850",
+      "completeEvents": 980,
+      "hits": 9,
+      "hitActors": {
+        "resident:1-16": 4,
+        "resident:1-17": 5
+      },
+      "misses": {
+        "OUT_OF_REACH": 4,
+        "BODY_BLOCKED": 1
+      },
+      "firstResponseHitMs": 690.902,
+      "simTicks": 328,
+      "hostTicks": 320,
+      "nativeContactWindows": "All10hits across2runs independently checked against exact actor/attempt native cue/preparation/active interval. No WINDOW_CLOSED."
+    },
+    "release10": {
+      "run": "27ae2961-11f4-464c-aa13-394c22dbdacd",
+      "status": "ok",
+      "capture": "aba2f2ab-3d99-484c-9fab-572dedecb064",
+      "completeEvents": 764,
+      "hits": 1,
+      "misses": {
+        "OUT_OF_REACH": 1
+      },
+      "firstHitMs": 4891.801,
+      "simTicks": 69,
+      "hostTicks": 324,
+      "scope": "First fullpack visit after restart, retained startup/catchup latency; no WINDOW_CLOSED."
+    },
+    "release12": {
+      "manifest": "release12-live-melee.json",
+      "run": "7311fd37-3eb8-4c88-a328-61bfa0218aeb",
+      "status": "ok",
+      "framePersonallyViewed": "northwatch-guard-circling",
+      "scope": "Ordinary player health loss and circling in fullpack. Raw94b9f505complete2541events confirms1hit. Old seat passenger rejected in same naturally loaded area and absent after ordinary unload.",
+      "capture": "94b9f505-f08d-483d-9ece-a1c50213c9d9"
+    },
+    "release13": {
+      "run": "78825d36-3d60-46eb-bf10-07b1bd4de091",
+      "status": "FAILED",
+      "reason": "Player actually traversed5.056m of required16m pursuitcircuit; nativehealthloss precedingphase passed. Do not waiveassertion/callPASS. Later productioncheckpoint protective stop separate andsource-reproduced.",
+      "capture": "87246900-5a8d-4d36-8d97-f686fe250227",
+      "frameViewed": "northwatch-guard-native-hit",
+      "classification": "CircuitcauseUNCONFIRMED; productionfailureconfirmedsharedadmissionmismatch."
+    },
+    "release16": {
+      "status": "PASS",
+      "runId": "e12f5462-d515-44d2-b289-1d31c18a992b",
+      "manifest": "release16-live-melee.json",
+      "raw": "release16-native-combat.jsonl",
+      "rawStatistics": "release16-combat-statistics.json",
+      "capture": "bd5d7c94-ef63-4490-97f3-5877e7282d06",
+      "complete": true,
+      "dataLoss": false,
+      "events": 747,
+      "hitCount": 6,
+      "misses": {
+        "OUT_OF_REACH": 1
+      },
+      "firstHitAfterInputMs": 2995.331174,
+      "allHitsInsideDeclaredNativeWindow": true,
+      "hostTicks": 330,
+      "simulationTicks": 426,
+      "framePersonallyViewed": "northwatch-guard-circling",
+      "locationLimitation": "This repeat occurred outdoors at guard current patrol location, not old kitchen buffer. No matched-location speed factor or complete kitchen native acceptance claim.",
+      "semanticProgress": []
+    }
+  },
+  "methodFailures": [
+    "Private pilot inputs were mistakenly hardlinked to mutable Gradle Sync outputs; that private source was restored with independent copies. Production24 and railway23JAR inputs validated intact.",
+    "Initial new geometry test used nonexistent collisionAt; corrected to actual collision-view API before any release.",
+    "A component probe was started while its candidate JAR was being written and failed class initialization; rerun only after completed build. No live mutation.",
+    "Intermediate furniture yield selected chair top, then stairs/flowerpot wall supports. These are not final acceptance: final policy restricts endpoint to actual authored floor/public ground and excludes all chair/table/access contacts; final exact floor proof and focused gates passed.",
+    "BoundedBlockMemo direct-slot and passage-cell-cache experiment passed focused checks but did not improve the frozen clearance probe; entirely discarded, never committed/deployed. Final implementation reuses exact immutable geometry exploration instead.",
+    "Snapshot-only13diagnostic missed failing task created in WAL; corrected to replay exact retained snapshot plus75transactions. Fixed probe first assumed successor worker already had an execution; vacant worker1-20 correctly hadnone, so diagnostic made optional."
+  ],
+  "limitations": [
+    "Timing profiles are evolving same-world observations, not controlled identical whole-server workloads. Stage totals are nested and not additive CPU time.",
+    "No M3 or HUMAN_CANDIDATE promotion from endpoint-only scenario; semantic progress obligations are absent from this targeted duel.",
+    "Retained historical required incident keeps diagnosticVerdict blocked; optional input waits remain visible.",
+    "First visit after release9 restart retained7.21s first hit and97simticks/368hostticks; warmed sameworld0.691s and328sim/320host. Warm combat fix does not establish elimination of startup/catchup latency.",
+    "Release16 duel passed at the guard current outdoor patrol position. The previous kitchen service-parking conflict is supported by source/trajectory/contact analysis, not a matched-location native timing comparison.",
+    "Whole test suite is not green: baseline failures are retained with exact comparison receipts; no weakened assertions or omitted failures are counted as passes.",
+    "Final resident counters describe the retained snapshot pair spanning3400 simulation ticks on release17; ordinary six HUNGRY residents are not classified as deadlocks merely for being hungry. No zero-future-failures or blanket20TPS claim."
+  ],
+  "evidenceHashes": {
+    "census-before.bin": "d4552da6910fa72577dfd2979ba2b82acad4ef27959b30c11a908ecc6791c979",
+    "census-before2.bin": "0c32f91748a0234a3d4eeaf3be77a69e93bc999edb7ec7b7c084478ec2da9989",
+    "census-after.bin": "04fdfc7a50aab0e69f1c4860ff56baaa85dfac5fcbfbeadb7c6bbd0245fc29a8",
+    "release5-census.bin": "3bcc4a3c91ac60067196c3d767f61076fa08884d6256cd18a79bf17601db4ce1",
+    "clinical-registered-fixed-snapshot.txt": "2fabfd26e650e5eaf785b0890b9c500965aa0a62941f8038eba5f8efcd741f46",
+    "registered-full-recovery.txt": "94ac1035b2e41129c5132ce7434d0c8e659a6c16b8ac25b134ecb0e2f008f545",
+    "turnover-final-probe.txt": "c1d65c3b06c9299885be9e60cf6ac49d14cb250a34f34a7ccfc89a046ba9b54d",
+    "release7-latest.bin": "39d08b8f58e6f13f65f0810913a713c9ada29c751ec247207829daa0fe177055",
+    "release7-stats.csv": "48fb0bb42bf6e33815ccdf3627ddf5513c4fcd331d8b710a5981460d7dd840f0",
+    "release7-native-combat.jsonl": "483a391423a1c84eaee4a3cd7f21e25392fa6c686379f87201ee34c0a3f40ff1",
+    "turnover-positive-probe.txt": "98708a0f5361468435bd259a3b57928824431b66e3501e8a4a1e37d3f7a4da95",
+    "body-departure-old.txt": "c06616c0b3af7c86fcdd50f1ef072b0a6798fc59ffc4378a4eece3e11bc2a0fc",
+    "body-departure-fixed.txt": "0b8adbb718b37e56bdde89a1b8e614551cdcb44e281a5e0a09bdde68bc7c7607",
+    "release6-seat-recovery.txt": "7b65a81ecefc979b0e8a72ff014ad1008ebf21b073c20fe5af5f01d2fbe6a26b",
+    "seat-fixed-prefix-probe.txt": "446a2c5d68811d1c6d2bd2870c8cda2c6046f8cc5e498b2cd026bc6caac7aaec",
+    "meal-turnover-final-floor-probe.txt": "f411dc7fb685d5b7f38fb66ab3bdfa91f1c8c85910e357d57d0b2f9092755b9f",
+    "release10-first.bin": "c4eea4b4c467cd858d81016eae4e247b2e4941bce10be5376a04accc8e19f96a",
+    "release10-live-melee.json": "ac8b964f35ec4998487b103c05bc9f6b1097b09c4da9bea0b355500c85cd6d65",
+    "release10-native-combat.jsonl": "3242e30dcec65f2cdad879976eff9df22decfb54440a531daefdad9c4fb62016",
+    "body-stored-proof-test-results.json": "dad3c598eea8a6cc15d603322ba69a4c080f25f5f2655be4746641dea8363a1b",
+    "seat-movement-baseline-comparison.json": "f8a416b330a98cf3e2594ca8846dda88db3cd01a77eaac0d062e07122fc6972b",
+    "release12-first.bin": "bbdec588758698db0eda80d959a08d882c5b5ee0ccb69f6eee5c02f325474fa1",
+    "release12-final.bin": "0e61da177031a79ebf417f47efe3f83d520d876c753a02eb8e7676ad98f790ee",
+    "release12-population-analysis.json": "6707683cb1661ce4045026136cf1d12f387e668252ccd07141985a0a8eff86f3",
+    "release12-saved-entities-after.json": "f92153ba11128223f04f7d660e43c2048cb531bcf5542653cc9abca9b4d3dfc8",
+    "release12-live-melee.json": "7fc0b84bb187827edd2f98f7a8fe64473e48d2f56aaf3b7cd06fa07cb9b6f9cf",
+    "clearance-frontier-comparison.json": "969460d780c80bbbf812e08b0d072fd611c9ab626614260f07d381cdef8ea038",
+    "clearance-frontier-tests.json": "445f204bdd869cdbd97edb8622516cefb192bd456cdeb4db7aecc8047165cda0",
+    "release12-latency.jfr": "5f719b08d4377e4355dea76f95d62b7e9691b9aab81ea2c899e3dedadad82a58",
+    "release12-before-stop-performance.txt": "e57ff38807756a8b7b8e75ab7621fc2caeb0e934b505e496fbbca11d199131fd",
+    "work-admission-old-prefix.txt": "9352fdb3f1c153afb79671e16518669c8dd7a7ad4de44c6689178e8d2467269b",
+    "work-admission-fixed-prefix.txt": "e80ca88a4b30fa133dd8eca8723c34f36b65682a99163c3d6ed191a810d2d439",
+    "work-admission-production-baseline.json": "f9fe99b2a5499d6cbdbf7e7bf5aa5b0bc79e41f4a3a1da8861bf59b3f25badda",
+    "release12-native-combat.jsonl": "b9d2c62e09505299feee154dd800e1f910a1166829522b6bc749925b402bdd67",
+    "release13-stopped.bin": "39d0b70a56e3e0d7c3b285df3dfa2f49705d5d03c031ba25d4b18b465ddbec60",
+    "release14-standing-dining-closure.txt": "b262679c6f55e70cb7b6a04543e9396a20fdeb3f56aab70bccf01184382747f0",
+    "release14-retired-passenger-closure.txt": "e5bea912b2cadc3e016d5de40861e5add68c8d7d642aaa2d3b6541b8ea15e862",
+    "release14-final.bin": "29980700167afd5d236e6a62ed5d49afaacfa7e85844caa55c02e7f6d469ceed",
+    "release14-native-combat.jsonl": "ce430529265a68c0911772ba32e78ee1387545ee51b1347664986fc4cae30020",
+    "meal-admission-old-prefix.txt": "07ec39dc29c96e28de50134548bc2e42feddcb0557d6fbdf2c4f138b5a71684a",
+    "meal-admission-fixed-prefix.txt": "e086fa8dd9993f59084fdd11944bb245947a5fa42e7f242fec45a2d97f873537",
+    "release15-protective-stop.log": "f2e6968a232f9e9cecc6439a2c4fd3bc1c2f62cbcbeedc69b6fc3235158f39ec",
+    "release15-group-return.txt": "ddff00510cc423ee8c0224a0f66207950e0dcb0076afe5ce74323dac887d4db6",
+    "release15-group-return-fixed.txt": "4098fd417932135c3eae8fd35d0c6facbedffd3d0f0303f7574c3430c533c994",
+    "release15-group-return-closure.txt": "d01ba7d49f5bc00db132ed28810ed4a89250949a49e03d1581e38eecde9c2b67",
+    "release16-native-combat.jsonl": "19cfd268dd83b8b3c7c0604b3cd880f1c39b7c9751e609bb507fca3572b3b034",
+    "release16-final.bin": "a341b5ffaba5932597b329952031c6226c049f9224d1e306022ade3f85d0497d",
+    "release16-combat-statistics.json": "e0c7386829a206647b6144972243b50bb7fe87c8492aff942a5da9950480613b",
+    "release17-first.bin": "74498c9c8168eb8e6e2889d5ba94d8c48ffb1d69f96a7763f64411c0f733f363",
+    "release17-final.bin": "05f306ef8bd503b02093c22f2a4d5172ec8dd78d9abfbd130a9767b2ff4fb9cd",
+    "release17-population-analysis.json": "93fcff5a708b3cbfac22bb8f061a39f077331f0902d702ed6eade594042e4fd6",
+    "release17-final-summary.json": "68b796036eaf741f9e16da79cd4852328efff2ceaf7a54875b754666b5605d33",
+    "release17-final-why.json": "07206c82a59b3600d13b69b55209d2700468b270d687470c211a6bdb0a10eb1a",
+    "release17-final-performance.json": "cef0eb93308904959de73715e33d25cc155fccddac6750c28bf935eceac18b57",
+    "release17-guide-terminal-check.json": "46b6a7119693f0c6ffe337b6545c12f6d333c2457f61166507caaad4eed07dcf"
+  },
+  "sameInputBodyDeparture": {
+    "snapshot": "release7-latest.bin",
+    "old": "body-departure-old.txt",
+    "fixed": "body-departure-fixed.txt",
+    "result": "Exact retained clinicalcurrent22/guardcontinuation21 checkpoint failsold. Fixed unload frees custody preserving health/inventory/executions/goal, no claimed arrival."
+  },
+  "profiles": {
+    "release7": {
+      "jfr": "release7-live-3890051.jfr",
+      "durationSeconds": 120,
+      "stats": "release7-stats.csv",
+      "meleePhysicalInvocations": 2244,
+      "meleeGapMs": {
+        "p50": 50.017,
+        "p95": 99.768,
+        "p99": 331.233,
+        "max": 962.614
+      },
+      "meleeOwnDurationMs": {
+        "p50": 0.014,
+        "p95": 0.367,
+        "p99": 2.689,
+        "max": 24.512
+      },
+      "scope": "Evolving sameworld final parking repair, before later guard/body checkpoint fixes. No repeated9–31second gap in this capture; no blanket latency bound."
+    },
+    "release9": {
+      "jfr": "release9-live-4113720.jfr",
+      "durationSeconds": 120,
+      "stats": "release9-stats.csv",
+      "meleeGapMs": {
+        "p50": 50.048,
+        "p95": 143.866,
+        "p99": 450.064,
+        "max": 1299.588
+      },
+      "scope": "First visit/catchup included; not a20TPS guarantee. Planned worker partial profile release9-partial-planner.txt; later read-only performance had pendingOrdinaryTicks0/ready0."
+    },
+    "release12": {
+      "jfr": "release12-latency.jfr",
+      "durationSeconds": 120,
+      "stats": "release12-stats.csv",
+      "meleeGapMs": {
+        "p50": 79.59,
+        "p95": 160.324,
+        "p99": 343.461,
+        "max": 1078.6
+      },
+      "finding": "Scheduled-preparation CPU dominated repeat KnownLocalAccess opportunity4096walking expansions. pendingOrdinaryTicks7147 at234875, then0 at258469 before restart; an episodic catchup/burst, not a permanent stopped thread. Final73bd cache correction stillpendinglive13."
+    }
+  },
+  "sameInputSeatClearance": {
+    "snapshot": "final-after.bin",
+    "logs": [
+      "meal-turnover-final-floor-probe.txt"
+    ],
+    "result": "Actual registered reviewer emits normal movement; incumbents1-2/1-7 vacate onto FOUNDATIONAL supports (-1438,64,-1416),(-1439,64,-1416). Each exact meal terminal after2movement+5mealsteps; actual food quantity-1, unchanged health. Older chairtop/flowerpot proposals are failed intermediates, not acceptance."
+  },
+  "savedPassengerRecovery": {
+    "status": "LIVE_RECOVERED",
+    "source": "df8c1da51",
+    "finding": "No-load raw NBT census:23columns36entities. Leon resident:1-5 same UUID at epoch10/residence16 root and retiredepoch8/residence10 passenger of pale_mirror:resident_seat, samecolumn[-91,-89]. Canceled native join left rejected passenger attached to accepted root, so ordinary native save serialized it again. Strict unique map also blocked return fencing before deserialization.",
+    "fix": "Positive UUID presence may publish monotonic return fence even with duplicates; strict census/snapshot uniqueness unchanged. Common body owner detaches/discards only exactknownresidence retired BODY incarnation (complete identity/kind/tombstone/disposition). Ordinary native load/save performs cleanup, no raw world edit.",
+    "checks": {
+      "focusedJvm": 30,
+      "failures": 0,
+      "guardrails": "PASS",
+      "package": "PASS",
+      "negative": "current/future/foreign/unknown residence denied; duplicate cannot grant COLD proof; malformed UUID rejected; storedimage unchanged by presence scan"
+    },
+    "evidence": [
+      "release11-saved-entity-audit.json",
+      "/tmp/pm-resident-retired-seat-tests-final.log"
+    ],
+    "live": {
+      "release12DuplicateCountAfterOrdinaryLoadSave": 0,
+      "invalidColumnsAfter": 0,
+      "leonSavedDeparture": true,
+      "leonLifeDiagnostic": "NOURISHED,mealNONE,clinicalNONE,Cold[],terminalmealprogressobligation",
+      "worldReset": false
+    }
+  },
+  "workAdmissionRecovery": {
+    "source": "a2c345e9c",
+    "status": "VERIFIED_PENDING_LIVE14",
+    "failure": "Release13 protected stop at261602: task:settlement-1-settlement_maintain_equipment-650 chose resident1-21 LEISUREgeneration73 seated with familycheckpointfalse. mayAdmitVacant onlycheckedRELEASEpolicy whileprepareVacant checkedactualowner/effect readiness.",
+    "fix": "Read-only vacant admission validates exact current owner checkpoint and shared physical effect fence, matching actual release. Family internals remain in capability.",
+    "sameInput": "Exact stopped native store, snapshot1268230 plus75WAL records replayed to1268305/t261602. Old registered planner chooses21 then reducer fails; fixed chooses resident1-20 Cold[], commits and preserves21execution andseat.",
+    "evidence": [
+      "work-admission-old-prefix.txt",
+      "work-admission-fixed-prefix.txt",
+      "release13-recovery"
+    ],
+    "verification": {
+      "focused": 36,
+      "passed": 36,
+      "guardrails": "PASS",
+      "package": "PASS",
+      "productionNeighbors": {
+        "total": 33,
+        "passed": 32,
+        "failed": 1,
+        "identicalOnBaseline73bd9b475": "ProductionBodyContinuationTest.observedDepartureSurvivesRecoveryAndRejoinsWithoutAwardingWork, expectedz-359 actual-360",
+        "comparison": "work-admission-production-baseline.json"
+      }
+    }
+  },
+  "diningAndCombatFollowup": {
+    "standingDining": {
+      "snapshot": "release14-first.bin",
+      "residents": [
+        "10-19",
+        "10-2",
+        "10-20",
+        "10-21",
+        "10-22",
+        "10-26",
+        "10-5",
+        "10-8"
+      ],
+      "cause": "All six contacts actually occupied by fed idle residents until next schedule window. No addressed turnover for DiningArea. New request uses existing review and ServiceExit.",
+      "probe": "release14-standing-dining-closure.txt",
+      "result": "All eight terminal, actual food delta -8. Only emitted addressed reviews processed; no direct food/body outcome mutation."
+    },
+    "retiredPassenger": {
+      "resident": "1-1",
+      "snapshot": "release14-final.bin",
+      "ageTicks": 28112,
+      "cause": "SEATED logical reservation retained after actual retired passenger feet captured in chair cell; MOVE_TO_DINING could not walk out of chair. COLD lacked native owner seatAction EXIT equivalent.",
+      "probe": "release14-retired-passenger-closure.txt",
+      "result": "ordinary seat EXIT then meal completes on exact input; focused regression consumes original portion once."
+    },
+    "nativeCombat14": {
+      "manifest": "release14-live-melee.json",
+      "capture": "release14-native-combat.jsonl",
+      "status": "FAILED",
+      "firstDecisionSeconds": 0.32,
+      "firstHitSeconds": 16.481575797,
+      "cause": "Stationary GUARD lease invokes optional service parking across kitchen idle buffer (-1448..-1455), repeatedly walking away from player. Native clearance lacked current activity safety checkpoint.",
+      "remaining": "Release16 unchanged checked-in duel/circling scenario PASS outdoors,6 native hits; kitchen-specific matched-location comparison not claimed."
+    },
+    "verification": {
+      "log": "/tmp/pm-resident-release15-tests.log",
+      "seatedLog": "/tmp/pm-resident-release15-seated-tests.log",
+      "guardrails": "PASS",
+      "package": "PASS",
+      "newTests": "standing area addressed turnover; retired passenger stand-up and exact consumption; assigned guard checkpoint false before mission projection"
+    },
+    "additionalKnownDebt": {
+      "test": "SingleHotNavigationArchitectureTest.productionCallersCannotUseTheLegacyTargetActuator",
+      "failure": "FrontierV3RestPlaceExecutor.getNavigation().stop bypasses owner",
+      "baseline": "Exact source file unchanged from a2c345e9c; assertion is a source scan, deterministic baseline violation. Retained, not suppressed."
+    },
+    "release15": "POSTVERIFY_PASS_THEN_PROTECTIVE_STOP294377; fixed by4f864f71a, same-world16 advanced past failure"
+  },
+  "postReleaseComposition": {
+    "failureSource": "f7bca4e95012fa9325d51e64c19ad84f85782486",
+    "stopTick": 294377,
+    "prefixRevision": 1497409,
+    "snapshotRevision": 1496206,
+    "walTransactions": 1203,
+    "oldProbe": "meal-admission-old-prefix.txt",
+    "newProbe": "meal-admission-fixed-prefix.txt",
+    "result": "Same registered scheduled action now frees LEISURE73 rest_2, closes routine, admits MEAL74 dining_2; no food consumption or arrival at admission.",
+    "verification": "47 affected neighbors pass; corrected new fixture passes; stale-callback rejection passes before callback invocation; guardrails/package PASS",
+    "live16": "same world advanced past failure, no new incident; retained incident occurrences5,last1497409"
+  },
+  "groupReturnRecovery": {
+    "resident": "resident:3-9",
+    "snapshot": "release15-first.bin",
+    "oldProbe": "release15-group-return.txt",
+    "cause": "READY aborted transport, RETURNING without supplies; human at395,63,-1345 fits VILLAGER but not enclosing DONKEY footprint. Farthest member chosen as shared origin made route isolated. Pack already at home rendezvous444,63,-1339.",
+    "newProbe": "release15-group-return-fixed.txt",
+    "closureProbe": "release15-group-return-closure.txt",
+    "result": "Shared route starts at actual pack contact; guide follows shared movement using own profile. Group CLOSED, mission COMPLETE, inventory unchanged through return; original starving guide then consumes actual food and becomes NOURISHED1000.",
+    "checks": {
+      "count": 24,
+      "passed": 23,
+      "baselineIdenticalFailure": "GroupMovementObservationTest.coincidentColdMembersHaveConnectedBirthSpaceWithoutChangingTheirJourneyOrCargo: body placement is outside a declared service zone",
+      "baseline": "4f864f71a",
+      "comparison": "group-return-baseline-comparison.json",
+      "guardrails": "PASS",
+      "package": "PASS"
+    },
+    "remaining": "Closed in same-world release17: resident3-9 returns through ordinary movement, eats actual meal, NOURISHED, GROUP_MEMBER admission retired; no world reset or direct canonical mutation."
+  },
+  "currentDeployment": {
+    "source": "/home/rd/proj/pm-resident-cadence-release17-20261108/pale-mirror",
+    "artifact": "/home/rd/proj/pm-resident-cadence-release17-20261108/pale-mirror/pale-mirror-neoforge/build/libs/pale_mirror-0.3.0-SNAPSHOT.jar",
+    "sha512": "b51bf8e3fe8956bd83b61304a781e4b4f77a731a692e5ca68605316f11a98fb60c6f0e7a3bc69962f254806d92c5f20d05a91b49fa24f495fcf80d30bc9be831",
+    "ref": "6391187f5a6ce5c8c6cf6fc9665fae2faff865fd",
+    "target": "/home/rd/far-frontier-server",
+    "world": "northwatch-leisure-seed139-20261108",
+    "java": "/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java",
+    "oldJavaPids": [
+      937060
+    ],
+    "notBefore": 1794151022,
+    "wrapperPid": 1096560,
+    "javaPid": 1096584,
+    "invocation": "a97a524519c1477ab9cdfe751473277b",
+    "stage": "POSTVERIFY_PASS_AND_POPULATION_RECOVERY_CONFIRMED",
+    "preflight": "/tmp/pm-resident-cadence-release17-preflight.log",
+    "build": "/tmp/pm-resident-cadence-release17-build.log",
+    "postverify": "/tmp/pm-resident-cadence-release17-verify.log",
+    "sameWorld": true,
+    "reset": false,
+    "historicalRequired": {
+      "firstRevision": 14991,
+      "lastRevision": 1497409,
+      "occurrences": 5
+    },
+    "newQuarantineSinceSource4f864f71a": false,
+    "finalSummary": "release17-final-summary.json",
+    "finalPerformance": "release17-final-performance.json",
+    "finalWhy": "release17-final-why.json",
+    "pendingOrdinaryTicks": 0,
+    "auditReadyWithoutWake": 0,
+    "observedThroughInstant": 308503
+  }
+}
