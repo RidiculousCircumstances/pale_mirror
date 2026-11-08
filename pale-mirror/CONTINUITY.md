@@ -1,6 +1,24 @@
 # Active continuity — 2026-11-09
 
-Latest user order: research crafting/resource costs, especially bread productivity.
+Current design direction (user2026-11-09): upcoming actual worldgen biomes must
+produce natural agricultural territories, settlement specialization and substantial
+fields sized to served population including exports. User likes the full Create
+bread chain, with manual versus automated operation eventually determined by
+settlement development; asks how to configure it NOW. No implementation requested
+in this question. Proposed baseline: manual milling/kneading, fuelled baking,
+approved3wheat->1bread and2bread/daily meal; one shared physical material chain
+across later technology providers. Field area from daily grain demand * growth
+period / yield, not decorative acreage. Illustrative30served:180grain/day,
+4daygrowth/yield1=>720productive cells (paths/irrigation/fallow extra);90served
+=>2160cells. These growth/yield/labour values are proposals, not approved or live.
+Current CultivationRules maximumCells1024 is a settlement total (CultivationPlanning
+subtracts existing area); exporting field scale will require explicit bounded
+capacity/performance work. Existing field/batch scheduling should be reused;
+no per-tick whole-field scans or permanent worker per plant. Prefer future
+mechanization benefits in labour/throughput while preserving agreed material
+policy; existing Create recipes still require explicit reconciliation.
+
+Previous research order: crafting/resource costs, especially bread productivity.
 RESEARCH COMPLETE; recipes, source and runtime unchanged. Main alone, no agents/push.
 Report `docs/research/resource-cost-balance-20261108.md` plus adjacent JSON; evidence
 IMPL/build/resource-cost-audit-20261108, frozen124384/t49000/r38.334alive,
