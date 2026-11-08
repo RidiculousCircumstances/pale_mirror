@@ -7,12 +7,12 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
-public sealed interface ActorMovementContext permits ActorMovementContext.RoutineLeg, ActorMovementContext.MealEntrance, ActorMovementContext.ClinicalLeg, ActorMovementContext.ServiceExit,
+public sealed interface ActorMovementContext permits ActorMovementContext.SeatClearance, ActorMovementContext.RoutineLeg, ActorMovementContext.MealEntrance, ActorMovementContext.ClinicalLeg, ActorMovementContext.ServiceExit,
         ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
         ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg, ActorMovementContext.StationWorkLeg,
             ActorMovementContext.GuardEquipment, ActorMovementContext.GuardMissionLeg, ActorMovementContext.EvasionLeg, ActorMovementContext.CombatManeuverLeg {
-    enum Provider { RESIDENT_ROUTINE, MEAL_ENTRANCE, SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION, EVASION, COMBAT_MANEUVER, CLINICAL }
+    enum Provider { SEAT_CLEARANCE, RESIDENT_ROUTINE, MEAL_ENTRANCE, SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY, STATION_WORK, GUARD_EQUIPMENT, GUARD_MISSION, EVASION, COMBAT_MANEUVER, CLINICAL }
     Provider provider();
     /** A producer's retained entrance journey; distance cannot revoke this exact live turn. */
     default java.util.Optional<ServiceAccessDemand.Identity> entranceClaim(ActorMovement movement) { return java.util.Optional.empty(); }
@@ -254,6 +254,22 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Routin
             if (transfer == null || transfer.pending().isPresent() || !transfer.execution().equals(movement.executionId())
                     || !transfer.order(mission.id(), mission.revision()).movementOrder().equals(movement.order()))
                 throw new IllegalArgumentException("replenishment movement lost its retained stock instruction");
+        }
+    }
+    record SeatClearance(SubjectId home, io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id seat) implements ActorMovementContext {
+        public SeatClearance { Objects.requireNonNull(home); Objects.requireNonNull(seat); }
+        public Provider provider() { return Provider.SEAT_CLEARANCE; }
+        public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
+        public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.RESIDENTS.at(movement.order().actorId()));
+        }
+        public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
+            SeatAccessClearance.place(refs.bootstrap(), home, seat);
+            if (movement.executionId().activityKind() != ActorActivityKind.SERVICE_EXIT
+                    || !movement.order().ownerId().equals(movement.order().actorId())
+                    || refs.people().resident(movement.order().actorId()) == null
+                    || movement.order().capability() != TraversalCapability.PEDESTRIAN)
+                throw new IllegalArgumentException("seat clearance lost its declared resident/seat movement");
         }
     }
     record ServiceExit(ServicePointId point) implements ActorMovementContext {

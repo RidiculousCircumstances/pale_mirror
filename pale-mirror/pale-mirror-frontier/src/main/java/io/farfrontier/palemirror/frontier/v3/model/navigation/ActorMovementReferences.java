@@ -18,13 +18,13 @@ import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteStat
 import java.util.Objects;
 
 /** Immutable aggregate inputs during hydration; never an alternative movement authority. */
-public record ActorMovementReferences(HumanPopulation people, ExactInventory inventory, ShipmentState shipments,
+public record ActorMovementReferences(FrontierBootstrap bootstrap, HumanPopulation people, ExactInventory inventory, ShipmentState shipments,
                                      UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,
                                      ForestState forest, Map<SubjectId, ProductionJob> productionJobs,
                                      Map<SubjectId, ActorLocation> actors,
                                      ActorExecutionState executions, io.farfrontier.palemirror.frontier.v3.model.combat.CombatState combat, io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutineState routines) {
     public ActorMovementReferences {
-        Objects.requireNonNull(people); Objects.requireNonNull(inventory); Objects.requireNonNull(shipments);
+        Objects.requireNonNull(bootstrap); Objects.requireNonNull(people); Objects.requireNonNull(inventory); Objects.requireNonNull(shipments);
         Objects.requireNonNull(groups); Objects.requireNonNull(extractionSites);
         Objects.requireNonNull(strategicPlans);
         Objects.requireNonNull(forest); Objects.requireNonNull(productionJobs);

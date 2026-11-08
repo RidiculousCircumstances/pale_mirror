@@ -136,8 +136,13 @@ public final class ResidentMealProcess {
             long retryAt = meal.coldTravel().filter(travel -> firstKnownBarrier(state, travel) < 0
                             && !travel.arrivedBy(now))
                     .map(TimedKnownRoute::arrivalTick).orElse(Math.addExact(now, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge()));
-            return List.of(new ProposedEvent(meal.residentId(),
-                    new ScheduleEffect.Rescheduled(action.id(), progress(meal, retryAt))));
+            var waiting = new java.util.ArrayList<ProposedEvent>();
+            if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING)
+                ResidentMealSeating.use(state, meal).ifPresent(use -> SeatAccessClearance.occupants(state, use).stream()
+                        .filter(actor -> ResidentServiceTurnover.mayPlan(state, actor, now))
+                        .forEach(actor -> waiting.add(ResidentActivityProcess.wakeAfterActivity(actor, now))));
+            waiting.add(new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(), progress(meal, retryAt))));
+            return List.copyOf(waiting);
         }
         List<ProposedEvent> events = new java.util.ArrayList<>();
         if (meal.phase() == ResidentMeal.Phase.CONSUME)

@@ -9,7 +9,7 @@ import java.util.Map;
 /** Closed declaration-based dispatch; purpose is never discovered from an ID or job lookup. */
 public final class ActorMovementProviders {
     private static final Map<ActorMovementContext.Provider, ActorMovementProvider> PORTS = registry(
-            List.of(new RoutineMovementProvider(),new MealEntranceMovementProvider(),new CombatManeuverMovementProvider(),new EvasionMovementProvider(),new ServiceExitMovementProvider(),
+            List.of(new SeatClearanceMovementProvider(),new RoutineMovementProvider(),new MealEntranceMovementProvider(),new CombatManeuverMovementProvider(),new EvasionMovementProvider(),new ServiceExitMovementProvider(),
                  new ShipmentMovementProvider(), new GroupMovementProvider(), new ExpeditionSupplyMovementProvider(),
                  new ExtractionMovementProvider(),
                 new DefenderEquipmentReturnMovementProvider(),

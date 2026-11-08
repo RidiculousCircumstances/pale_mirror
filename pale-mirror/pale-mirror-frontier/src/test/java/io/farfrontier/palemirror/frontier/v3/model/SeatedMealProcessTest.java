@@ -20,6 +20,63 @@ class SeatedMealProcessTest {
         var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home.id());
         return AutomaticStationProductionTest.supply(state, state.inventory().containers().get(pantry), "minecraft:bread", 64, "seated-meal");
     }
+    @Test void reservedMealWakesItsIdleObstructionAndOrdinaryMovementVacatesAccessWithoutInventingFood() {
+        var state = prepared(); var home = state.bootstrap().settlements().getFirst();
+        var eater = home.residents().getFirst().id(); var blocker = home.residents().get(1).id();
+        state = state.withHumanPopulation(state.humanPopulation().accrueHunger(eater, START));
+        var started = ResidentMealProcess.selectSourceAtYield(state, eater, START).orElseThrow();
+        state = ResidentMealProcess.reduceStarted(state, eater, started);
+        var driver = new ModelEventDriver(); long tick = START;
+        for (int step = 0; state.humanPopulation().meals().get(eater).phase() != ResidentMeal.Phase.MOVE_TO_DINING && step < 100; step++) {
+            var meal = state.humanPopulation().meals().get(eater);
+            tick = Math.max(tick + 1, meal.coldTravel().map(t -> t.arrivalTick()).orElse(tick + 1));
+            state = driver.apply(state, FrontierWorldRuntimeDefinition.planScheduled(state, ResidentMealProcess.progress(meal, tick), new SimInstant(tick)), tick);
+        }
+        var meal = state.humanPopulation().meals().get(eater); assertEquals(ResidentMeal.Phase.MOVE_TO_DINING, meal.phase());
+        var use = ResidentMealSeating.use(state, meal).orElseThrow();
+        // Explicit fixture: a previously fed idle resident stands at the selected chair's approach.
+        state = state.withHumanPopulation(state.humanPopulation().consumeResidentFood(blocker, tick, 1000, state.bootstrap().ruleset().residentLife()));
+        state = state.withActorBody(blocker, use.place().approach().standingBody());
+        assertEquals(ResidentActivityChoice.Kind.IDLE, ResidentActivityCoordinator.assess(state, blocker, tick).kind());
+        var inventory = state.inventory(); var health = state.actorLocations().get(blocker).condition().health();
+        assertTrue(ResidentMealProcess.planColdStep(state, eater, tick).isEmpty());
+        var waits = FrontierWorldRuntimeDefinition.planScheduled(state, ResidentMealProcess.progress(meal, ++tick), new SimInstant(tick));
+        assertTrue(waits.stream().anyMatch(e -> e.subject().equals(blocker) && e.payload() instanceof ScheduleEffect.Rescheduled));
+        var clearing = FrontierWorldRuntimeDefinition.planScheduled(state, ResidentActivityProcess.review(blocker, tick), new SimInstant(tick));
+        state = driver.apply(state, clearing, tick);
+        var movement = state.actorMovements().get(blocker); assertNotNull(movement);
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.SeatClearance.class, movement.context());
+        var admitted = state;
+        assertTrue(movement.order().legalStations().stream().noneMatch(p -> SeatAccessClearance.furnitureContact(admitted, p)));
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        var provider = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement);
+        var route = provider.route(state, movement, state.actorLocations().get(blocker).supportingSurface());
+        var damaged = state.recordPhysicalDelta(new PhysicalDelta(route.getLast().support().offset(0, 1, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:blocked-seat-clearance"));
+        assertThrows(RuntimeException.class, () -> provider.requireRoute(damaged, movement, route));
+        assertEquals(inventory, state.inventory()); assertEquals(health, state.actorLocations().get(blocker).condition().health());
+        var forged = new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(movement.order(), movement.issuedAtTick(),
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.SeatClearance(new SubjectId("settlement:missing"), use.place().id()), movement.executionId());
+        var running = state; assertThrows(IllegalArgumentException.class, () -> provider.validate(running, forged));
+        for (int step = 0; state.actorMovements().containsKey(blocker) && step < 20; step++) {
+            var current = state.actorMovements().get(blocker);
+            tick = Math.max(tick + 1, current.coldTravel().map(t -> t.arrivalTick()).orElse(tick + 1));
+            state = driver.apply(state, FrontierWorldRuntimeDefinition.planScheduled(state, ActorMovementProcess.progress(current, tick), new SimInstant(tick)), tick);
+        }
+        assertFalse(state.actorMovements().containsKey(blocker));
+        assertNotEquals(use.place().approach(), state.actorLocations().get(blocker).supportingSurface());
+        assertEquals(inventory, state.inventory(), "yielding grants no food transfer, wear or meal outcome");
+        assertEquals(health, state.actorLocations().get(blocker).condition().health());
+        for (int step = 0; state.humanPopulation().meals().containsKey(eater) && step < 30; step++) {
+            var current = state.humanPopulation().meals().get(eater);
+            tick = Math.max(tick + 200, current.coldTravel().map(t -> t.arrivalTick()).orElse(tick + 200));
+            state = driver.apply(state, FrontierWorldRuntimeDefinition.planScheduled(state, ResidentMealProcess.progress(current, tick), new SimInstant(tick)), tick);
+        }
+        assertFalse(state.humanPopulation().meals().containsKey(eater));
+        assertEquals(inventory.fungibleResources().totalQuantity(home.id(), "minecraft:bread") - meal.portion().quantity(),
+                state.inventory().fungibleResources().totalQuantity(home.id(), "minecraft:bread"));
+        assertEquals(state, codec.decode(codec.encode(state)));
+    }
     @Test void allSixAuthoredPlacesHaveExclusiveReservationsAndFailedAdmissionsDoNotPoisonTheOccupancyIndex() {
         var state = prepared(); var home = state.bootstrap().settlements().getFirst();
         var area = ResidentDiningPlaces.in(state, home.id()).getFirst(); var building = ResidentDiningPlaces.facility(state, home.id(), area);

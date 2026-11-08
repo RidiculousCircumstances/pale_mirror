@@ -14,7 +14,8 @@ final class ResidentServiceTurnover {
 
     /** Queue admission only; destination search belongs to the actual owner plan. */
     static boolean mayPlan(FrontierWorldState state, SubjectId actorId, long atTick) {
-        return eligiblePoint(state, actorId, atTick, true).isPresent();
+        return eligiblePoint(state, actorId, atTick, true).isPresent()
+                || eligibleSeat(state, actorId, atTick, true).isPresent();
     }
 
     private static Optional<ServiceBoundaryProvider.Declaration> eligiblePoint(FrontierWorldState state,
@@ -26,6 +27,11 @@ final class ResidentServiceTurnover {
                 || ActorExecutionCoordinator.sceneOwns(state, actorId)) return Optional.empty();
         var occupied = ServiceAccessCoordinator.turnoverPoint(state, actorId);
         if (occupied.isEmpty()) return Optional.empty();
+        return mayYield(state, actorId, atTick, eligibilityOnly) ? occupied : Optional.empty();
+    }
+
+    private static boolean mayYield(FrontierWorldState state, SubjectId actorId, long atTick, boolean eligibilityOnly) {
+        var resident = state.humanPopulation().resident(actorId);
         HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
         // A possible meal may win the actual plan; it cannot park an idle obstruction
         // merely because its clearance route has not been computed yet.
@@ -36,16 +42,26 @@ final class ResidentServiceTurnover {
                 : ResidentActivityCoordinator.assess(state, actorId, atTick).kind() == ResidentActivityChoice.Kind.IDLE;
         if (!ResidentWorkYield.assess(state, assignment).ready()
                 || !idle && !ActivityExecutionCapabilities.waitingForServiceResource(state, assignment))
-            return Optional.empty();
+            return false;
         AmbientActorLease lease = state.ambientLeases().get(actorId);
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.HOT)
-            return Optional.empty();
-        return occupied;
+            return false;
+        return true;
+    }
+
+    private static Optional<io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace> eligibleSeat(FrontierWorldState state,
+            SubjectId actor, long tick, boolean eligibilityOnly) {
+        var location = state.actorLocations().get(actor);
+        if (state.humanPopulation().resident(actor) == null || location == null || location.condition().status() != ActorLifeStatus.ALIVE
+                || state.actorMovements().containsKey(actor) || state.humanPopulation().meals().containsKey(actor)
+                || ActorExecutionCoordinator.sceneOwns(state, actor)) return Optional.empty();
+        var seat = SeatAccessClearance.requestedAt(state, actor);
+        return seat.isPresent() && mayYield(state, actor, tick, eligibilityOnly) ? seat : Optional.empty();
     }
 
     static Optional<ActorMovement> select(FrontierWorldState state, SubjectId actorId, long atTick) {
         var occupied = eligiblePoint(state, actorId, atTick, false);
-        if (occupied.isEmpty()) return Optional.empty();
+        if (occupied.isEmpty()) return selectSeat(state, actorId, atTick);
         var actor = state.actorLocations().get(actorId);
         var point = occupied.orElseThrow();
         var clearance = ServiceClearanceRoutes.fromService(state, actorId, actor.supportingSurface(), point.identity());
@@ -60,6 +76,27 @@ final class ResidentServiceTurnover {
                         Math.addExact(atTick, 1L), List.of(destination), TraversalCapability.PEDESTRIAN,
                         MovementOrder.ArrivalPolicy.EXACT_STATION), atTick,
                         new ActorMovementContext.ServiceExit(point.identity()),
+                        state.actorExecutions().next(actorId, ActorActivityKind.SERVICE_EXIT, actorId)))
+                .or(() -> selectSeat(state, actorId, atTick));
+    }
+    private static Optional<ActorMovement> selectSeat(FrontierWorldState state, SubjectId actorId, long tick) {
+        var seat = eligibleSeat(state, actorId, tick, false);
+        if (seat.isEmpty()) return Optional.empty();
+        var start = state.actorLocations().get(actorId).supportingSurface();
+        var place = seat.orElseThrow();
+        var clearance = ServiceClearanceRoutes.from(state, actorId, start);
+        var excluded = ServiceDestinationClaims.excludedFor(state, actorId);
+        var available = ServiceAccessCoordinator.transientDestinations(state, actorId);
+        return KnownLocalAccess.opportunity(clearance.knowledge().geometry(), start, 32,
+                surface -> !surface.equals(place.approach()) && !surface.equals(place.egress())
+                        && available.test(surface) && !SeatAccessClearance.furnitureContact(state, surface)
+                        && SeatAccessClearance.parkingFloor(state, place, surface)
+                        && ServiceAreaDestinations.hasStandingClearance(surface, excluded), clearance::allowsLocal)
+                .map(receipt -> receipt.route().getLast())
+                .map(destination -> new ActorMovement(new MovementOrder(actorId, actorId, 0L, Math.addExact(tick, 1L), List.of(destination),
+                        TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION), tick,
+                        new ActorMovementContext.SeatClearance(place.home(), place.id()),
                         state.actorExecutions().next(actorId, ActorActivityKind.SERVICE_EXIT, actorId)));
     }
+
 }

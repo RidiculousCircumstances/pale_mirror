@@ -67,9 +67,7 @@ public final class ServiceClearanceRoutes {
         if (firstPublic > 0 && !departure.traversable(route.subList(0, firstPublic + 1))) return false;
         var continuation = route.subList(firstPublic, route.size());
         if (!publicGeometry.traversable(continuation)) return false;
-        var touched = new java.util.TreeMap<SubjectId, ServiceBoundaryProvider.Declaration>();
-        for (var surface : route) for (var declaration : nearby.getOrDefault(
-                new TerrainColumn(surface.x(), surface.z()), List.of())) touched.put(declaration.pointId(), declaration);
+        var touched = touched(route);
         for (var point : touched.values()) {
             var boundary = point.boundary();
             // An unused service envelope is ordinary transit, never inventory authority.
@@ -89,4 +87,19 @@ public final class ServiceClearanceRoutes {
         }
         return true;
     }
+    /** A short courtesy step can remain in a declared room, but cannot enter or re-enter a demanded throat. */
+    public boolean allowsLocal(List<SurfaceAnchor> route) {
+        if (route.isEmpty() || !route.getFirst().equals(origin) || !departure.traversable(route)) return false;
+        for (var point : touched(route).values())
+            if ((demanded(point.pointId()) || point.boundary().occupied(origin.standingBody()))
+                    && !point.boundary().allowsWaitingRoute(route)) return false;
+        return true;
+    }
+    private java.util.Map<SubjectId, ServiceBoundaryProvider.Declaration> touched(List<SurfaceAnchor> route) {
+        var touched = new java.util.TreeMap<SubjectId, ServiceBoundaryProvider.Declaration>();
+        for (var surface : route) for (var declaration : nearby.getOrDefault(
+                new TerrainColumn(surface.x(), surface.z()), List.of())) touched.put(declaration.pointId(), declaration);
+        return touched;
+    }
+
 }

@@ -41,6 +41,12 @@ final class ActorMovementStateCodec {
             output.writeLong(movement.issuedAtTick());
             ActorExecutionStateCodec.writeId(output, movement.executionId());
             switch (movement.context()) {
+                case ActorMovementContext.SeatClearance exit -> {
+                    output.writeByte(18);
+                    FrontierWorldStateCodec.writeString(output, exit.home().value());
+                    FrontierWorldStateCodec.writeString(output, exit.seat().buildingId().value());
+                    FrontierWorldStateCodec.writeString(output, exit.seat().localId());
+                }
                 case ActorMovementContext.RoutineLeg leg -> { output.writeByte(17); output.writeLong(leg.sequence()); }
                 case ActorMovementContext.MealEntrance leg -> { output.writeByte(16); FrontierWorldStateCodec.writeString(output, leg.pointId().value()); }
                 case ActorMovementContext.ClinicalLeg leg -> {output.writeByte(15);FrontierWorldStateCodec.writeString(output,leg.taskId().value());output.writeLong(leg.revision());}
@@ -119,6 +125,8 @@ final class ActorMovementStateCodec {
             long issuedAt = input.readLong();
             var executionId = ActorExecutionStateCodec.readId(input);
             ActorMovementContext context = switch (input.readUnsignedByte()) {
+                case 18 -> new ActorMovementContext.SeatClearance(new SubjectId(FrontierWorldStateCodec.readString(input)),
+                        new io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id(new SubjectId(FrontierWorldStateCodec.readString(input)), FrontierWorldStateCodec.readString(input)));
                 case 17 -> new ActorMovementContext.RoutineLeg(input.readLong());
                 case 16 -> new ActorMovementContext.MealEntrance(new SubjectId(FrontierWorldStateCodec.readString(input)));
                 case 14 -> new ActorMovementContext.CombatManeuverLeg(new SubjectId(FrontierWorldStateCodec.readString(input)),input.readLong());
