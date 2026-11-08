@@ -38,7 +38,12 @@ public final class UnitGroupProcess {
         if (group.members().stream().anyMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE
                 && (port.execution(state, group, member).isEmpty() || state.actorMovements().containsKey(member.actorId())))) return Optional.empty();
         var target = port.destination(state, group, ordinal);
-        var availableDeparture = group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE).max(Comparator
+        var knowledge = port.knowledge(state, group);
+        // The common route must start at an actual member whose contact fits
+        // the group's enclosing profile. Other members join with their own
+        // profiles; a guide in a narrow room is not the pack animal's origin.
+        var availableDeparture = group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(member -> knowledge.clearStation(state.actorLocations().get(member.actorId()).supportingSurface())).max(Comparator
                 .comparingLong((UnitGroup.Member member) -> distance(state.actorLocations().get(member.actorId()).supportingSurface(), target))
                 .thenComparing(UnitGroup.Member::actorId));
         if (availableDeparture.isEmpty()) return Optional.empty();
@@ -47,7 +52,6 @@ public final class UnitGroupProcess {
         var order = new MovementOrder(group.id(), departure.actorId(), ordinal, group.revision() + 1, List.of(target),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         try {
-            var knowledge = port.knowledge(state, group);
             var route = port.itinerary(state, group, ordinal)
                     .map(itinerary -> KnownRouteJoining.segment(knowledge, origin, order, itinerary))
                     .orElseGet(() -> knowledge.plannedSegment(origin, order));
@@ -69,11 +73,13 @@ public final class UnitGroupProcess {
                 && (port.execution(state, group, member).isEmpty() || state.actorMovements().containsKey(member.actorId()))))
             return new NavigationReadiness("PARTICIPANT_WAIT", "EXECUTION_NOT_AVAILABLE");
         var target = port.destination(state, group, ordinal);
-        var departure = group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE).max(Comparator
+        var knowledge = port.knowledge(state, group);
+        var departure = group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE)
+                .filter(member -> knowledge.clearStation(state.actorLocations().get(member.actorId()).supportingSurface())).max(Comparator
                 .comparingLong((UnitGroup.Member member) -> distance(state.actorLocations().get(member.actorId()).supportingSurface(), target))
                 .thenComparing(UnitGroup.Member::actorId));
         if (departure.isEmpty()) return new NavigationReadiness("PARTICIPANT_WAIT", "NO_SURVIVING_PARTICIPANTS");
-        return port.knowledge(state, group).segmentEvidence(state.actorLocations().get(departure.orElseThrow().actorId()).supportingSurface(), target)
+        return knowledge.segmentEvidence(state.actorLocations().get(departure.orElseThrow().actorId()).supportingSurface(), target)
                 .map(result -> new NavigationReadiness(result.status().name(), result.reason()))
                 .orElseGet(() -> new NavigationReadiness("NOT_REQUESTED", "NO_CURRENT_CALCULATION_EVIDENCE"));
     }
