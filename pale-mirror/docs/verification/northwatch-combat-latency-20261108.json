@@ -1,0 +1,324 @@
+{
+  "schema": 1,
+  "date": "2026-11-08",
+  "scope": "Repair the measured 9–31 second combat-stage freezes, deploy to the same Northwatch world and inspect the user rematch. Combat timing still has a separately evidenced unresolved defect.",
+  "sourceCommit": "ca5eadc85270bd97b8077f86faf50672555dc23e",
+  "scenarioFollowupCommit": "16d439326",
+  "baseline": {
+    "captures": [
+      {
+        "id": "60b15329-f6bc-453e-92e8-effc259b2fb3",
+        "events": 1996,
+        "complete": true,
+        "dataLoss": false,
+        "actor": "resident:1-16 / Nora Bell / armed",
+        "combatStageSeconds": [
+          9.8099,
+          14.3998,
+          31.4132
+        ],
+        "frameGapSeconds": [
+          9.85,
+          14.47
+        ],
+        "nativeTicksPerGap": 2
+      },
+      {
+        "id": "4911edc4-27a3-4286-bdfe-96ef6f6500a5",
+        "events": 613,
+        "complete": true,
+        "dataLoss": false,
+        "frameGapSeconds": 9.1035,
+        "nativeTicksPerGap": 2
+      }
+    ],
+    "analysis": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/combat-delay-20261108/armed-record-analysis.json",
+    "exactThreadDump": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/combat-delay-20261108/armed-thread-1.txt",
+    "caller": "CombatExecutor.tick -> CommandSubmission.propose -> CombatManeuverProcess.request -> MeleeManeuverPlanning.assess -> MeleeManeuvers.destination -> ServiceAccessCoordinator.transientDestinations -> StorageServiceBoundaries.geometry -> ServicePointGeometryCache -> ServiceClearanceTargets.egressRegion -> KnownBlockSurfaceOverlay.surfacesAt",
+    "rootCause": "Transient destination predicate built full waiting/egress geometry before checking actual service demands and for waiting-area columns that cannot be immediate exits.",
+    "jfrLimit": "1376 server CPU samples, 1002 truncated at configured depth64. Full exact thread dump supplies the caller; absence of deeper CPU names is not absence evidence."
+  },
+  "change": {
+    "files": [
+      "ServiceAccessCoordinator.java",
+      "ServiceClearanceTargets.java"
+    ],
+    "behavior": "Retain claims and occupied-boundary exclusions, then reject impossible egress columns and absent actual demand before the existing complete geometry check. Cardinal column broadphase is a negative proof only, with no height exclusion or permission shortcut. No new navigator, thread, deadline, owner or schema."
+  },
+  "verification": {
+    "focused": "PASS71: ServiceAccessCapabilities9, ServicePointGeometryCache3, SettlementSecurity35, ResidentRoutine7, SeatedLeisure7, Architecture10; /tmp/pm-combat-transient-gate.log",
+    "negative": "An unclaimed true immediate exit of an active service remains excluded; real and elevated egress columns survive broadphase.",
+    "guardrailsAndPackage": "PASS in the same gate log",
+    "cleanDetachedBuild": "PASS /tmp/pm-combat-transient-detached.log; tested and detached JAR entry differences only META-INF/pale-mirror-runtime-identity.properties",
+    "limits": "NeoForge test task excluded from detached packaging due separately classified existing baseline debt; prior unaffected evidence reused. No blanket fresh whole-suite green claim.",
+    "finalDocumentationGuardrails": "PASS /tmp/pm-combat-latency-final-guardrails.log; guardrails completed in12s; git diff --check PASS"
+  },
+  "sameInputProbe": {
+    "snapshot": "snapshot-00000000000000155118.bin",
+    "revision": 155118,
+    "instant": 40023,
+    "snapshotSha256": "c1321da96c46fc2eade806de49f810defae40b5f4f21e4d51bec98d6113603ae",
+    "candidates": 49,
+    "answers": "1111111111111111111111111111111111111111101111100",
+    "identicalDecisions": true,
+    "oldNanos": 1615093828,
+    "newNanos": 140593960,
+    "oldSource": "8a351e75064aaf30b8d2fe93e07f7ea6ce855b8a",
+    "newSource": "ca5eadc85270bd97b8077f86faf50672555dc23e",
+    "evidence": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/combat-delay-20261108/transient-same-input-probe.json",
+    "limits": "Single copied immutable state and input, actual clean core JARs; startup/decode excluded. Component comparison only, not an overall TPS multiplier."
+  },
+  "rematch": {
+    "capture": "4639618a-3429-4dbd-9d9d-6004ef191229",
+    "sha256": "1a6c3c9a07e4a0382611475bc1a4f2b5bad99f4297f68664b8949cfdee6b955d",
+    "start": {
+      "player": "ad89af27-6b1d-3aa4-8d65-34e196913703",
+      "playerName": "rd",
+      "positionIntervalTicks": 2,
+      "radiusBlocks": 48,
+      "maxBodies": 64,
+      "worldDirectory": "northwatch-leisure-seed139-20261108",
+      "pid": 2741914,
+      "seed": 139,
+      "evidenceOnly": true,
+      "schema": 1,
+      "kind": "capture_start",
+      "capture": "4639618a-3429-4dbd-9d9d-6004ef191229",
+      "requestedAt": "2026-11-08T10:01:36.543995432Z",
+      "durationSeconds": 180,
+      "startedAt": "2026-11-08T10:01:36.545290680Z"
+    },
+    "end": {
+      "kind": "capture_end",
+      "capture": "4639618a-3429-4dbd-9d9d-6004ef191229",
+      "reason": "OPERATOR_STOP",
+      "expectedEvents": 2325,
+      "writtenEvents": 2325,
+      "dataLoss": false,
+      "exportLimit": false,
+      "complete": true
+    },
+    "largestFrameGaps": [
+      {
+        "seconds": 0.716081498,
+        "nativeTicks": 2,
+        "fromSequence": 2009,
+        "toSequence": 2013
+      },
+      {
+        "seconds": 0.686633532,
+        "nativeTicks": 2,
+        "fromSequence": 1503,
+        "toSequence": 1507
+      },
+      {
+        "seconds": 0.674961115,
+        "nativeTicks": 2,
+        "fromSequence": 1651,
+        "toSequence": 1655
+      },
+      {
+        "seconds": 0.637695838,
+        "nativeTicks": 2,
+        "fromSequence": 1687,
+        "toSequence": 1691
+      },
+      {
+        "seconds": 0.603751765,
+        "nativeTicks": 2,
+        "fromSequence": 2181,
+        "toSequence": 2185
+      },
+      {
+        "seconds": 0.596221076,
+        "nativeTicks": 2,
+        "fromSequence": 1886,
+        "toSequence": 1890
+      }
+    ],
+    "settledStrikes": [
+      {
+        "sequence": 988,
+        "at": "2026-11-08T10:01:53.731996394Z",
+        "serverTick": 19915,
+        "worldTick": 42542,
+        "simulationTick": 42537,
+        "attempt": 42525,
+        "attack": "QUICK",
+        "stage": "MISS",
+        "detail": "OUT_OF_REACH",
+        "cueStartedAt": 42536,
+        "distanceToHitbox": 4.602332279816602,
+        "angleFromAimDegrees": -6.539862419714041
+      },
+      {
+        "sequence": 1097,
+        "at": "2026-11-08T10:01:56.039933054Z",
+        "serverTick": 19961,
+        "worldTick": 42588,
+        "simulationTick": 42579,
+        "attempt": 42560,
+        "attack": "BASIC_CUT",
+        "stage": "MISS",
+        "detail": "WINDOW_CLOSED",
+        "cueStartedAt": 42574,
+        "distanceToHitbox": 2.5237306127677237,
+        "angleFromAimDegrees": -31.494311502479537
+      },
+      {
+        "sequence": 1353,
+        "at": "2026-11-08T10:02:01.682993301Z",
+        "serverTick": 20074,
+        "worldTick": 42701,
+        "simulationTick": 42696,
+        "attempt": 42678,
+        "attack": "OVERHEAD",
+        "stage": "MISS",
+        "detail": "WINDOW_CLOSED",
+        "cueStartedAt": 42688,
+        "distanceToHitbox": 2.95894914638221,
+        "angleFromAimDegrees": -18.31481655504939
+      },
+      {
+        "sequence": 1633,
+        "at": "2026-11-08T10:02:08.166301691Z",
+        "serverTick": 20200,
+        "worldTick": 42827,
+        "simulationTick": 42796,
+        "attempt": 42761,
+        "attack": "QUICK",
+        "stage": "MISS",
+        "detail": "OUT_OF_REACH",
+        "cueStartedAt": 42811,
+        "distanceToHitbox": 7.006804481727127,
+        "angleFromAimDegrees": 25.626255138890585
+      },
+      {
+        "sequence": 2114,
+        "at": "2026-11-08T10:02:19.182076107Z",
+        "serverTick": 20424,
+        "worldTick": 43051,
+        "simulationTick": 43046,
+        "attempt": 42970,
+        "attack": "OVERHEAD",
+        "stage": "MISS",
+        "detail": "WINDOW_CLOSED",
+        "cueStartedAt": 43035,
+        "distanceToHitbox": 0.3626410030405568,
+        "angleFromAimDegrees": -2.006729573622579e-06
+      },
+      {
+        "sequence": 2272,
+        "at": "2026-11-08T10:02:22.781666802Z",
+        "serverTick": 20496,
+        "worldTick": 43123,
+        "simulationTick": 43118,
+        "attempt": 43074,
+        "attack": "QUICK",
+        "stage": "MISS",
+        "detail": "WINDOW_CLOSED",
+        "cueStartedAt": 43114,
+        "distanceToHitbox": 0.3626410030405568,
+        "angleFromAimDegrees": -2.006729573622579e-06
+      }
+    ],
+    "limits": "Manual diagnostic rematch, different opponent/style and evolving world; no controlled total-server speedup or native scenario acceptance."
+  },
+  "remainingDefect": {
+    "status": "OPEN; no source repair for this defect in this receipt",
+    "evidence": "Four WINDOW_CLOSED misses, including two stationary point-blank strikes at distance0.362641 blocks and aim error about0.000002 degrees. Two other OUT_OF_REACH misses are legitimate and not reclassified. Seventh prepared strike continues outside the capture.",
+    "exactPointBlankTimelines": [
+      {
+        "attempt": 42970,
+        "attack": "OVERHEAD",
+        "firstWindupWorldTick": 43035,
+        "nextAdmissionWorldTick": 43051,
+        "nativeTickGap": 16
+      },
+      {
+        "attempt": 43074,
+        "attack": "QUICK",
+        "firstWindupWorldTick": 43114,
+        "nextAdmissionWorldTick": 43123,
+        "nativeTickGap": 9
+      }
+    ],
+    "sourceFinding": "Pending strikes are checked when the cooperative physical executor registry reaches combat-melee; its admission requires canonical causal headroom/no predecessor and its ordered cursor shares a per-tick allowance. Short native contact windows can elapse between actual recorded checks. Specific scheduler/admission contributions still require causal discrimination before changing ownership or timing.",
+    "nextWork": "Repair shared execution cadence/admission without widening damage windows, granting late hits or bypassing durable intent and incarnation checks."
+  },
+  "rematchProfile": {
+    "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/combat-delay-20261108/fixed-user-rematch-2741914.jfr",
+    "windowUtc": [
+      "2026-11-08T10:02:08Z",
+      "2026-11-08T10:02:25Z"
+    ],
+    "stages": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/combat-delay-20261108/fixed-rematch-stages.txt",
+    "observed": {
+      "hostTickEvents": 336,
+      "combatMeleeStageEvents": 25,
+      "combatMeleeTotalMs": 84.641,
+      "combatMeleeMaxMs": 29.279,
+      "ambientActorsTotalMs": 3917.96,
+      "ambientActorsMaxMs": 242.571,
+      "coldHarvestScheduleTotalMs": 8664.3,
+      "coldHarvestScheduleMaxMs": 368.384
+    },
+    "limits": "Stage totals can nest/overlap and must not be added as exclusive CPU. This later 17 second window is a diagnostic cost map, not an isolated controlled benchmark. Configured stack depth remained64."
+  },
+  "nativeScenarioAttempts": [
+    {
+      "manifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/combat-delay-20261108/fixed-live-melee-pilot.json",
+      "result": "Setup full settlement diagnostic exceeded response limit; no combat evidence action.",
+      "manifestPresent": true
+    },
+    {
+      "manifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/combat-delay-20261108/fixed-live-melee-pilot2.json",
+      "result": "Updated bounded fixture and target Eli; visit_nearest_entity did not rendezvous within30 seconds. No combat acceptance. Earlier body-availability suspicion unconfirmed; human later fought Eli successfully in this runtime.",
+      "manifestPresent": true
+    },
+    {
+      "result": "Operator cancelled isolated seed41 bootstrap before client/evidence to prioritize actual user live rematch. Native server saved all dimensions and stopped; runner terminated SIGINT, exit130. Neither pass nor product failure.",
+      "manifestPresent": false,
+      "intendedManifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/combat-delay-20261108/fixed-disposable-maneuvers2.json"
+    }
+  ],
+  "deployment": {
+    "detachedSource": "/home/rd/proj/pm-combat-latency-release-20261108/pale-mirror",
+    "target": "/home/rd/far-frontier-server",
+    "world": "northwatch-leisure-seed139-20261108",
+    "worldPreserved": true,
+    "profile": "frontier-v3-leisure-seats-r37",
+    "schema": 351,
+    "network": 10,
+    "java": "/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java",
+    "coreSha512": "587dd7bf91bab65841917077ab8df0fba6b549013ac530c72e523add8b805283199915a9f40e6092d9566610d39ba657561598d05deacc93287d6bbd3377995b",
+    "visualsUnchanged": true,
+    "userService": "far-frontier-v3-live.service",
+    "wrapperPid": 2741890,
+    "javaPid": 2741914,
+    "invocation": "efe8d477b2dc421cad18090d23b30893",
+    "notBefore": 1794131094,
+    "preflight": "/tmp/pm-combat-transient-preflight.log",
+    "install": "/tmp/pm-combat-transient-install.log",
+    "postverify": "/tmp/pm-combat-transient-postverify.log",
+    "controlledStop": "RCON normal stop, all dimensions saved, prior JVM2689444 and ports exited before installation",
+    "finalCheck": {
+      "activeState": "active",
+      "subState": "running",
+      "revision": 290335,
+      "instant": 57550,
+      "sceneConflicts": 0,
+      "inventoryConflicts": 0,
+      "requiredConflicts": 1,
+      "diagnosticVerdict": "blocked",
+      "incident": "Only retained historical event:revision-14991-0; firstRevision=lastRevision14991, occurrences1 rechecked at revision291431. Not erased or called green."
+    }
+  },
+  "cleanup": "Both task live pilot clients/private Xvfb closed. Isolated task server/runner/Xvfb closed, ports25599/8766/18766 not listening. Exact live JVM2741914 JFR.check has no active recordings. Production25565/25575 remain listening; HTTP/observatory untouched.",
+  "repositories": {
+    "implementation": "Tracked clean at16d439326; unrelated .serena retained",
+    "pack": "Tracked clean at909c26c; unrelated .f0v-baseline retained",
+    "governance": "Own ledger and this receipt only; extensive unrelated WIP preserved. No push."
+  },
+  "overallVerdict": "Measured multi-second stall path corrected and deployed; manual rematch has no9–31s stalls, largest sampled two-native-tick frame gap0.716s. Combat as a whole is NOT accepted: skipped strike windows remain open."
+}
