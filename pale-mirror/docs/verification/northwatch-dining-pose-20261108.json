@@ -1,0 +1,235 @@
+{
+  "schema": 1,
+  "recordedAt": "2026-11-08T06:23:03.042580+00:00",
+  "scope": "Client-only chair height and Human Era coupled riding-joint preservation through meal completion; existing pilot camera/evidence corrections",
+  "source": {
+    "commit": "639633fbd81d3cbed34258f74efce3059c5a9547",
+    "sourceTree": "23603378dcfeeed79c4a86ea50439b7265786df9",
+    "implementation": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror",
+    "release": "/home/rd/proj/pm-dining-pose-release-20261108/pale-mirror"
+  },
+  "correction": {
+    "humanEra": "Keep authored CEM riding rotations/translations; compensate six model pixels only in PM-seat local render stack",
+    "fallback": "Report seated-only base-pose mutation for overlay restoration",
+    "serverPhysicsChanged": false,
+    "schema": 350,
+    "network": 9,
+    "ruleset": "frontier-v3-living-residents-r36"
+  },
+  "checks": {
+    "scopedJvm": {
+      "passed": 57,
+      "log": "/tmp/pm-dining-pose-complete-client-gate.log",
+      "command": "./gradlew guardrails :pale-mirror-neoforge:test --tests '*ResidentPoseOverlayTest' --tests '*MeleeAnimationTest' --tests '*FrontierV3TestPilotScenarioTest' :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar --no-daemon"
+    },
+    "nodeParser": {
+      "passed": 56,
+      "command": "node --test tools/frontier-v3-test-pilot/test/scenario.test.mjs",
+      "log": "/tmp/pm-dining-pose-camera-parser.log"
+    },
+    "detachedBuild": {
+      "status": "passed",
+      "seconds": 16,
+      "log": "/tmp/pm-dining-pose-detached-release.log",
+      "command": "JAVA_HOME=/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2 ./gradlew -PfrontierV3GrayboxDisabledModsCatalog=/home/rd/proj/minecraft/config/graybox-disabled-mods.txt guardrails :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar -x test --no-daemon"
+    },
+    "architectureDebtSelfTests": 19,
+    "finalGovernanceGuardrails": {
+      "status": "passed",
+      "log": "/tmp/pm-dining-pose-governance-final.log"
+    }
+  },
+  "native": {
+    "status": "ok",
+    "manifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/northwatch-living-routines/pilot-dining-pose-cycle-5.json",
+    "scenario": "tools/frontier-v3-test-pilot/scenarios/disposable-northwatch-dining-pose-cycle.json",
+    "runId": "63ff09f5-7a5b-4606-9271-ae8eebc9d974",
+    "recovery": {
+      "mode": "graceful",
+      "world": "v3-disposable_northwatch_dining_pose_cy-15b6212a",
+      "splitAfterAction": 6,
+      "beforeRestartManifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/northwatch-living-routines/pilot-dining-pose-cycle-5.before-restart.json",
+      "clientSession": {
+        "runId": "15b6212a-0d37-4619-8176-da8783c0937a",
+        "reusedJvm": true,
+        "controlDirectory": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/15b6212a-0d37-4619-8176-da8783c0937a-persistent-session"
+      }
+    },
+    "terminalCleanup": {
+      "mode": "exact_owned_post_semantic_disposal",
+      "serverPid": 1311127,
+      "port": 25599,
+      "portClosed": true
+    },
+    "frames": [
+      {
+        "after": 6,
+        "name": "native-human-seated-hips-and-legs",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_dining_pose_cycle-63ff09f5-7a5b-4606-9271-ae8eebc9d974-native-human-seated-hips-and-legs.png",
+        "manuallyReviewed": true,
+        "observation": "Seated hips supported by chair; native bent-leg pose retained"
+      },
+      {
+        "after": 14,
+        "name": "native-human-first-standing-after-meal",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_dining_pose_cycle-63ff09f5-7a5b-4606-9271-ae8eebc9d974-native-human-first-standing-after-meal.png",
+        "manuallyReviewed": true,
+        "observation": "Standing full body with attached legs after meal"
+      },
+      {
+        "after": 18,
+        "name": "native-human-second-standing-after-meal",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_dining_pose_cycle-63ff09f5-7a5b-4606-9271-ae8eebc9d974-native-human-second-standing-after-meal.png",
+        "manuallyReviewed": true,
+        "observation": "Legs attached after meal; second standing view partly occluded by chair"
+      },
+      {
+        "after": 22,
+        "name": "native-human-third-standing-after-meal",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_northwatch_dining_pose_cycle-63ff09f5-7a5b-4606-9271-ae8eebc9d974-native-human-third-standing-after-meal.png",
+        "manuallyReviewed": true,
+        "observation": "Standing full body with attached legs after meal"
+      }
+    ],
+    "realMeals": 3,
+    "sourcePortions": {
+      "before": 128,
+      "after": 125
+    },
+    "residents": [
+      "resident:1-11",
+      "resident:1-14",
+      "resident:1-17"
+    ],
+    "postMealStoredSatietyEach": 1000,
+    "postMealSeatAndMealPhase": "NONE",
+    "humanEraMotionClientTicks": 60
+  },
+  "earlierAttempts": [
+    {
+      "attempt": 1,
+      "status": "incomplete",
+      "reason": "External SIGTERM/exit143, cause unconfirmed; empty-chair postmeal capture rejected"
+    },
+    {
+      "attempt": 2,
+      "status": "failed",
+      "reason": "Moving actor occluded from old camera; LOS false"
+    },
+    {
+      "attempt": 3,
+      "status": "failed",
+      "reason": "Java recovery segment parser retained setup-only camera restriction"
+    },
+    {
+      "attempt": 4,
+      "status": "failed",
+      "reason": "Final visible body rejected for hidden nameplate; all meals terminal; first two standing frames reviewed"
+    }
+  ],
+  "releaseByteProof": {
+    "status": "ok",
+    "changedEntries": [
+      "META-INF/pale-mirror-runtime-identity.properties"
+    ],
+    "releaseSha512": "69f8e002970bd480354a0a08a8e2ce4f999be34d4ff09b305dfa57565a326c21655ce4f9d1cd7a26cd4a3bed6d19359f4d795740166a827281c2224ae7e24be1",
+    "identity": "# Build-owned source provenance. The runtime host reads this declaration; canonical reducers never derive it.\nsourceTree=23603378dcfeeed79c4a86ea50439b7265786df9\n",
+    "commit": "639633fbd81d3cbed34258f74efce3059c5a9547"
+  },
+  "deployment": {
+    "status": "postverify-passed",
+    "world": "northwatch-max-living-seed139-20261108",
+    "sameWorldPreserved": true,
+    "seed": 139,
+    "runtime": "/home/rd/far-frontier-server",
+    "service": "far-frontier-v3-live.service",
+    "wrapperPid": 1338964,
+    "javaPid": 1338988,
+    "java": "/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java",
+    "invocationId": "2256aa63e8aa482c92317c54d270586a",
+    "notBefore": 1794118889,
+    "normalStopBeforeInstall": {
+      "oldJavaPid": 725226,
+      "allDimensionsSaved": true,
+      "jvmExited": true,
+      "portsClosed": true
+    },
+    "packIndexedChecksums": 172,
+    "coreSha512": "69f8e002970bd480354a0a08a8e2ce4f999be34d4ff09b305dfa57565a326c21655ce4f9d1cd7a26cd4a3bed6d19359f4d795740166a827281c2224ae7e24be1",
+    "visualsSha512": "2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601",
+    "preflightLog": "/tmp/pm-dining-pose-preflight.log",
+    "publishLog": "/tmp/pm-dining-pose-publish.log",
+    "installLog": "/tmp/pm-dining-pose-install.log",
+    "postverifyLog": "/tmp/pm-dining-pose-postverify.log",
+    "before": {
+      "schema": 1,
+      "kind": "summary",
+      "id": "",
+      "world": "frontier:graybox",
+      "revision": 341058,
+      "instant": 104783,
+      "status": "ok",
+      "diagnosticVerdict": "green",
+      "requiredConflicts": 0,
+      "diagnosticScope": "RETAINED_CONFLICTS",
+      "progressVerdict": "NOT_ASSESSED",
+      "preparingReplicaScopes": 0,
+      "settlements": 12,
+      "residents": 338,
+      "bioforms": 49,
+      "sites": 32,
+      "intents": 23,
+      "ambientLeases": 22,
+      "sceneLeases": 14,
+      "sceneConflicts": 0,
+      "items": 81,
+      "inventoryConflicts": 0,
+      "replicaCustodyDiagnostics": 0,
+      "incidentIndexSize": 3,
+      "optionalDiagnosticDrops": 0
+    },
+    "after": {
+      "schema": 1,
+      "kind": "summary",
+      "id": "",
+      "world": "frontier:graybox",
+      "revision": 345594,
+      "instant": 105881,
+      "status": "ok",
+      "diagnosticVerdict": "green",
+      "requiredConflicts": 0,
+      "diagnosticScope": "RETAINED_CONFLICTS",
+      "progressVerdict": "NOT_ASSESSED",
+      "preparingReplicaScopes": 0,
+      "settlements": 12,
+      "residents": 338,
+      "bioforms": 49,
+      "sites": 32,
+      "intents": 23,
+      "ambientLeases": 22,
+      "sceneLeases": 14,
+      "sceneConflicts": 0,
+      "items": 81,
+      "inventoryConflicts": 0,
+      "replicaCustodyDiagnostics": 0,
+      "incidentIndexSize": 3,
+      "optionalDiagnosticDrops": 0
+    }
+  },
+  "limits": [
+    "Native full-pack graphical meal acceptance uses disposable scenario world; no new HUMAN_CANDIDATE claim for exact live world",
+    "Preexisting live incidentIndexSize=3 remains 3; required/scene/inventory conflicts remain zero",
+    "Known unrelated full-check baseline failures retained in northwatch-living-20261108.json; no broad all-green claim",
+    "No new server scan/timer/thread; no incremental performance measurement claimed"
+  ],
+  "clientAction": "Run ordinary pack updater and fully restart Minecraft to replace loaded renderer",
+  "repositories": {
+    "implementation": "Tracked clean after scoped commit; unrelated .serena preserved",
+    "pack": "HEAD909c26c tracked clean; unrelated .f0v-baseline preserved",
+    "governance": "Only this new receipt staged; existing unrelated WIP and continuity preserved"
+  }
+}
