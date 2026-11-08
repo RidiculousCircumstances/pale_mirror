@@ -41,6 +41,26 @@ class FrontierV3PhysicalPassTest {
         assertEquals(List.of(0, 1), seen);
         pass.begin(21);
         pass.run(3, 5, ready::get, seen::add);
-        assertEquals(List.of(0, 1, 2), seen);
+        assertEquals(List.of(0, 1, 2, 0, 1), seen,
+                "finishing an older suffix does not throw away the new tick's unused capacity");
+        pass.run(3, 5, ready::get, stage -> fail("a wrap cannot replay a stage within the native tick"));
+    }
+    @Test void recoveredHeadroomRestoresCadenceWithoutChangingDependencyOrderOrRenewingAWakeBudget() {
+        var clock = new AtomicLong(); var pass = new FrontierV3PhysicalPass(clock::get);
+        var ready = new AtomicBoolean(true); var seen = new ArrayList<Integer>();
+        pass.begin(30);
+        pass.run(4, 5, ready::get, stage -> { seen.add(stage); clock.addAndGet(6); });
+        assertEquals(List.of(0), seen);
+        pass.begin(31);
+        ready.set(false);
+        pass.run(4, 5, ready::get, stage -> fail("a new tick cannot bypass an unpublished predecessor"));
+        ready.set(true);
+        pass.run(4, 5, ready::get, stage -> { seen.add(stage); clock.incrementAndGet(); });
+        assertEquals(List.of(0, 1, 2, 3, 0), seen);
+        pass.run(4, 5, ready::get, stage -> fail("durability wake cannot repeat an executor"));
+        pass.begin(32);
+        pass.run(4, 5, ready::get, stage -> { seen.add(stage); clock.incrementAndGet(); });
+        assertEquals(List.of(0, 1, 2, 3, 0, 1, 2, 3, 0), seen,
+                "cheap effects resume on successive native ticks, without an empty tail-only round");
     }
 }

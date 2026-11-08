@@ -80,6 +80,15 @@ public final class ClinicalCareProcess {
         }
         if(!ClinicalAuthority.current(s,task))return cancelled(action);
         if(task.role()==ClinicalTask.Role.MEDIC&&ClinicalAuthority.needsCare(s,task.actor())&&!s.actorMovements().containsKey(task.actor()))return ended(s,task,action,tick);
+        if(use!=null&&use.phase()==RestUse.Phase.RESTING&&s.actorMovements().containsKey(task.actor())){
+            // An older stay could fall through self-dressing without supplies and
+            // issue an approach while still lying in bed. Retire that exact leg
+            // through its owner checkpoint before waking; never invent arrival.
+            var assessment=ActorMovementProcess.ownerTransitionCheckpoint(s,task.execution(),tick);
+            if(assessment instanceof ActivityInterruptionPlanner.Waiting)return retry(s,action,tick);
+            var ready=((ActivityInterruptionPlanner.Ready)assessment).validate(s,task.actor());
+            var events=new ArrayList<>(ready.events());events.add(cancel(action));events.add(ClinicalContinuation.wake(task.id(),tick));return List.copyOf(events);
+        }
         if(s.actorMovements().containsKey(task.actor()))return cancelled(action);
         var wound=s.humanPopulation().clinical().wounds().get(task.patient());
         if(use!=null&&use.phase()==RestUse.Phase.RESTING){
@@ -87,7 +96,9 @@ public final class ClinicalCareProcess {
                 s.combat().evasions().containsKey(task.actor())||task.phase()==ClinicalTask.Phase.SUPPLY)
                 return leaveBed(s,task,action,use,tick);
             boolean selfDressing=wound!=null&&wound.needsDressing(ClinicalAuthority.quality(s,task));
-            if(!selfDressing||anotherProcedure(s,task)){
+            if(selfDressing&&ActorConsumables.available(s,task.actor(),task.home(),rules.bandage())==0
+                    &&ActorSupplyVisits.stockPresent(s,task.actor(),task.home(),rules.bandage()))return leaveBed(s,task,action,use,tick);
+            if(!selfDressing||anotherProcedure(s,task)||ActorConsumables.available(s,task.actor(),task.home(),rules.bandage())==0){
                 if(task.phase()!=ClinicalTask.Phase.REST)return destination(task,action,ClinicalTask.Phase.REST,s.actorLocations().get(task.actor()).supportingSurface(),tick);
                 return retry(s,action,tick);
             }

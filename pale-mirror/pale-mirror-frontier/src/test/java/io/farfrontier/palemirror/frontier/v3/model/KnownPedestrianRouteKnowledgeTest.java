@@ -24,6 +24,30 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void indexedDepartureKeepsEveryDeclaredExitAndInvalidatesWhenTheBuildingPlanChanges() {
+        for (long seed : new long[] {139L, 91L, 139L}) {
+            var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:departure-index"), seed,
+                    FrontierRulesets.installed("frontier-v3-leisure-seats-r37")));
+            var contacts = new java.util.LinkedHashSet<SurfaceAnchor>();
+            for (var home : state.bootstrap().settlements()) for (var facility : home.structures()) {
+                for (var port : FrontierTraversalPlan.facilityPorts(facility)) {
+                    contacts.addAll(port.ingressSurfaces()); contacts.addAll(port.stations());
+                }
+                contacts.addAll(FrontierGrayboxPlan.publicAccessSurfaces(facility));
+            }
+            contacts.add(SurfaceAnchor.at(0, -40, 0));
+            for (var contact : contacts) {
+                var expected = state.bootstrap().settlements().stream().flatMap(home -> home.structures().stream()
+                        .filter(facility -> FrontierTraversalPlan.facilityPorts(facility).stream().anyMatch(port ->
+                                port.ingressSurfaces().contains(contact) || port.stations().contains(contact)
+                                || FrontierGrayboxPlan.publicAccessSurfaces(facility).contains(contact)))
+                        .map(facility -> new KnownPedestrianRouteKnowledge.SettlementPassage(home.id(),
+                                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)))).toList();
+                assertEquals(expected, PedestrianLocalDeparture.exits(state, contact),
+                        "index must preserve declaration order and cannot invent an exit: " + contact);
+            }
+        }
+    }
     @Test void advisoryGeometryCannotReplaceTheOwnersCacheOrHideAChangedPhysicalFact() throws Exception {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:geometry-worker-isolation"), 20260918065L));
         var home = state.bootstrap().settlements().getFirst();

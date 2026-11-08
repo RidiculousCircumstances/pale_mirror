@@ -119,6 +119,14 @@ final class FrontierV3PedestrianTraffic {
         return query(level, actor, target, scope).path();
     }
 
+    /** Birth connectivity is block-only: the retained origin may have a living
+     * occupant. Apply the same scope and finite search bound during expansion,
+     * rather than searching the whole follow range and rejecting it afterwards. */
+    static Path placementPath(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope) {
+        return search(level, actor, target, scope, List.of(), java.util.Optional.empty(), PedestrianTraversalPolicy.ORDINARY,
+                new FrontierV3PathClearance.Query(level, actor, actor.getNavigation().getNodeEvaluator().canOpenDoors()));
+    }
+
     static Query query(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope) {
         return query(level, actor, target, scope, java.util.Optional.empty());
     }

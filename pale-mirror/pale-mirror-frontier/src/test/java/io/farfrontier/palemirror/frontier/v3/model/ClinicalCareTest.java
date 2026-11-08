@@ -3,6 +3,10 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.clinical.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
+import io.farfrontier.palemirror.frontier.v3.model.rest.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.process.ClinicalCareProcess;
+import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
 import java.util.*;
@@ -27,6 +31,55 @@ class ClinicalCareTest {
         assertEquals(4,recipe.product().quantity());assertEquals(1,recipe.ingredients().getFirst().quantity());assertFalse(recipe.requiresCombustion());
         assertEquals(0,s.inventory().fungibleResources().totalQuantity(s.bootstrap().settlements().getFirst().id(),rules.clinical().bandage()));
         assertTrue(new ClinicalReserveSupply().read(s,s.bootstrap().settlements().getFirst().id()).needs().get(rules.clinical().bandage()).immediate()>0);
+    }
+    @Test void restingWithoutBandagesCannotFallThroughToWalkingAndHealedPatientExitsBeforeClosing(){
+        var r=patient();var s=r.state();var t=r.task();var actor=t.actor();
+        var use=RestPlaces.select(s,t.execution(),t.home(),RestPlaceProfile.Purpose.MEDICAL,2).orElseThrow();
+        s=RestPlaces.apply(s,actor,new RestEvent.Reserved(use),2);
+        s=s.withActorBody(actor,use.approach().standingBody());
+        s=ClinicalTransitions.apply(s,t.id(),new ClinicalEvent.Destination(t.id(),t.revision(),ClinicalTask.Phase.REST,use.approach()),3);
+        t=s.humanPopulation().clinical().tasks().get(t.id());
+        s=RestPlaces.apply(s,actor,new RestEvent.Changed(actor,use.revision(),Optional.empty(),RestUse.Action.ENTER,true,
+                new SurfaceAnchor(use.place().head()).standingBody()),4);
+        var action=ClinicalContinuation.progress(t.id(),5);
+        var plan=ClinicalCareProcess.progress(s,action,5);
+        assertFalse(plan.stream().anyMatch(e->e.payload() instanceof ClinicalEvent.Destination d&&d.phase()==ClinicalTask.Phase.APPROACH),
+                "missing bandages cannot turn an occupied bed into an unwalkable departure");
+        assertTrue(s.humanPopulation().clinical().wounds().get(actor).needsDressing(ClinicalAuthority.quality(s,t)));
+        var sleeping=s;var movement=new ActorMovement(t.order(),5,new ActorMovementContext.ClinicalLeg(t.id(),t.revision()),t.execution());
+        assertThrows(IllegalArgumentException.class,()->ActorMovementProcess.reduceStarted(sleeping,actor,new ActorMovementStarted(movement)));
+        s=ClinicalTransitions.apply(s,actor,new ClinicalEvent.Recovered(actor,Optional.empty(),100000,
+                ClinicalAuthority.recovery(s,s.humanPopulation().clinical().wounds().get(actor),100000),true),100000);
+        assertFalse(s.humanPopulation().clinical().wounds().containsKey(actor));
+        var exit=ClinicalCareProcess.progress(s,ClinicalContinuation.progress(t.id(),100001),100001);
+        assertTrue(exit.stream().anyMatch(e->e.payload() instanceof RestEvent.Changed c&&c.action()==RestUse.Action.EXIT));
+        assertFalse(exit.stream().anyMatch(e->e.payload() instanceof ClinicalEvent.Ended),"closing cannot erase an occupied bed");
+        s=ResidentRoutineProcessTest.apply(s,exit,100001);
+        var close=ClinicalCareProcess.progress(s,ClinicalContinuation.progress(t.id(),100002),100002);
+        s=ResidentRoutineProcessTest.apply(s,close,100002);
+        assertFalse(s.humanPopulation().clinical().tasks().containsKey(t.id()));
+        assertFalse(s.humanPopulation().restPlaces().uses().containsKey(actor));
+        assertFalse(s.actorMovements().containsKey(actor));
+    }
+    @Test void recoveredLegacyBedAndWalkingOverlapRetiresOnlyItsExactGoalBeforeWaking(){
+        var r=patient();var s=r.state();var t=r.task();var actor=t.actor();
+        var use=RestPlaces.select(s,t.execution(),t.home(),RestPlaceProfile.Purpose.MEDICAL,2).orElseThrow();
+        s=RestPlaces.apply(s,actor,new RestEvent.Reserved(use),2);s=s.withActorBody(actor,use.approach().standingBody());
+        s=ClinicalTransitions.apply(s,t.id(),new ClinicalEvent.Destination(t.id(),t.revision(),ClinicalTask.Phase.APPROACH,use.approach()),3);
+        t=s.humanPopulation().clinical().tasks().get(t.id());
+        s=RestPlaces.apply(s,actor,new RestEvent.Changed(actor,use.revision(),Optional.empty(),RestUse.Action.ENTER,true,
+                new SurfaceAnchor(use.place().head()).standingBody()),4);
+        // Historical precondition admitted by the old fall-through, not a fabricated outcome.
+        var movement=new ActorMovement(t.order(),5,new ActorMovementContext.ClinicalLeg(t.id(),t.revision()),t.execution());
+        s=s.withChanges(FrontierWorldStateUpdate.begin().actorMovements(ImmutableLookupMap.withEntry(s.actorMovements(),actor,movement)));
+        var codec=new FrontierWorldStateCodec();s=codec.decode(codec.encode(s));
+        var body=s.actorLocations().get(actor).body();var health=s.actorLocations().get(actor).condition().health();
+        var plan=ClinicalCareProcess.progress(s,ClinicalContinuation.progress(t.id(),6),6);
+        assertTrue(plan.stream().anyMatch(e->e.payload() instanceof ActorMovementInterrupted));
+        s=ResidentRoutineProcessTest.apply(s,plan,6);
+        assertFalse(s.actorMovements().containsKey(actor));assertEquals(body,s.actorLocations().get(actor).body());
+        assertEquals(health,s.actorLocations().get(actor).condition().health(),"interrupting the exact leg grants neither arrival nor healing");
+        assertEquals(RestUse.Phase.RESTING,s.humanPopulation().restPlaces().uses().get(actor).phase());
     }
     @Test void selfDressingMovesActualSupplyConsumesOneAndDoesNotInstantlyHeal(){
         var r=patient();var s=r.state();var t=r.task();var container=s.inventory().containers().get(FrontierWorldState.depotId(t.home()));

@@ -71,7 +71,7 @@ final class FrontierV3BodyPlacement {
                 BlockPos target = new BlockPos(origin.x(), origin.y() + 1, origin.z());
                 if (!FrontierV3LoadedWorld.ready(level, target)) { rejected.add(new Rejection(surface, Reason.CHUNK_UNLOADED)); continue; }
                 FrontierV3BodyObservation.refreshGroundContact(level, candidate);
-                var path = candidate.getNavigation().createPath(target, 0);
+                var path = FrontierV3PedestrianTraffic.placementPath(level, candidate, target, scope);
                 if (FrontierV3PhysicalPathPolicy.reject(level, path, scope).isPresent()) { rejected.add(new Rejection(surface, Reason.NO_CONNECTED_PATH)); continue; }
             }
             // A pending owner proof propagates to its exact producer before insertion.

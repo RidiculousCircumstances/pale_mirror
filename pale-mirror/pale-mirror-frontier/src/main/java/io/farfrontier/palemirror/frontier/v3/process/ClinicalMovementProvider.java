@@ -18,6 +18,9 @@ public final class ClinicalMovementProvider implements ActorMovementProvider {
     }
     @Override public void validate(FrontierWorldState state, ActorMovement movement) { work(state, movement); }
     @Override public FrontierWorldState start(FrontierWorldState state, ActorMovement movement, FrontierWorldStateUpdate update) {
+        var rest=state.humanPopulation().restPlaces().uses().get(movement.order().actorId());
+        if(rest!=null&&rest.phase()==io.farfrontier.palemirror.frontier.v3.model.rest.RestUse.Phase.RESTING)
+            throw new IllegalArgumentException("clinical movement requires an observed bed exit");
         validate(state, movement); return state.withChanges(update);
     }
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {

@@ -55,14 +55,18 @@ public final class ClinicalTransitions {
         }
         if(event instanceof ClinicalEvent.Destination destination){
             s.actorExecutions().requireCurrent(t.execution());
+            var rest=s.humanPopulation().restPlaces().uses().get(t.actor());
             if(t.pending()||s.actorMovements().containsKey(t.actor())||destination.phase()==ClinicalTask.Phase.SUPPLY
+                    ||rest!=null&&rest.phase()==RestUse.Phase.RESTING&&destination.phase()==ClinicalTask.Phase.APPROACH
                     ||destination.phase()==ClinicalTask.Phase.TEND&&!destination.station().equals(s.actorLocations().get(t.actor()).supportingSurface()))
                 throw new IllegalArgumentException("unsettled clinical destination");
             return ClinicalAuthority.update(s,clinical.with(t.phase(destination.phase(),destination.station(),tick)));
         }
         if(event instanceof ClinicalEvent.SourceSelected selected){
             s.actorExecutions().requireCurrent(t.execution());var visit=selected.visit();var p=(ActorContainerItemOrder.Portion.Fungible)visit.order().portion();
+            var rest=s.humanPopulation().restPlaces().uses().get(t.actor());
             if(t.pending()||t.supply().isPresent()||s.actorMovements().containsKey(t.actor())||!visit.execution().equals(t.execution())||!visit.economicOwner().equals(t.home())
+                    ||rest!=null&&rest.phase()==RestUse.Phase.RESTING
                     ||visit.pending().isPresent()||!p.itemKind().equals(rules.bandage())||p.quantity()>rules.supplyLoad()
                     ||visit.order().goalRevision()!=t.revision()+1||visit.order().goalOrdinal()!=ClinicalTask.Phase.SUPPLY.wireTag()
                     ||ActorConsumables.available(s,t.actor(),t.home(),rules.bandage())>0||!ActorSupplyVisits.available(s,visit)

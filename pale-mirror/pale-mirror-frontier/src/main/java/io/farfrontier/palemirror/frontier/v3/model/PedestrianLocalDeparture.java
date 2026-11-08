@@ -4,6 +4,8 @@ import java.util.List;
 
 /** Geometry for leaving an occupied declared port, independent of profession, task and home. */
 public final class PedestrianLocalDeparture {
+    private static final ImmutableInputView<java.util.Map<SurfaceAnchor, List<KnownPedestrianRouteKnowledge.SettlementPassage>>> EXITS =
+            new ImmutableInputView<>();
     private PedestrianLocalDeparture() { }
 
     public static KnownPedestrianRouteKnowledge departure(FrontierWorldState state, SurfaceAnchor start) {
@@ -34,14 +36,22 @@ public final class PedestrianLocalDeparture {
         return java.util.Optional.empty();
     }
 
-    private static List<KnownPedestrianRouteKnowledge.SettlementPassage> exits(FrontierWorldState state, SurfaceAnchor start) {
-        return state.bootstrap().settlements().stream()
-                .flatMap(settlement -> settlement.structures().stream()
-                    .filter(facility -> FrontierTraversalPlan.facilityPorts(facility).stream().anyMatch(port ->
-                            port.ingressSurfaces().contains(start) || port.stations().contains(start)
-                            || FrontierGrayboxPlan.publicAccessSurfaces(facility).contains(start)))
-                    .map(facility -> new KnownPedestrianRouteKnowledge.SettlementPassage(settlement.id(),
-                            new KnownPedestrianRouteKnowledge.Passage(facility,
-                                    KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)))).toList();
+    static List<KnownPedestrianRouteKnowledge.SettlementPassage> exits(FrontierWorldState state, SurfaceAnchor start) {
+        // Only immutable declarations are indexed. Current collision, custody and
+        // traversal permissions remain the journey knowledge's responsibility.
+        return EXITS.get(List.of(state.bootstrap()), () -> {
+            var indexed = new java.util.LinkedHashMap<SurfaceAnchor, List<KnownPedestrianRouteKnowledge.SettlementPassage>>();
+            for (var settlement : state.bootstrap().settlements()) for (var facility : settlement.structures()) {
+                var ports = FrontierTraversalPlan.facilityPorts(facility);
+                if (ports.isEmpty()) continue;
+                var contacts = new java.util.LinkedHashSet<>(FrontierGrayboxPlan.publicAccessSurfaces(facility));
+                for (var port : ports) { contacts.addAll(port.ingressSurfaces()); contacts.addAll(port.stations()); }
+                var passage = new KnownPedestrianRouteKnowledge.SettlementPassage(settlement.id(),
+                        new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS));
+                for (var contact : contacts) indexed.computeIfAbsent(contact, ignored -> new java.util.ArrayList<>()).add(passage);
+            }
+            indexed.replaceAll((contact, passages) -> List.copyOf(passages));
+            return java.util.Map.copyOf(indexed);
+        }).getOrDefault(start, List.of());
     }
 }
