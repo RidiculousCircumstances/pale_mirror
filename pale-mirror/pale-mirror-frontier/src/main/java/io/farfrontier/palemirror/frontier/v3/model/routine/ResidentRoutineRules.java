@@ -10,7 +10,15 @@ public record ResidentRoutineRules(
     long pauseTicks,
     long walkingBudgetTicks,
     int strollRadius,
-    int eatingTicks) {
+    int eatingTicks,
+    boolean seatedRest) {
+  public ResidentRoutineRules(boolean enabled, int admissionInterval, int candidateVisits, int activeLimit,
+      long cooldownTicks, long pauseTicks, long walkingBudgetTicks, int strollRadius, int eatingTicks) {
+    this(enabled, admissionInterval, candidateVisits, activeLimit, cooldownTicks, pauseTicks, walkingBudgetTicks, strollRadius, eatingTicks, false);
+  }
+  public ResidentRoutineRules withSeatedRest() {
+    return new ResidentRoutineRules(enabled, admissionInterval, candidateVisits, activeLimit, cooldownTicks, 600, walkingBudgetTicks, strollRadius, eatingTicks, true);
+  }
   public ResidentRoutineRules {
     if (admissionInterval < 20
         || candidateVisits < 1
@@ -64,6 +72,7 @@ public record ResidentRoutineRules(
         + ":"
         + strollRadius
         + ":"
-        + eatingTicks;
+        + eatingTicks
+        + (seatedRest ? ":seated-rest" : "");
   }
 }

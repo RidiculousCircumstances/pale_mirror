@@ -16,6 +16,7 @@ public record ResidentRoutine(
     Phase phase,
     Optional<ActorExecutionId> execution,
     SurfaceAnchor goal,
+    Optional<io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id> seat,
     long startedAt,
     long phaseAt,
     long pauseTicks,
@@ -24,7 +25,8 @@ public record ResidentRoutine(
     STROLL(1),
     LOOK_AROUND(2),
     GREET(3),
-    STRETCH(4);
+    STRETCH(4),
+    SIT(5);
     private final int tag;
 
     Kind(int tag) {
@@ -44,7 +46,8 @@ public record ResidentRoutine(
   public enum Phase {
     WALKING(1),
     PAUSING(2),
-    CLOSED(3);
+    CLOSED(3),
+    SEATING(4);
     private final int tag;
 
     Phase(int tag) {
@@ -68,6 +71,7 @@ public record ResidentRoutine(
     Objects.requireNonNull(phase);
     Objects.requireNonNull(execution);
     Objects.requireNonNull(goal);
+    Objects.requireNonNull(seat);
     if (sequence < 1
         || startedAt < 0
         || phaseAt < startedAt
@@ -82,8 +86,22 @@ public record ResidentRoutine(
                         || !e.activityOwnerId().equals(actor)
                         || e.activityKind() != ActorActivityKind.LEISURE)
             .isPresent()
-        || phase == Phase.WALKING && kind != Kind.STROLL)
+        || phase == Phase.WALKING && kind != Kind.STROLL && kind != Kind.SIT
+        || seat.isPresent() != (kind == Kind.SIT)
+        || phase == Phase.SEATING && kind != Kind.SIT)
       throw new IllegalArgumentException("invalid declared resident routine");
+  }
+
+  public ResidentRoutine(SubjectId actor, SubjectId home, long sequence, Kind kind, Phase phase,
+      Optional<ActorExecutionId> execution, SurfaceAnchor goal, long startedAt, long phaseAt,
+      long pauseTicks, long eligibleAt) {
+    this(actor, home, sequence, kind, phase, execution, goal, Optional.empty(), startedAt, phaseAt, pauseTicks, eligibleAt);
+  }
+
+  public ResidentRoutine seated(long tick) {
+    if (phase != Phase.SEATING) throw new IllegalArgumentException("routine is not awaiting its seat receipt");
+    return new ResidentRoutine(actor, home, sequence, kind, Phase.PAUSING, execution, goal, seat,
+        startedAt, tick, pauseTicks, eligibleAt);
   }
 
   public ResidentRoutine arrived(long tick) {
@@ -93,9 +111,10 @@ public record ResidentRoutine(
         home,
         sequence,
         kind,
-        Phase.PAUSING,
+        kind == Kind.SIT ? Phase.SEATING : Phase.PAUSING,
         execution,
         goal,
+        seat,
         startedAt,
         tick,
         pauseTicks,
@@ -111,6 +130,7 @@ public record ResidentRoutine(
         Phase.CLOSED,
         Optional.empty(),
         goal,
+        seat,
         startedAt,
         phaseAt,
         pauseTicks,

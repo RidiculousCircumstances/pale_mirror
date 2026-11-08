@@ -9,7 +9,8 @@ public record BuildingSeat(String id, String zoneId, Kind kind, String chairBloc
         BlockPosition chair, BlockPosition table, BlockPosition approach, BlockPosition egress,
         FacilityFacing facing) {
     public enum Kind {
-        HANDCRAFTED_CHAIR(1, "handcrafted:spruce_chair", "handcrafted:spruce_table");
+        HANDCRAFTED_CHAIR(1, "handcrafted:spruce_chair", "handcrafted:spruce_table"),
+        HANDCRAFTED_BENCH(2, "handcrafted:spruce_bench", "handcrafted:spruce_table");
         private final int tag; private final String chair, table;
         Kind(int tag, String chair, String table) { this.tag = tag; this.chair = chair; this.table = table; }
         public boolean supports(String chair, String table) { return this.chair.equals(chair) && this.table.equals(table); }

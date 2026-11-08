@@ -31,7 +31,7 @@ final class FrontierStateSchema {
     // Explicit manual-passage capability and alternate transit collision shape.
     // Authored inventories replace synthetic settlement stores; optional rack provider has stable tag3.
     // Shared seat reservations retain declared furniture, exact activity and pending body interaction.
-    static final int VERSION = 350;
+    static final int VERSION = 351;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

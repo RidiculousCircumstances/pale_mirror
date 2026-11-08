@@ -44,6 +44,7 @@ public final class FrontierV3FixtureCatalog {
    * Test-only catalog: an alternate immutable ruleset must be named here and in the profile file.
    */
   private static final Map<String, FrontierRuleset> RULESETS = Map.ofEntries(
+          Map.entry("leisure-r37", FrontierRulesets.installed("frontier-v3-leisure-seats-r37")),
           Map.entry("living-r36", FrontierRulesets.installed("frontier-v3-living-residents-r36")),
           Map.entry("clinical-r35", FrontierRulesets.installed("frontier-v3-clinical-care-r35")),Map.entry("wood-production-r29",
         FrontierRulesets.installed("frontier-v3-wood-production-graybox-r29")),
@@ -63,6 +64,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22")));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("northwatchStationWork", (world, seed) -> fungibleProductionWorkConfiguration(world, seed, false, true, RULESETS.get("clinical-r35"))),
+            Map.entry("northwatchLeisure", NorthwatchLeisureFixture::configuration),
             Map.entry("northwatchWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("clinical-r35"))),
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("northwatchAccess", NorthwatchAccessFixture::configuration),

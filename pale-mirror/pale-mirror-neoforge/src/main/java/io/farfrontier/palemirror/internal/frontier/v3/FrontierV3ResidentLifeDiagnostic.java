@@ -168,6 +168,9 @@ final class FrontierV3ResidentLifeDiagnostic {
         var row=state.routines().rows().get(actor);
         return ",\"routineKind\":\""+(row==null?"NONE":row.kind().name())+"\",\"routinePhase\":\""+(row==null?"NONE":row.phase().name())
                 +"\",\"routineOrdinal\":"+(row==null?0:row.sequence())+",\"routineEligibleAt\":"+(row==null?0:row.eligibleAt())
+                +",\"routineSeat\":"+(row==null||row.seat().isEmpty()?"null":FrontierV3DiagnosticJson.position(
+                        io.farfrontier.palemirror.frontier.v3.model.seating.SeatContacts.place(state,row.home(),row.seat().orElseThrow()).chair()))
+                +",\"routineGoal\":"+(row==null?"null":FrontierV3DiagnosticJson.position(row.goal().standingBody()))
                 +",\"routineWalkArrived\":"+(row!=null&&row.kind()==io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutine.Kind.STROLL&&
                         row.phase()!=io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutine.Phase.WALKING&&row.phaseAt()>row.startedAt());
     }

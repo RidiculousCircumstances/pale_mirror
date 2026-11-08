@@ -17,6 +17,7 @@ final class ResidentRoutineStateCodec {
     if (r.execution().isPresent())
       ActorExecutionStateCodec.writeId(out, r.execution().orElseThrow());
     FrontierWorldStateCodec.writePosition(out, r.goal().support());
+    seat(out, r.seat());
     out.writeLong(r.startedAt());
     out.writeLong(r.phaseAt());
     out.writeLong(r.pauseTicks());
@@ -42,12 +43,20 @@ final class ResidentRoutineStateCodec {
         phase,
         execution,
         new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
+        seat(in),
         in.readLong(),
         in.readLong(),
         in.readLong(),
         in.readLong());
   }
 
+  static void seat(DataOutputStream out, Optional<io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id> seat) throws IOException {
+    out.writeBoolean(seat.isPresent());
+    if (seat.isPresent()) { out.writeUTF(seat.orElseThrow().buildingId().value()); out.writeUTF(seat.orElseThrow().localId()); }
+  }
+  static Optional<io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id> seat(DataInputStream in) throws IOException {
+    return in.readBoolean() ? Optional.of(new io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id(new SubjectId(in.readUTF()), in.readUTF())) : Optional.empty();
+  }
   static void write(DataOutputStream out, ResidentRoutineState value) throws IOException {
     for (var entry : value.rows().entrySet())
       if (!entry.getKey().equals(entry.getValue().actor()))

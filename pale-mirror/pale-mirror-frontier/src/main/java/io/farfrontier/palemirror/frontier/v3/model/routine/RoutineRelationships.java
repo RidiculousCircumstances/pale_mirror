@@ -20,18 +20,19 @@ public final class RoutineRelationships {
       ROWS = new ImmutableReferenceIndex.Source<>(s -> s.routines().rows());
   private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, ActorMovement>
       MOVEMENTS = new ImmutableReferenceIndex.Source<>(FrontierWorldState::actorMovements);
+  private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, io.farfrontier.palemirror.frontier.v3.model.seating.SeatUse> SEATS = new ImmutableReferenceIndex.Source<>(s -> s.humanPopulation().seats().uses());
   private static final ImmutableReferenceIndex<FrontierWorldState, SubjectId, ResidentRoutine>
       CHECK =
           new ImmutableReferenceIndex<>(
               SimulationCapacity.MAX_RESIDENTS,
-              5,
-              List.of(ACTORS, PEOPLE, EXECUTIONS, ROWS, MOVEMENTS),
+              6,
+              List.of(ACTORS, PEOPLE, EXECUTIONS, ROWS, MOVEMENTS, SEATS),
               (s, row) ->
                   List.of(
                       ACTORS.at(row.actor()),
                       PEOPLE.at(row.actor()),
                       EXECUTIONS.at(row.actor()),
-                      MOVEMENTS.at(row.actor())),
+                      MOVEMENTS.at(row.actor()), SEATS.at(row.actor())),
               (s, key, row) -> {
                 var person = s.humanPopulation().resident(key);
                 if (!key.equals(row.actor())
@@ -43,11 +44,12 @@ public final class RoutineRelationships {
                   if (s.actorLocations().get(key).condition().status() != ActorLifeStatus.ALIVE)
                     throw new IllegalArgumentException(
                         "active routine cannot retain a dead performer");
+                  if (row.seat().isPresent()) ResidentRoutines.use(s, row);
                   var movement = s.actorMovements().get(key);
                   if (row.phase() == ResidentRoutine.Phase.WALKING
                           && (movement == null
                               || !movement.executionId().equals(row.execution().orElseThrow()))
-                      || row.phase() == ResidentRoutine.Phase.PAUSING
+                      || row.phase() != ResidentRoutine.Phase.WALKING
                           && movement != null
                           && movement.executionId().equals(row.execution().orElseThrow()))
                     throw new IllegalArgumentException(

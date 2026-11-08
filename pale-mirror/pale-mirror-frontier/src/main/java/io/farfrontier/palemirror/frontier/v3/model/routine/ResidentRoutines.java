@@ -6,6 +6,8 @@ import io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.model.seating.*;
+import io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition;
 
 /**
  * Optional resident-owned purpose. Shared UAE, movement, geometry and body owners remain
@@ -24,7 +26,71 @@ public final class ResidentRoutines {
   public static ResidentRoutine.Kind nextKind(FrontierWorldState s, SubjectId actor) {
     var row = s.routines().rows().get(actor);
     long sequence = row == null ? 1 : row.sequence() + 1;
-    return VARIETY.get((int) Math.floorMod(actor.hashCode() + sequence, VARIETY.size()));
+    var variety = s.bootstrap().ruleset().residentLife().routines().seatedRest()
+        ? List.of(ResidentRoutine.Kind.STROLL, ResidentRoutine.Kind.LOOK_AROUND, ResidentRoutine.Kind.GREET, ResidentRoutine.Kind.STRETCH, ResidentRoutine.Kind.SIT) : VARIETY;
+    var selected = variety.get((int) Math.floorMod(actor.hashCode() + sequence, variety.size()));
+    return selected == ResidentRoutine.Kind.SIT && seats(s, actor).isEmpty() ? ResidentRoutine.Kind.LOOK_AROUND : selected;
+  }
+
+  private static final ImmutableInputView<Map<SubjectId, List<SeatPlace>>> REST_PLACES = new ImmutableInputView<>();
+  private static List<SeatPlace> authoredSeats(FrontierWorldState s, SubjectId homeId) {
+    return REST_PLACES.get(List.of(s.bootstrap()), () -> {
+      var result = new HashMap<SubjectId, List<SeatPlace>>();
+      for (var home : s.bootstrap().settlements()) {
+        var found = new ArrayList<SeatPlace>();
+        for (var building : home.structures()) for (var seat : building.definition().seats().values())
+          if (building.definition().zones().get(seat.zoneId()).use() == BuildingDefinition.ZoneUse.REST)
+            found.add(SeatPlace.authored(home.id(), building, seat));
+        result.put(home.id(), found.stream().sorted(Comparator.comparing(p -> p.id().buildingId().value() + ":" + p.id().localId())).toList());
+      }
+      return Map.copyOf(result);
+    }).getOrDefault(homeId, List.of());
+  }
+
+  public static List<SeatPlace> seats(FrontierWorldState s, SubjectId actor) {
+    var person = Objects.requireNonNull(s.humanPopulation().resident(actor));
+    var places = authoredSeats(s, person.settlementId());
+    var start = s.actorLocations().get(actor).supportingSurface();
+    var execution = s.actorExecutions().next(actor, ActorActivityKind.LEISURE, actor);
+    return places.stream().filter(p -> distance(start, p.approach()) <= s.bootstrap().ruleset().residentLife().routines().strollRadius())
+        .filter(p -> s.humanPopulation().seats().free(p.id()))
+        .filter(p -> SeatContacts.furnitureKnowledge(s, p) != SeatContacts.FurnitureKnowledge.MISSING)
+        .filter(p -> !ServiceDestinationClaims.excludedFor(s, actor).contains(p.approach())
+            && !ServiceDestinationClaims.excludedFor(s, actor).contains(p.egress()))
+        .sorted(Comparator.comparingLong(p -> distance(start, p.approach())))
+        .limit(8).filter(p -> SeatContacts.approachClear(s, SeatUse.reserve(execution, p, 0))).toList();
+  }
+
+  public static SeatUse use(FrontierWorldState s, ResidentRoutine row) {
+    var use = s.humanPopulation().seats().uses().get(row.actor());
+    if (use == null) throw new IllegalArgumentException("routine lost its exact seat reservation");
+    if (!row.execution().equals(Optional.of(use.execution())) || !row.seat().equals(Optional.of(use.place().id()))
+        || !row.home().equals(use.place().home())) throw new IllegalArgumentException("routine lost its exact seat reservation");
+    return use;
+  }
+
+  /** Intent is independent of whether a seated body can already plan a meal route. */
+  public static boolean finishing(FrontierWorldState s, ResidentRoutine row, long tick) {
+    if (tick >= (row.phase() == ResidentRoutine.Phase.PAUSING ? row.phaseAt() + row.pauseTicks()
+        : row.startedAt() + s.bootstrap().ruleset().residentLife().routines().walkingBudgetTicks())) return true;
+    if (row.kind() != ResidentRoutine.Kind.SIT) return false;
+    var person = s.humanPopulation().resident(row.actor());
+    var nutrition = s.humanPopulation().nutrition(row.actor());
+    return SeatContacts.furnitureKnowledge(s, use(s, row).place()) == SeatContacts.FurnitureKnowledge.MISSING
+        || s.combat().evasions().containsKey(row.actor())
+        || io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalAuthority.needsCare(s, row.actor())
+        || nutrition.accrueThrough(Math.max(tick, nutrition.lastEvaluatedTick()), s.bootstrap().ruleset().residentLife(),
+            person.characteristics().effectiveMetabolismPermille(tick)).wantsFood(s.bootstrap().ruleset().residentLife())
+        || !HumanAssignmentProjection.compile(s).idle(row.actor())
+        || use(s, row).phase() == SeatUse.Phase.RESERVED
+            && (row.phase() == ResidentRoutine.Phase.PAUSING || use(s, row).carrierEpoch() > 1);
+  }
+
+  private static boolean destination(FrontierWorldState s, SubjectId actor, ResidentRoutine.Kind kind,
+      SurfaceAnchor goal, Optional<SeatPlace.Id> seat) {
+    return kind == ResidentRoutine.Kind.SIT
+        ? seat.isPresent() && seats(s, actor).stream().anyMatch(p -> p.id().equals(seat.orElseThrow()) && p.approach().equals(goal))
+        : seat.isEmpty() && targets(s, actor, kind).contains(goal);
   }
 
   public static boolean eligible(FrontierWorldState s, SubjectId actor, long tick) {
@@ -47,6 +113,8 @@ public final class ResidentRoutines {
         || io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalAuthority.needsCare(
             s, actor)
         || ServiceAccessCoordinator.turnoverPoint(s, actor).isPresent()
+            && nextKind(s, actor) != ResidentRoutine.Kind.SIT
+            && authoredSeats(s, person.settlementId()).stream().noneMatch(p -> p.approach().equals(body.supportingSurface()))
         || ActorInventoryInteractionFences.pending(s, actor)
         || !HumanAssignmentProjection.compile(s).idle(actor)) return false;
     var current = s.actorExecutions().actors().get(actor);
@@ -71,6 +139,7 @@ public final class ResidentRoutines {
       FrontierWorldState s, SubjectId actor, ResidentRoutine.Kind kind) {
     var person = Objects.requireNonNull(s.humanPopulation().resident(actor));
     var start = s.actorLocations().get(actor).supportingSurface();
+    if (kind == ResidentRoutine.Kind.SIT) return seats(s, actor).stream().map(SeatPlace::approach).toList();
     if (kind != ResidentRoutine.Kind.STROLL) return List.of(start);
     var declared =
         TARGETS
@@ -127,7 +196,10 @@ public final class ResidentRoutines {
 
   public static KnownPedestrianRouteKnowledge knowledge(
       FrontierWorldState s, SubjectId actor, SurfaceAnchor start) {
-    return PedestrianLocalDeparture.departure(s, start).forActor(s, actor);
+    var row = s.routines().rows().get(actor);
+    return PedestrianLocalDeparture.departure(s, start,
+        row != null && row.phase() != ResidentRoutine.Phase.CLOSED && row.seat().isPresent()
+            ? SeatContacts.passages(s, SeatContacts.place(s, row.home(), row.seat().orElseThrow())) : List.of()).forActor(s, actor);
   }
 
   public static ResidentRoutine require(FrontierWorldState s, ActorExecutionId e) {
@@ -146,7 +218,7 @@ public final class ResidentRoutines {
     var actor = request.subject();
     if (!eligible(s, actor, tick)
         || request.kind() != nextKind(s, actor)
-        || !targets(s, actor, request.kind()).contains(request.goal()))
+        || !destination(s, actor, request.kind(), request.goal(), request.seat()))
       throw new IllegalArgumentException(
           "routine admission lacks an idle, nourished, available person and declared destination");
     var rules = s.bootstrap().ruleset().residentLife().routines();
@@ -158,11 +230,12 @@ public final class ResidentRoutines {
         s.humanPopulation().resident(actor).settlementId(),
         sequence,
         request.kind(),
-        request.kind() == ResidentRoutine.Kind.STROLL
+        (request.kind() == ResidentRoutine.Kind.STROLL || request.kind() == ResidentRoutine.Kind.SIT)
             ? ResidentRoutine.Phase.WALKING
             : ResidentRoutine.Phase.PAUSING,
         Optional.of(execution),
         request.goal(),
+        request.seat(),
         tick,
         tick,
         rules.pauseTicks() + Math.floorMod(actor.hashCode(), 4) * 20L,
@@ -173,7 +246,7 @@ public final class ResidentRoutines {
     if (!eligible(s, row.actor(), tick)
         || row.kind() != nextKind(s, row.actor())
         || row.startedAt() != tick
-        || !targets(s, row.actor(), row.kind()).contains(row.goal()))
+        || !destination(s, row.actor(), row.kind(), row.goal(), row.seat()))
       throw new IllegalArgumentException("stale routine start");
     var e = row.execution().orElseThrow();
     var expected = s.actorExecutions().next(row.actor(), ActorActivityKind.LEISURE, row.actor());
@@ -186,13 +259,14 @@ public final class ResidentRoutines {
         || row.eligibleAt() != tick + rules.cooldownTicks()
         || row.pauseTicks() != rules.pauseTicks() + Math.floorMod(row.actor().hashCode(), 4) * 20L
         || row.phase()
-            != (row.kind() == ResidentRoutine.Kind.STROLL
+            != ((row.kind() == ResidentRoutine.Kind.STROLL || row.kind() == ResidentRoutine.Kind.SIT)
                 ? ResidentRoutine.Phase.WALKING
                 : ResidentRoutine.Phase.PAUSING))
       throw new IllegalArgumentException("routine start changed its nominal policy or identity");
-    return ActorExecutionComposition.LIFECYCLE
-        .prepareBegin(s, e, tick)
-        .commit(s, FrontierWorldStateUpdate.begin().routines(s.routines().with(row)));
+    var changes = FrontierWorldStateUpdate.begin().routines(s.routines().with(row));
+    if (row.seat().isPresent()) changes.humanPopulation(s.humanPopulation().withSeats(s.humanPopulation().seats().reserve(
+        SeatUse.reserve(e, SeatContacts.place(s, row.home(), row.seat().orElseThrow()), tick))));
+    return ActorExecutionComposition.LIFECYCLE.prepareBegin(s, e, tick).commit(s, changes);
   }
 
   public static FrontierWorldState arrived(
@@ -207,6 +281,16 @@ public final class ResidentRoutines {
         FrontierWorldStateUpdate.begin().routines(s.routines().with(row.arrived(tick))));
   }
 
+  public static FrontierWorldState seated(FrontierWorldState s, RoutineEvent.Seated event, long tick) {
+    var row = require(s, event.execution());
+    s.actorExecutions().requireCurrent(event.execution());
+    if (row.sequence() != event.sequence() || row.phase() != ResidentRoutine.Phase.SEATING
+        || use(s, row).phase() != SeatUse.Phase.SEATED || use(s, row).pendingBody().isPresent()
+        || !s.actorLocations().get(row.actor()).supportingSurface().equals(use(s, row).place().contact()))
+      throw new IllegalArgumentException("rest interval needs its exact settled seated body receipt");
+    return s.withChanges(FrontierWorldStateUpdate.begin().routines(s.routines().with(row.seated(tick))));
+  }
+
   public static FrontierWorldState ended(
       FrontierWorldState s, RoutineEvent.Ended event, long tick) {
     var row = require(s, event.execution());
@@ -214,15 +298,13 @@ public final class ResidentRoutines {
     if (row.sequence() != event.sequence()
         || s.actorMovements().containsKey(row.actor())
         || ActorInventoryInteractionFences.pending(s, row.actor())
-        || tick
-            < (row.phase() == ResidentRoutine.Phase.PAUSING
-                ? row.phaseAt() + row.pauseTicks()
-                : row.startedAt()
-                    + s.bootstrap().ruleset().residentLife().routines().walkingBudgetTicks()))
+        || !finishing(s, row, tick)
+        || row.seat().isPresent() && (use(s, row).pendingBody().isPresent() || use(s, row).phase() != SeatUse.Phase.RESERVED))
       throw new IllegalArgumentException(
           "routine cannot end before its movement/effect checkpoint and duration");
     return s.withChanges(
         FrontierWorldStateUpdate.begin()
+            .humanPopulation(row.seat().isPresent() ? s.humanPopulation().withSeats(s.humanPopulation().seats().without(row.actor())) : s.humanPopulation())
             .routines(s.routines().with(row.closed()))
             .actorExecutions(s.actorExecutions().finish(event.execution())));
   }

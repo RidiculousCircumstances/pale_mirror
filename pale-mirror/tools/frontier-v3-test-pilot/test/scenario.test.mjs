@@ -615,3 +615,24 @@ test('station work facing carrier requires actual work and a resolvable declared
   const foreign=structuredClone(value);foreign.actions[9].workFacingTarget.diagnostic.field='foreignTarget';
   assert.throws(()=>validateScenario(foreign));
 });
+
+test('routine camera travel reads its retained typed goal without granting resident mutation', () => {
+  const visit = { type: 'visit', dimension: 'pale_mirror:frontier_graybox', position: {
+    diagnostic: { view: 'resident_life', id: 'resident:1-12', field: 'routineGoal' }
+  }, settleMs: 0 };
+  const value = { ...scenario, actions: [visit], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(value));
+  for (const reference of [{ view: 'resident_life', id: 'site:1', field: 'routineGoal' },
+    { view: 'resident_life', id: 'resident:1-12', field: 'undeclaredGoal' }]) {
+    assert.throws(() => validateScenario({ ...value, actions: [{ ...visit, position: { diagnostic: reference } }] }), /visit needs/);
+  }
+});
+
+test('bench intervention addresses only its exact declared read-only seat contact', () => {
+  const reference = { view: 'resident_life', id: 'resident:1-12', field: 'routineSeat' };
+  const value = { ...scenario, actions: [{ type: 'break', position: { diagnostic: reference }, timeoutMs: 10000 }], assertions: [], frames: [] };
+  assert.doesNotThrow(() => validateScenario(value));
+  assert.throws(() => validateScenario({ ...value, actions: [{ type: 'break', position: {
+    diagnostic: { ...reference, id: 'job:foreign' }
+  } }] }), /block position/);
+});

@@ -49,19 +49,41 @@ public final class SeatContacts {
     public static boolean present(FrontierWorldState state, SeatPlace place) {
         return place.equals(place(state, place.home(), place.id()));
     }
+    public static List<KnownPedestrianRouteKnowledge.SettlementPassage> passages(FrontierWorldState state, SeatPlace place) {
+        var building = FrontierWorldStateSupport.settlement(state.bootstrap(), place.home()).structures().stream()
+                .filter(s -> s.id().equals(place.id().buildingId())).findFirst().orElseThrow();
+        return List.of(new KnownPedestrianRouteKnowledge.SettlementPassage(place.home(),
+                new KnownPedestrianRouteKnowledge.Passage(building, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
+    }
+    /** Current common block evidence; an unavailable observation never restores pristine furniture. */
+    public enum FurnitureKnowledge { PRESENT, MISSING, UNKNOWN }
+    public static FurnitureKnowledge furnitureKnowledge(FrontierWorldState state, SeatPlace place) {
+        var chair = furnitureCell(state, place.chair(), place.chairBlock(), Optional.of(place.facing()));
+        var table = furnitureCell(state, place.table(), place.tableBlock(), Optional.empty());
+        if (chair == FurnitureKnowledge.MISSING || table == FurnitureKnowledge.MISSING) return FurnitureKnowledge.MISSING;
+        return chair == FurnitureKnowledge.UNKNOWN || table == FurnitureKnowledge.UNKNOWN ? FurnitureKnowledge.UNKNOWN : FurnitureKnowledge.PRESENT;
+    }
+    private static FurnitureKnowledge furnitureCell(FrontierWorldState state, BlockPosition at, String block, Optional<FacilityFacing> facing) {
+        var delta = state.physicalDeltas().get(at);
+        if (delta != null) return delta.kind() == PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS ? FurnitureKnowledge.MISSING : FurnitureKnowledge.UNKNOWN;
+        var observation = state.navigationGeometry().cells().get(at);
+        if (observation == null) return FurnitureKnowledge.PRESENT; // Exact authored genesis evidence, with no retained override.
+        var actual = observation.cell().flatMap(cell -> cell.observedState());
+        if (actual.isEmpty()) return FurnitureKnowledge.UNKNOWN;
+        var value = actual.orElseThrow();
+        return value.kind().equals(block) && (facing.isEmpty() || facing.orElseThrow().name().toLowerCase(Locale.ROOT).equals(value.properties().get("facing")))
+                ? FurnitureKnowledge.PRESENT : FurnitureKnowledge.MISSING;
+    }
     public static boolean approachClear(FrontierWorldState state, SeatUse use) {
-        var building = FrontierWorldStateSupport.settlement(state.bootstrap(), use.place().home()).structures().stream()
-                .filter(s -> s.id().equals(use.place().id().buildingId())).findFirst().orElseThrow();
-        var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, use.place().home(), List.of(
-                new KnownPedestrianRouteKnowledge.SettlementPassage(use.place().home(),
-                        new KnownPedestrianRouteKnowledge.Passage(building, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS))))
+
+        var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, use.place().home(), passages(state, use.place()))
                 .forActor(state, use.execution().actorId());
         return knowledge.clearStation(use.place().approach()) && knowledge.clearStation(use.place().egress());
     }
     /** At most five known local exits; no route discovery or remote movement. */
     public static Optional<SurfaceAnchor> coldExit(FrontierWorldState state, SeatUse use) {
         var knowledge = KnownPedestrianRouteKnowledge.forPublicJourney(state, use.place().home(),
-                ResidentDiningPlaces.passages(state, use.place().home(), new MealDestination.Seat(use.place().id())))
+                passages(state, use.place()))
                 .forActor(state, use.execution().actorId());
         var exits = new LinkedHashSet<SurfaceAnchor>(); exits.add(use.place().egress());
         for (var facing : FacilityFacing.values()) exits.add(new SurfaceAnchor(use.place().chair().offset(facing.x(), -1, facing.z())));

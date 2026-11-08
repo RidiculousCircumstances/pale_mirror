@@ -1,0 +1,122 @@
+{
+  "sourceRef": "a9b03edfbbd5359b148c85284ea038066d689866",
+  "source": "fundamentals/townhall5.blueprint",
+  "sourceSha256": "2ed8ff0d8ab14fc0a45f7a50e8906244693fd34fd998e0f05294b3a39e5da672",
+  "license": "private test derivative; upstream ARR",
+  "adaptations": [
+    "original native blocks, shapes and materials retained with pinned dependencies",
+    "terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air",
+    "supported open entrance",
+    "declared machine/operator aisle and service points",
+    "no entities, inventories or foreign controllers; typed visual data retained",
+    "pinned original smallwell3 in an owned paved forecourt; two sparse Handcrafted bench modules and exact REST contacts outside the front door aisle"
+  ],
+  "replacements": [
+    {
+      "position": [
+        -11,
+        4,
+        20
+      ],
+      "before": {
+        "Name": "minecraft:air"
+      },
+      "after": {
+        "Name": "handcrafted:spruce_bench",
+        "Properties": {
+          "facing": "east",
+          "shape": "right",
+          "color": "none",
+          "waterlogged": "false"
+        }
+      }
+    },
+    {
+      "position": [
+        -10,
+        4,
+        20
+      ],
+      "before": {
+        "Name": "minecraft:air"
+      },
+      "after": {
+        "Name": "handcrafted:spruce_table",
+        "Properties": {
+          "color": "none",
+          "shape": "south_side",
+          "waterlogged": "false"
+        }
+      }
+    },
+    {
+      "position": [
+        -11,
+        4,
+        21
+      ],
+      "before": {
+        "Name": "minecraft:air"
+      },
+      "after": {
+        "Name": "handcrafted:spruce_bench",
+        "Properties": {
+          "facing": "east",
+          "shape": "left",
+          "color": "none",
+          "waterlogged": "false"
+        }
+      }
+    },
+    {
+      "position": [
+        -10,
+        4,
+        21
+      ],
+      "before": {
+        "Name": "minecraft:air"
+      },
+      "after": {
+        "Name": "handcrafted:spruce_table",
+        "Properties": {
+          "color": "none",
+          "shape": "north_side",
+          "waterlogged": "false"
+        }
+      }
+    }
+  ],
+  "decorations": [
+    {
+      "source": "decorations/misc/smallwell3.blueprint",
+      "sha256": "bb0a4fb48d62ee589a6a0a3cb174cc193ee607f817c9780fae02785a5da3fffc",
+      "offset": [
+        -10,
+        0,
+        12
+      ],
+      "omittedControllers": [
+        "minecolonies:blockwaypoint",
+        "minecolonies:decorationcontroller"
+      ]
+    }
+  ],
+  "paving": [
+    {
+      "min": [
+        -12,
+        3,
+        9
+      ],
+      "max": [
+        1,
+        4,
+        23
+      ],
+      "block": "minecraft:stone_bricks"
+    }
+  ],
+  "blocks": 2975,
+  "beds": 1
+}

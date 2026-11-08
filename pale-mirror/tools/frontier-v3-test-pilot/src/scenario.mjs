@@ -616,7 +616,7 @@ function validResolvablePosition(value) {
     && ((reference.view === 'site' && requiredId(reference.id, 'site:')
       && ['firstCrop', 'lastCrop', 'boardPosition', 'terminalHarvest.terminalBody'].includes(reference.field))
       || (reference.view === 'forest' && requiredId(reference.id, 'settlement:') && ['firstTree', 'workSource'].includes(reference.field))
-      || (reference.view === 'resident_life' && requiredId(reference.id, 'resident:') && reference.field === 'clinical.bedsidePosition')
+      || (reference.view === 'resident_life' && requiredId(reference.id, 'resident:') && ['clinical.bedsidePosition', 'routineGoal', 'routineSeat'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'actor' && (requiredId(reference.id, 'actor:') || requiredId(reference.id, 'resident:')) && reference.field === 'position')
       || (['settlement','settlement_security'].includes(reference.view) && requiredId(reference.id, 'settlement:')

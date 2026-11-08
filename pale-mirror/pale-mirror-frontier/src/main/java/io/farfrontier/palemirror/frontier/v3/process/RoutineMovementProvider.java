@@ -96,7 +96,7 @@ public final class RoutineMovementProvider implements ActorMovementProvider {
     var row = ResidentRoutines.require(s, m.executionId());
     return List.of(
         new ProposedEvent(row.actor(), new RoutineEvent.Arrived(m.executionId(), row.sequence())),
-        ResidentRoutineProcess.wake(row, tick + row.pauseTicks()));
+        ResidentRoutineProcess.wake(row, tick + (row.kind() == ResidentRoutine.Kind.SIT ? s.bootstrap().ruleset().residentLife().routines().admissionInterval() : row.pauseTicks())));
   }
 
   public List<ProposedEvent> interrupted(FrontierWorldState s, ActorMovement m, long tick) {

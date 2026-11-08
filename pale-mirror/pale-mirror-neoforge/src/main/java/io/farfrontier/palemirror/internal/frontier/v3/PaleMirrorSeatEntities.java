@@ -15,6 +15,7 @@ public final class PaleMirrorSeatEntities {
     public static void register(IEventBus bus) {
         if (!ModList.get().isLoaded("handcrafted")) return;
         FrontierV3SeatProvider.register(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSeat.Kind.HANDCRAFTED_CHAIR, new FrontierV3HandcraftedSeating());
+        FrontierV3SeatProvider.register(io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSeat.Kind.HANDCRAFTED_BENCH, new FrontierV3HandcraftedSeating());
         seat = ENTITIES.register("resident_seat", () -> EntityType.Builder.<FrontierV3SeatEntity>of(FrontierV3SeatEntity::new, MobCategory.MISC)
                 .sized(1, 1).fireImmune().noSummon().clientTrackingRange(8).updateInterval(20).build("pale_mirror:resident_seat"));
         ENTITIES.register(bus);

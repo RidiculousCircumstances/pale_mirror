@@ -11,6 +11,8 @@ public final class SeatRelationships {
             new ImmutableReferenceIndex.Source<>(FrontierWorldState::actorLocations);
     private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, ActorExecution> EXECUTIONS =
             new ImmutableReferenceIndex.Source<>(s -> s.actorExecutions().actors());
+    private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, io.farfrontier.palemirror.frontier.v3.model.routine.ResidentRoutine> ROUTINES =
+            new ImmutableReferenceIndex.Source<>(s -> s.routines().rows());
     private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, ResidentMeal> MEALS =
             new ImmutableReferenceIndex.Source<>(s -> s.humanPopulation().meals());
     private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, ResidentMealResourceObligation> OBLIGATIONS =
@@ -22,10 +24,10 @@ public final class SeatRelationships {
     private static final ImmutableReferenceIndex.Source<FrontierWorldState, SubjectId, FencedRecoveryTombstone> RETIRED =
             new ImmutableReferenceIndex.Source<>(s -> s.fencedRecovery().tombstones());
     private static final ImmutableReferenceIndex<FrontierWorldState, SubjectId, SeatUse> REFERENCES = new ImmutableReferenceIndex<>(
-            SimulationCapacity.MAX_RESIDENTS, 7, List.of(ACTORS, EXECUTIONS, MEALS, OBLIGATIONS, PEOPLE, BODIES, RETIRED),
+            SimulationCapacity.MAX_RESIDENTS, 8, List.of(ACTORS, EXECUTIONS, ROUTINES, MEALS, OBLIGATIONS, PEOPLE, BODIES, RETIRED),
             (state, use) -> {
                 var reads = new ArrayList<ImmutableReferenceIndex.Read<FrontierWorldState>>(List.of(ACTORS.at(use.execution().actorId()),
-                        EXECUTIONS.at(use.execution().actorId()), MEALS.at(use.execution().actorId()),
+                        EXECUTIONS.at(use.execution().actorId()), ROUTINES.at(use.execution().actorId()), MEALS.at(use.execution().actorId()),
                         OBLIGATIONS.at(use.execution().actorId()), PEOPLE.at(use.execution().actorId())));
                 use.pendingBody().ifPresent(body -> {
                     var key = io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(body.body().actorId());

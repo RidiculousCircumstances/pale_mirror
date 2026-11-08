@@ -96,7 +96,7 @@ final class FrontierV3ResidentRoutineExecutor {
       }
     }
     for (var row : s.routines().active().values()) {
-      if (row.phase() != ResidentRoutine.Phase.PAUSING || tick >= row.phaseAt() + row.pauseTicks())
+      if (row.kind() == ResidentRoutine.Kind.SIT || row.phase() != ResidentRoutine.Phase.PAUSING || tick >= row.phaseAt() + row.pauseTicks())
         continue;
       var raw = level.getEntity(ActorBodyId.entityId(s.bootstrap().worldId(), row.actor()));
       if (!(raw instanceof Mob body)
@@ -189,6 +189,17 @@ final class FrontierV3ResidentRoutineExecutor {
         continue;
       }
       var kind = ResidentRoutines.nextKind(s, actor);
+      if (kind == ResidentRoutine.Kind.SIT) {
+        for (var place : ResidentRoutines.seats(s, actor)) {
+          var provider = FrontierV3SeatProvider.find(place.kind());
+          if (provider.isEmpty() || !provider.orElseThrow().available(level, place, body).orElse(false)
+              || !FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, place.approach())) continue;
+          FrontierV3CommandSubmission.propose(runtime, "resident-routine", actor.value(),
+              new RoutineEvent.Requested(authority.id(), kind, place.approach(), Optional.of(place.id())));
+          return;
+        }
+        continue;
+      }
       var targets = ResidentRoutines.targets(s, actor, kind);
       for (var target : targets) {
         if (!FrontierV3LoadedWorld.ready(level, new BlockPos(target.x(), target.y(), target.z()))

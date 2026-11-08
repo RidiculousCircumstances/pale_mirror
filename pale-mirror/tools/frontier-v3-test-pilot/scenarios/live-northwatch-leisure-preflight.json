@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "id": "live_northwatch_leisure_preflight",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 300 0 true"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "summary",
+          "id": "",
+          "expect": {
+            "status": "ok",
+            "settlements": 12,
+            "requiredConflicts": 0,
+            "sceneConflicts": 0,
+            "inventoryConflicts": 0
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1439,
+        "y": 64,
+        "z": -1418
+      },
+      "settleMs": 1500
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:authored-f44e2af7-8312-352c-a5bc-cbea085a98a7",
+      "expect": {
+        "status": "ok",
+        "custody": {
+          "status": "ACQUIRED"
+        },
+        "physicalSocket": {
+          "chunk": "LOADED",
+          "ordinaryPlayerNearby": true
+        }
+      },
+      "timeoutMs": 120000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1446,
+        "y": 64,
+        "z": -1417
+      },
+      "settleMs": 1500
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -1448,
+        "y": 64,
+        "z": -1419
+      },
+      "block": "handcrafted:spruce_bench",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look",
+      "position": {
+        "x": -1448,
+        "y": 65,
+        "z": -1419
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -1448,
+        "y": 64,
+        "z": -1419
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1469,
+        "y": 64,
+        "z": -1343
+      },
+      "settleMs": 1500
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": -1472,
+        "y": 64,
+        "z": -1346
+      },
+      "block": "handcrafted:spruce_bench",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look",
+      "position": {
+        "x": -1472,
+        "y": 65,
+        "z": -1346
+      }
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": -1472,
+        "y": 64,
+        "z": -1346
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 11,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "settlements": 12,
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 6,
+      "name": "northwatch-kitchen-leisure-bench"
+    },
+    {
+      "after": 10,
+      "name": "northwatch-well-leisure-bench"
+    }
+  ]
+}

@@ -1,0 +1,460 @@
+{
+  "schema": 1,
+  "id": "disposable_northwatch_leisure_seats",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 139
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25599,
+    "profile": "northwatch-leisure",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/effect give @s minecraft:night_vision 300 0 true"
+    },
+    {
+      "type": "command",
+      "command": "/execute in pale_mirror:frontier_graybox run pale_mirror v3 building layout export settlement:1 leisure_review"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 3,
+        "y": 0,
+        "z": 2
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-12",
+      "expect": {
+        "status": "ok",
+        "ambientStatus": "HOT",
+        "routineKind": "SIT",
+        "routinePhase": "PAUSING",
+        "routineOrdinal": 1,
+        "seatPhase": "SEATED",
+        "seatPending": false
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "resident_life",
+          "id": "resident:1-12",
+          "field": "routineGoal"
+        }
+      },
+      "offset": {
+        "x": 2,
+        "y": 0,
+        "z": -3
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "name"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "name"
+        }
+      },
+      "vehicleType": "pale_mirror:resident_seat",
+      "maxDistance": 16,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-12",
+      "expect": {
+        "status": "ok",
+        "routineKind": "SIT",
+        "routinePhase": "PAUSING",
+        "routineOrdinal": 1,
+        "seatPhase": "SEATED",
+        "seatPending": false
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "resident_life",
+          "id": "resident:1-12",
+          "field": "routineGoal"
+        }
+      },
+      "offset": {
+        "x": 2,
+        "y": 0,
+        "z": -3
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "name"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "name"
+        }
+      },
+      "vehicleType": "pale_mirror:resident_seat",
+      "maxDistance": 16,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "kitchen-rest-after-restart",
+      "workerId": "resident:1-12",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "name"
+        }
+      },
+      "maxDistance": 16,
+      "durationTicks": 40,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 10000,
+      "requiredModelRig": "human_era"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-17",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 3,
+        "y": 0,
+        "z": 2
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-17",
+      "expect": {
+        "status": "ok",
+        "ambientStatus": "HOT",
+        "routineKind": "SIT",
+        "routinePhase": "PAUSING",
+        "routineOrdinal": 1,
+        "seatPhase": "SEATED",
+        "seatPending": false
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "resident_life",
+          "id": "resident:1-17",
+          "field": "routineGoal"
+        }
+      },
+      "offset": {
+        "x": 3,
+        "y": 0,
+        "z": 1
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-17",
+          "field": "name"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-17",
+          "field": "name"
+        }
+      },
+      "vehicleType": "pale_mirror:resident_seat",
+      "maxDistance": 16,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "observe_entity_motion",
+      "id": "outdoor-well-rest",
+      "workerId": "resident:1-17",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-17",
+          "field": "name"
+        }
+      },
+      "maxDistance": 16,
+      "durationTicks": 40,
+      "sampleEveryTicks": 1,
+      "timeoutMs": 10000,
+      "requiredModelRig": "human_era"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-17",
+      "expect": {
+        "status": "ok",
+        "routineKind": "SIT",
+        "routinePhase": "CLOSED",
+        "routineOrdinal": 1,
+        "seatPhase": "NONE",
+        "movementOrderPresent": false
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "workerId": "resident:1-17",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-17",
+          "field": "name"
+        }
+      },
+      "maxDistance": 64,
+      "standOff": 1.8,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-17",
+          "field": "name"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-17",
+          "field": "name"
+        }
+      },
+      "maxDistance": 16,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": 3,
+        "y": 0,
+        "z": 2
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "resident_life",
+      "id": "resident:1-12",
+      "expect": {
+        "status": "ok",
+        "routineKind": "SIT",
+        "routinePhase": "CLOSED",
+        "routineOrdinal": 1,
+        "seatPhase": "NONE",
+        "movementOrderPresent": false
+      },
+      "timeoutMs": 60000,
+      "pollIntervalMs": 100
+    },
+    {
+      "type": "visit_nearest_entity",
+      "entityType": "minecraft:villager",
+      "workerId": "resident:1-12",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "name"
+        }
+      },
+      "maxDistance": 64,
+      "standOff": 1.8,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look_nearest_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "name"
+        }
+      },
+      "maxDistance": 32,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "assert_visible_entity",
+      "entityType": "minecraft:villager",
+      "nameContains": {
+        "diagnostic": {
+          "view": "actor",
+          "id": "resident:1-12",
+          "field": "name"
+        }
+      },
+      "maxDistance": 16,
+      "timeoutMs": 5000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "wait",
+      "ms": 15000
+    }
+  ],
+  "assertions": [
+    {
+      "after": 26,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 5,
+      "name": "kitchen-real-seated-rest"
+    },
+    {
+      "after": 10,
+      "name": "kitchen-rest-restored-with-attached-legs"
+    },
+    {
+      "after": 16,
+      "name": "well-real-bench-rest"
+    },
+    {
+      "after": 20,
+      "name": "well-standing-after-rest"
+    },
+    {
+      "after": 25,
+      "name": "kitchen-standing-after-rest"
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 5,
+    "resumeSetup": []
+  }
+}

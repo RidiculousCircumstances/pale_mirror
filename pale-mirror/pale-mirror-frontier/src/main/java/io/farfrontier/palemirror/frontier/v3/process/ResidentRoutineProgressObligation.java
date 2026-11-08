@@ -38,11 +38,12 @@ public record ResidentRoutineProgressObligation(
             + ":"
             + row.phaseAt()
             + ":"
-            + s.actorLocations().get(actor).body();
+            + s.actorLocations().get(actor).body()
+            + ":" + (row.seat().isPresent() ? ResidentRoutines.use(s, row) : "standing");
     return new ResidentRoutineProgressObligation(
         Math.addExact(row.sequence(),1L),
         fingerprint,
-        row.phase() == ResidentRoutine.Phase.WALKING
+        (row.phase() == ResidentRoutine.Phase.WALKING || row.phase() == ResidentRoutine.Phase.SEATING)
             ? rules.walkingBudgetTicks() + rules.admissionInterval()
             : row.pauseTicks() + rules.admissionInterval(),
         disposition,

@@ -15,7 +15,8 @@ public sealed interface RoutineEvent extends FrontierPayload {
   }
 
 
-  record Requested(ActorActuationId actor, ResidentRoutine.Kind kind, SurfaceAnchor goal)
+  record Requested(ActorActuationId actor, ResidentRoutine.Kind kind, SurfaceAnchor goal,
+      Optional<io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id> seat)
       implements RoutineEvent {
     public static final String TYPE = "frontier.resident_routine_requested";
 
@@ -23,6 +24,13 @@ public sealed interface RoutineEvent extends FrontierPayload {
       Objects.requireNonNull(actor);
       Objects.requireNonNull(kind);
       Objects.requireNonNull(goal);
+      Objects.requireNonNull(seat);
+      if (seat.isPresent() != (kind == ResidentRoutine.Kind.SIT))
+        throw new IllegalArgumentException("routine request must explicitly declare its seat purpose");
+    }
+
+    public Requested(ActorActuationId actor, ResidentRoutine.Kind kind, SurfaceAnchor goal) {
+      this(actor, kind, goal, Optional.empty());
     }
 
     public SubjectId subject() {
@@ -58,6 +66,13 @@ public sealed interface RoutineEvent extends FrontierPayload {
     public String type() {
       return TYPE;
     }
+  }
+
+  record Seated(ActorExecutionId execution, long sequence) implements RoutineEvent {
+    public static final String TYPE = "frontier.resident_routine_seated";
+    public Seated { require(execution, sequence); }
+    public SubjectId subject() { return execution.actorId(); }
+    public String type() { return TYPE; }
   }
 
   record Ended(ActorExecutionId execution, long sequence) implements RoutineEvent {

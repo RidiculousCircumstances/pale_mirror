@@ -23,7 +23,7 @@ class SeatedMealProcessTest {
     @Test void allSixAuthoredPlacesHaveExclusiveReservationsAndFailedAdmissionsDoNotPoisonTheOccupancyIndex() {
         var state = prepared(); var home = state.bootstrap().settlements().getFirst();
         var area = ResidentDiningPlaces.in(state, home.id()).getFirst(); var building = ResidentDiningPlaces.facility(state, home.id(), area);
-        var declarations = building.definition().seats().values().stream().sorted(Comparator.comparing(
+        var declarations = building.definition().seats().values().stream().filter(seat -> seat.zoneId().equals(area.zoneId())).sorted(Comparator.comparing(
                 io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSeat::id)).toList();
         assertEquals(6, declarations.size());
         var board = SeatState.empty();

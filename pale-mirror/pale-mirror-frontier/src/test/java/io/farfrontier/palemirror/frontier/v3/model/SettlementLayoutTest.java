@@ -21,6 +21,26 @@ class SettlementLayoutTest {
                     FrontierRulesets.installed("frontier-v3-simulation-terrain-r31"));
 
     @Test
+    void leisureProfileChangesOnlyNorthwatchAndRetainsItsExplicitStyleThroughRecovery() {
+        var world = new WorldId("frontier:leisure-layout-isolation");
+        var old = FrontierBootstrapper.create(world, 139, FrontierRulesets.installed("frontier-v3-living-residents-r36"));
+        var current = FrontierBootstrapper.create(world, 139, FrontierRulesets.installed("frontier-v3-leisure-seats-r37"));
+        assertEquals(old.settlements().subList(1, old.settlements().size()), current.settlements().subList(1, current.settlements().size()));
+        assertEquals(new BuildingStyleId("pale_mirror:medieval_spruce_max"), old.settlements().getFirst().layout().style());
+        assertEquals(new BuildingStyleId("pale_mirror:medieval_spruce_leisure"), current.settlements().getFirst().layout().style());
+        for (var home : List.of(old.settlements().getFirst(), current.settlements().getFirst())) {
+            var counts = home.structures().stream().flatMap(b -> b.definition().seats().values().stream())
+                    .filter(seat -> seat.kind() == BuildingSeat.Kind.HANDCRAFTED_BENCH).count();
+            assertEquals(home == old.settlements().getFirst() ? 0 : 4, counts);
+        }
+        var state = FrontierWorldState.initial(current); var codec = new FrontierWorldStateCodec();
+        assertEquals(state, codec.decode(codec.encode(state)));
+        var layout = current.ruleset().worldLayout();
+        assertEquals(layout.settlementStyles(), layout.withProductionSites(FrontierWorldLayout.ProductionSites.DISPERSED).settlementStyles());
+        assertThrows(IllegalArgumentException.class, () -> layout.withSettlementStyle(new SubjectId("settlement:9999"), BuildingCatalog.defaultStyle()));
+    }
+
+    @Test
     void northwatchSelectsTheActualMaximumLevelSetWithoutUpgradingOtherSettlements() {
         var northwatch = BOOTSTRAP.settlements().getFirst();
         assertEquals(new BuildingStyleId("pale_mirror:medieval_spruce_max"), northwatch.layout().style());

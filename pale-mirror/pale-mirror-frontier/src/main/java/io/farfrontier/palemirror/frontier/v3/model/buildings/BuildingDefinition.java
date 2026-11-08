@@ -203,7 +203,7 @@ public record BuildingDefinition(
                     || chair == null || !chair.state().kind().equals(seat.chairBlock())
                     || !seat.facing().name().toLowerCase(Locale.ROOT).equals(chair.state().properties().get("facing"))
                     || table == null || !table.state().kind().equals(seat.tableBlock())
-                    || zone == null || zone.use() != ZoneUse.DINING || !zone.volume().contains(seat.chair())
+                    || zone == null || (zone.use() != ZoneUse.DINING && zone.use() != ZoneUse.REST) || !zone.volume().contains(seat.chair())
                     || !parcel.contains(seat.approach()) || !parcel.contains(seat.egress()))
                 throw new IllegalArgumentException("invalid authored seating declaration " + entry.getKey());
         }

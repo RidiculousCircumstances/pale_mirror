@@ -13,6 +13,7 @@ final class ResidentRoutineProcessModule implements FrontierWorldProcessModule {
           RoutineEvent.Requested.TYPE,
           RoutineEvent.Started.TYPE,
           RoutineEvent.Arrived.TYPE,
+          RoutineEvent.Seated.TYPE,
           RoutineEvent.Ended.TYPE);
   static final DeterministicProcessDescriptor DESCRIPTOR =
       new DeterministicProcessDescriptor(
@@ -23,6 +24,7 @@ final class ResidentRoutineProcessModule implements FrontierWorldProcessModule {
           ProcessTypeSets.union(
               TYPES,
               Set.of(
+                  "frontier.seat_changed",
                   "frontier.actor_movement_started",
                   "frontier.actor_movement_interrupted",
                   "kernel.schedule_created",
@@ -41,7 +43,8 @@ final class ResidentRoutineProcessModule implements FrontierWorldProcessModule {
       if (row.phase() == ResidentRoutine.Phase.WALKING)
         events.addAll(ActorMovementProcess.planStart(RoutineMovementProvider.movement(row)));
       long due =
-          row.phase() == ResidentRoutine.Phase.WALKING
+          row.kind() == ResidentRoutine.Kind.SIT ? row.startedAt() + s.bootstrap().ruleset().residentLife().routines().admissionInterval()
+              : row.phase() == ResidentRoutine.Phase.WALKING
               ? row.startedAt()
                   + s.bootstrap().ruleset().residentLife().routines().walkingBudgetTicks()
               : row.phaseAt() + row.pauseTicks();
@@ -63,6 +66,7 @@ final class ResidentRoutineProcessModule implements FrontierWorldProcessModule {
               ResidentRoutines.arrived(s, e, event.instant().ticks()),
               event.subject(),
               event.instant().ticks());
+      case RoutineEvent.Seated e -> ResidentRoutines.seated(s, e, event.instant().ticks());
       case RoutineEvent.Ended e ->
           ResidentActivityProcess.retargetHotResident(
               ResidentRoutines.ended(s, e, event.instant().ticks()),

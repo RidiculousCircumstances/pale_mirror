@@ -76,6 +76,32 @@ def build(spec,source,out):
    if pos not in cells:continue
    if value[0]==1 and not cells[pos][0].startswith('domum_ornamentum:'):continue # Stale source tile on a replaced vanilla bed, not an architectural material.
    data[pos]=(cells[pos][0],value[0],int(n['mcversion']),value[1])
+ # Merge explicitly pinned decorations into the same owned content envelope. Controllers
+ # are authoring-only omissions; a cell overlap fails instead of erasing architecture.
+ for decoration in spec.get('decorations',[]):
+  payload=(source.parent/Path(decoration['source']).name).read_bytes()
+  if hashlib.sha256(payload).hexdigest()!=decoration['sha256']:raise ValueError('unpinned decoration')
+  dn=nbtlib.File.parse(io.BytesIO(gzip.decompress(payload)));dp=[v.unpack() for v in dn['palette']]
+  dsx,dsy,dsz=[int(dn[k]) for k in ('size_x','size_y','size_z')];di=[]
+  for w in dn['blocks']:w=int(w)&0xffffffff;di.extend((w>>16,w&65535))
+  offset=decoration['offset'];omit=set(decoration['omittedControllers'])
+  if not omit<={'minecolonies:blockwaypoint','minecolonies:decorationcontroller'}:raise ValueError('undeclared decoration controller')
+  for i,v in enumerate(di[:dsx*dsy*dsz]):
+   state=dp[v]
+   if state['Name'] in omit:continue
+   value=adapt(state)
+   if value is None:continue
+   at=(i%dsx+offset[0],i//(dsx*dsz)+offset[1],i//dsx%dsz+offset[2])
+   if at in cells:raise ValueError('decoration overlaps source architecture '+str(at))
+   cells[at]=value
+  for tile in dn['tile_entities']:
+   at=tuple(int(tile[k])+offset[j] for j,k in enumerate('xyz'));value=visual_data(tile)
+   if value is not None and at in cells:data[at]=(cells[at][0],value[0],int(dn['mcversion']),value[1])
+ for paving in spec.get('paving',[]):
+  lo,hi=paving['min'],paving['max']
+  if hi[1]!=lo[1]+1 or (hi[0]-lo[0])*(hi[2]-lo[2])>1024:raise ValueError('unbounded authored paving')
+  for x in range(lo[0],hi[0]):
+   for z in range(lo[2],hi[2]):cells.setdefault((x,lo[1],z),(paving['block'],{}))
  # Explicit adaptation: a narrow supported entrance and named stations. No
  # runtime inference/paste, inventories or foreign block-entity data are imported.
  door=tuple(spec['door']);dx,dz=DIRECTIONS[spec['front']]
@@ -210,7 +236,7 @@ def build(spec,source,out):
  # Certificates are produced by the registered Minecraft shape compiler, never fabricated.
  geometry=base.with_suffix('.geometry')
  if not geometry.exists():geometry.write_text('# Native collision certificate pending authoring compilation.\n')
- base.with_suffix('.provenance.json').write_text(json.dumps({'sourceRef':'a9b03edfbbd5359b148c85284ea038066d689866','source':spec['source'],'sourceSha256':spec['sha256'],'license':'private test derivative; upstream ARR','adaptations':['original native blocks, shapes and materials retained with pinned dependencies','terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air','supported open entrance','declared machine/operator aisle and service points','no entities, inventories or foreign controllers; typed visual data retained']+spec.get('adaptations',[]),'replacements':spec.get('replacements',[]),'blocks':len(cells),'beds':len(beds)},indent=2)+'\n')
+ base.with_suffix('.provenance.json').write_text(json.dumps({'sourceRef':'a9b03edfbbd5359b148c85284ea038066d689866','source':spec['source'],'sourceSha256':spec['sha256'],'license':'private test derivative; upstream ARR','adaptations':['original native blocks, shapes and materials retained with pinned dependencies','terrain placeholders and colony controllers omitted; complete source foundation retained; surveyed ground datum and explicit excavation volumes distinguish terrain from source air','supported open entrance','declared machine/operator aisle and service points','no entities, inventories or foreign controllers; typed visual data retained']+spec.get('adaptations',[]),'replacements':spec.get('replacements',[]),'decorations':spec.get('decorations',[]),'paving':spec.get('paving',[]),'blocks':len(cells),'beds':len(beds)},indent=2)+'\n')
  print(spec['name'],len(cells),'beds',len(beds))
 
 def main():

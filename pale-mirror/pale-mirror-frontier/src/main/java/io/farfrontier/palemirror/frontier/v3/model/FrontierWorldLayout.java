@@ -5,14 +5,24 @@ import java.util.*;
 /** Explicit immutable genesis placement. All geometry, recovery and worldgen
  * consumers receive the same ruleset value; coordinates are not inferred from IDs. */
 public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements,
-        List<String> settlementNames, Roads roads, Optional<Set<Integer>> extractionProducers, Terrain terrain, ProductionSites productionSites) {
+        List<String> settlementNames, Roads roads, Optional<Set<Integer>> extractionProducers, Terrain terrain, ProductionSites productionSites,
+        Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingStyleId> settlementStyles) {
+    public FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settlements, List<String> names, Roads roads,
+            Optional<Set<Integer>> producers, Terrain terrain, ProductionSites productionSites) {
+        this(bounds, settlements, names, roads, producers, terrain, productionSites, Map.of());
+    }
+    public FrontierWorldLayout withSettlementStyle(io.farfrontier.palemirror.frontier.v3.api.SubjectId settlement,
+            io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingStyleId style) {
+        var styles = new HashMap<>(settlementStyles); styles.put(settlement, style);
+        return new FrontierWorldLayout(bounds, settlements, settlementNames, roads, extractionProducers, terrain, productionSites, styles);
+    }
     public enum ProductionSites { ADJACENT, DISPERSED }
     public FrontierWorldLayout(WorldBounds bounds,List<BlockPosition> settlements,List<String> names,Roads roads,
             Optional<Set<Integer>> extractionProducers,Terrain terrain) {
         this(bounds,settlements,names,roads,extractionProducers,terrain,ProductionSites.ADJACENT);
     }
     public FrontierWorldLayout withProductionSites(ProductionSites mode) {
-        return new FrontierWorldLayout(bounds,settlements,settlementNames,roads,extractionProducers,terrain,mode);
+        return new FrontierWorldLayout(bounds,settlements,settlementNames,roads,extractionProducers,terrain,mode,settlementStyles);
     }
     public enum Terrain { FLAT, RELIEF }
     public enum Roads { HISTORICAL_GRID, LOCAL_ACCESS }
@@ -33,6 +43,11 @@ public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settle
         return List.copyOf(result);
     }
     public FrontierWorldLayout {
+        settlementStyles = Map.copyOf(settlementStyles);
+        var declared = new HashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
+        for (int index = 0; index < settlements.size(); index++)
+            declared.add(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("settlement:" + (index + 1)));
+        if (!declared.containsAll(settlementStyles.keySet())) throw new IllegalArgumentException("style names an absent settlement");
         Objects.requireNonNull(productionSites); Objects.requireNonNull(bounds); settlements = List.copyOf(settlements);
         settlementNames = List.copyOf(settlementNames); Objects.requireNonNull(roads); Objects.requireNonNull(terrain);
         extractionProducers = Objects.requireNonNull(extractionProducers).map(Set::copyOf);
@@ -97,8 +112,10 @@ public record FrontierWorldLayout(WorldBounds bounds, List<BlockPosition> settle
     }
     String canonicalText() {
         String base = bounds + ":" + settlements;
-        return roads == Roads.HISTORICAL_GRID && settlementNames.equals(HISTORICAL_NAMES) && extractionProducers.isEmpty() && terrain == Terrain.FLAT && productionSites == ProductionSites.ADJACENT ? base
+        var text = roads == Roads.HISTORICAL_GRID && settlementNames.equals(HISTORICAL_NAMES) && extractionProducers.isEmpty() && terrain == Terrain.FLAT && productionSites == ProductionSites.ADJACENT ? base
                 : base + ":names=" + settlementNames + ":roads=" + roads + ":extraction="
                     + extractionProducers.map(values -> values.stream().sorted().toList().toString()).orElse("historical-stride") + ":terrain=" + terrain + ":productionSites=" + productionSites;
+        return settlementStyles.isEmpty() ? text : text + ":styles=" + settlementStyles.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).map(e -> e.getKey().value() + "=" + e.getValue().value()).toList();
     }
 }

@@ -13,6 +13,7 @@ final class ResidentRoutinePayloadCodecs {
                 RoutineEvent.Requested.TYPE,
                 RoutineEvent.Started.TYPE,
                 RoutineEvent.Arrived.TYPE,
+                RoutineEvent.Seated.TYPE,
                 RoutineEvent.Ended.TYPE)
             .stream()
             .map(ResidentRoutinePayloadCodecs::codec)
@@ -33,9 +34,14 @@ final class ResidentRoutinePayloadCodecs {
                   CombatWire.actuation(out, e.actor());
                   out.writeByte(e.kind().wireTag());
                   FrontierWorldStateCodec.writePosition(out, e.goal().support());
+                  ResidentRoutineStateCodec.seat(out, e.seat());
                 }
                 case RoutineEvent.Started e -> ResidentRoutineStateCodec.row(out, e.routine());
                 case RoutineEvent.Arrived e -> {
+                  ActorExecutionStateCodec.writeId(out, e.execution());
+                  out.writeLong(e.sequence());
+                }
+                case RoutineEvent.Seated e -> {
                   ActorExecutionStateCodec.writeId(out, e.execution());
                   out.writeLong(e.sequence());
                 }
@@ -57,11 +63,14 @@ final class ResidentRoutinePayloadCodecs {
                       new RoutineEvent.Requested(
                           CombatWire.actuation(in),
                           ResidentRoutine.Kind.fromWireTag(in.readUnsignedByte()),
-                          new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)));
+                          new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
+                          ResidentRoutineStateCodec.seat(in));
                   case RoutineEvent.Started.TYPE ->
                       new RoutineEvent.Started(ResidentRoutineStateCodec.row(in));
                   case RoutineEvent.Arrived.TYPE ->
                       new RoutineEvent.Arrived(ActorExecutionStateCodec.readId(in), in.readLong());
+                  case RoutineEvent.Seated.TYPE ->
+                      new RoutineEvent.Seated(ActorExecutionStateCodec.readId(in), in.readLong());
                   case RoutineEvent.Ended.TYPE ->
                       new RoutineEvent.Ended(ActorExecutionStateCodec.readId(in), in.readLong());
                   default -> throw new IllegalArgumentException("unknown routine payload");
