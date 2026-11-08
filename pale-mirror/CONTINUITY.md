@@ -1,6 +1,27 @@
 # Active continuity — 2026-11-08
 
-Current user order: make the restaurant's remaining chairs/benches functional.
+Latest user order: research crafting/resource costs, especially bread productivity.
+RESEARCH COMPLETE; recipes, source and runtime unchanged. Main alone, no agents/push.
+Report `docs/research/resource-cost-balance-20261108.md` plus adjacent JSON; evidence
+IMPL/build/resource-cost-audit-20261108, frozen124384/t49000/r38.334alive,
+1711stored bread across12towns,13hungry0starving; Northwatch23alive/115bread.
+Actual NPC3wheat->1bread (64->21+1left),80work EACH loaf; no batch-roundup bug.
+Life72ticks/unit,1000capacity, eatBelow668, bread1000 but333useful at threshold;
+~1loaf/day/person. Nutrition500 makes no difference,200 gives2items/one meal/day.
+Initial128bread PER TOWN masks shortages4–6days. Idealized worker1.17x+ironhoe
+harvest1.5x gives20/40/80bread per farmer workday for yield1/2/4; excludes travel,
+growth constraints, maintenance/logistics. Combined direct field+bake FTE for30:
+1.67/0.92/0.54. Actual steady throughput NOT measured. Installed Create6.0.10
+milling wheat->1flour+25%2extra, then1dough->1bread:64guaranteed/96expected from64
+wheat versus NPC21. FD egg dough also more efficient. Need pack-wide tech parity
+before merely increasing NPC wheat cost. Clothes are not a recurring cloth sink;
+wood ratios vanilla; iron repairs restore HALF125durability, not full250.
+Proposed only, NOT implemented/approved: keep3:1, trial breadnutrition200/work320,
+explicit food-labour target and controlled multi-day trade-adjusted measurements.
+Future balance must use a new profile, preserving r38. No pending implementation.
+
+
+Previous restaurant order: make the restaurant's remaining chairs/benches functional.
 TECHNICAL DELIVERY COMPLETE WITH LIMITS; verified, committed and deployed below.
 Main alone; SA audit paused, Terra stopped, no subagents or push. AGENTS and
 engineering-agent-protocol remain authoritative. No M3/HUMAN_CANDIDATE or universal
