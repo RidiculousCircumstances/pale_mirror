@@ -1,137 +1,105 @@
 # Active continuity — 2026-11-08
 
-User requested statistical investigation and repair of resident combat, navigation
-and planning stalls. This bounded technical delivery is COMPLETE, with the limits
-below; no M3/HUMAN_CANDIDATE or universal latency claim. Main alone implemented;
-SA audit paused, Terra stopped, no subagents/push. Governance AGENTS/protocol remain
-authoritative. Other product orders are not promoted or waived by this repair.
+Current user order: make the restaurant's remaining chairs/benches functional.
+TECHNICAL DELIVERY COMPLETE WITH LIMITS; verified, committed and deployed below.
+Main alone; SA audit paused, Terra stopped, no subagents or push. AGENTS and
+engineering-agent-protocol remain authoritative. No M3/HUMAN_CANDIDATE or universal
+latency claim; unrelated product orders are not promoted by this delivery.
 
 IMPL `/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror`, Git root parent,
-branch feat/baker-carry-orders-20260926. HEAD
-6391187f5a6ce5c8c6cf6fc9665fae2faff865fd; tracked clean, unrelated .serena.
-PACK `/home/rd/proj/minecraft` HEAD909c26c tracked clean; unrelated .f0v-baseline.
-GOV `/home/rd/proj/pm-governance` extensive unrelated WIP preserved. Own delivery:
-this ledger, ONE architecture.yml line resident_execution_latency_boundary, and
-`docs/verification/northwatch-resident-execution-audit-20261108.json`. Stage only
-that architecture line against HEAD, never the whole architecture file. No push.
+branch feat/baker-carry-orders-20260926, HEAD0375cad2594179b9489ce9d085ea11fc3a9ddb22.
+Tracked clean; unrelated .serena retained. PACK `/home/rd/proj/minecraft`
+HEAD909c26c, tracked clean; unrelated .f0v-baseline retained. GOV
+`/home/rd/proj/pm-governance` has extensive unrelated WIP: preserve all. Own scope
+is this ledger, ONE resident_furniture_boundary architecture line, and
+`docs/verification/northwatch-restaurant-furniture-20261108.json`. Never stage
+whole architecture.yml; stage own line against HEAD. No repository migration.
 
-Prior combat profiling remains in `docs/verification/northwatch-combat-latency-20261108.json`.
-Detailed receipt above owns commit list, failed intermediates, tests, comparisons,
-hashes and profile limits. Evidence root: IMPL/build/resident-execution-audit-20261108/.
-Already-read skills: pm-worldgen-performance, pm-release-verification,
-pm-test-server-ops + operations-map, pm-engine-source; Serena manual read.
+## Functional restaurant
 
-## Delivered behavior and causal evidence
+New independent kitchen_furnished_5, style pale_mirror:medieval_spruce_furnished,
+ruleset frontier-v3-furnished-restaurant-r38. R37 assets/profile remain immutable;
+unit evidence proves other settlements unchanged. Actual original staircase
+retained. Replaced reviewed ground/upper-floor/terrace fake stair furniture and
+seven blank sign armrests (exact block and typed visual SNBT SHA256 preimages).
+28 seats:16DINING+12REST, physically22chairs+6bench cells;16table sections.
+Old kitchen had6DINING+2REST. No authored extra containers or fires introduced.
 
-Baseline335 living/12towns,343417/t67023 versus446291/t84623(+17600ticks): two
-persistent clinical APPROACH+RESTING contradictions, Nora1-16/Eli1-22, full20HP;
-Nora starving. Missing bandages cannot fall through into walking while resting.
-Exact legacy overlap interrupts its own movement, exits bed, ends care without
-healing/arrival gift. Both recovered and resumed work/guard in SAME world.
+SeatTable is explicitly Optional in BuildingSeat/SeatPlace. Markup6 requires
+both table=none/tableBlock=none for tableless REST; DINING requires a supported
+exact table. Shared SeatState, activity owners, navigation, native provider and
+non-replayable operation journal retain authority. No new executor or navigator.
+SeatStateCodec persists table presence; snapshot schema352 rejects351 before
+hydration; no heuristic conversion. New world was required and authorized.
+Generic native authoring now checks connected clear approach/egress for each
+seat. Initial terrace contacts and upper table neighbour states were corrected
+through authored content, without carving architecture or runtime patches.
 
-Physical pass now finishes an old suffix then fills current native tick, once per
-stage/tick. Shared preparation budget cannot suppress bounded admitted effects;
-canonical predecessor/capacity remain hard. Birth connectivity uses finite scoped
-block-only search; bootstrap exit index and immutable authored-cell memo preserve
-current observation/unknown damage/collision precedence. Melee cue starts AFTER
-canonical impact admission, retains full native preparation and finite contact;
-no late hit, restart, larger reach or canonical damage substitution.
+Evidence: IMPL/build/restaurant-furniture-20261108 and receipt above.
+Targeted JVM49/49 PASS: layout, explicit none/dining rejection, optional-seat wire,
+truncation, old schema rejection, ordinary/interrupted/recovered meals/leisure.
+Guardrails and verifyPackagedJar PASS (/tmp/pm-restaurant-gates.log).
+Native building-authoring11/11 PASS (/tmp/pm-restaurant-authoring5.log), actual
+registry certificate and all4furniture rotations. Deterministic pinned import
+PASS; forged sign payload rejected before any output. Initial concurrent Gradle
+compilation invalidated loaded test classes; serial rerun passed. No whole-suite
+claim: prior unrelated architecture/JVM/Node debt remains in previous receipt.
 
-Optional parking uses shared positive KnownLocalAccess(radius32/4096edge checks),
-not global per-destination waits; exhaustion grants no global NO_PATH. Ready or
-physically admitted service throats constrain route and destination; resource wait
-alone owns no exclusive entrance. Private outward/no-reentry remains exact. Bound
-production source without operational custody retains job/stock/claims as
-SOURCE_PHYSICAL_BINDING while allowing safe yield. Completed local explorations
-retain only64 immutable parent/visit proofs;16 exact exclusion-set views; occupancy,
-suitability and permissions are reevaluated. SAME frozen22actor probe: identical
-choices, warm totals957/1176ms baseline versus106/95ms candidate (local probe only).
-Rejected direct-slot block-memo experiment discarded, not delivered.
+Checked-in disposable-northwatch-furnished-restaurant scenario PASS,
+run931bd2fe-907a-4f48-84fd-ad75279599ef,27actions/5frames, graceful restart after5,
+same fullpack Java22 client. Resident1-12 tableless bench furnished_10 and1-17
+chair furnished_26 seat and leave through common owners; both ordinal1 CLOSED,
+seat NONE, no movement; conflicts0. All5frames personally viewed; ground seated
+legs persist through restart and exit coherently. Upper frame is close from
+behind, not full pose aesthetic proof. First attempt inherited a camera inside
+the staircase; corrected camera retry passed. Two representative native flows,
+not an NPC replay on every seat or a dining-task acceptance for every new chair.
 
-Assigned security response blocks ordinary work/care handoff before patrol
-projection. Body departure notifies every retained exact owner; only current
-movement resets its clock, suspended guard cannot reject clinical leg. Exact
-722911 input demonstrates old failure/new unload without health/stock/outcome gift.
+Fresh VibeCraft MCP before/after scans (12825blocks each) show all44furniture
+blocks exactly match authored IDs/properties, zero mismatches; real stairs
+retained. Before image and fresh central/window/upper/MCP after images personally
+viewed. Final live layout inspection runbcdd6828-284e-4aef-8d5d-e6c2751037a2 PASS.
+First MCP scan during receiving-level screen failed; one retry after compiled
+chunks passed. No canonical, world-file or live-block edits used for evidence.
+No owned native client/Xvfb/bridge/JFR remains active.
 
-Meal-owned movement required its own census. Reserved-seat obstruction addresses
-ordinary resident review and SERVICE_EXIT through shared movement. MealSeatClearance
-retains exact meal/portion/claim; no food bindings, pending interaction, movement or
-body-custody bypass. Standing DiningArea now addresses actual legal-contact occupants
-also: exact263402 input frees six fed incumbents, eight old meals end with food-8,
-only emitted addressed reviews driven. A retired native passenger chair-feet cell
-stands through the owner's existing seat EXIT before dining return. Exact286602
-resident1-1(age28112) ends via ordinary exit/reapproach/consumption; no invented arrival.
+## Current runtime
 
-Observed-unsaved body departure can use independently stamped saved census proof,
-preserving original receipt and transactional publication/rollback. Native NBT
-found Leon1-5 root plus a retired seat passenger with sameUUID. Positive presence
-fences COLD even for duplicates; strict unique saved proof unchanged. Common body
-owner detaches/discards only a complete known-residence retired BODY tombstone;
-current/future/foreign/unknown fenced. Ordinary native load/save removed actual
-stale passenger; Leon meal/care ended/nourished without raw world edit or reset.
+LIVE `/home/rd/far-frontier-server`, far-frontier-v3-live.service ACTIVE.
+Clean DETACHED source `/home/rd/proj/pm-restaurant-release-20261108/pale-mirror`
+at0375cad25. Build/JAR package, preflight, publish/install, fresh postverify and
+final postverify PASS. Metadata `/tmp/pm-restaurant-release.json`; operation logs
+`/tmp/pm-restaurant-release-{build,preflight,publish,install,verify,final-verify}.log`.
+SHA512 edb9cea4df66620af86fc0607d1d109546dabff0d2782f8e030dbbb733b10f404a518ab3e474aca353774b52d37e7b87d0d23a5645c39fff1a13e889ceb5aa9c.
+Wrapper1438432/Java1438456; invocation3fe78a2407754eec8bf032d642156dac.
+NEW world northwatch-restaurant-seed139-20261108, seed139/r38/schema352/network10.
+Old northwatch-leisure-seed139-20261108 directory preserved; normal old Java1096584
+stop proved all dimensions saved, exact process exit and port free. Required
+managed graybox datapack installed before new genesis. Java22
+`/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java`,4–12G.
+Preserve HTTP8092/8094/observatory. NotBefore1794154053. Final snapshot t4016:
+319residents/12settlements, diagnostic green, required/scene/inventory conflicts0.
+WIP verified candidate and clean deployed JAR have identical entries/content
+except declared sourceTree provenance (clean7e3793cc40ae88fbff8e521f1c988994261937e0).
 
-Late admissions exposed aggregate composition errors. Vacant work discovery now
-checks the same owner checkpoint/shared effect fence as actual release (a2c345e9c).
-Exact1268305 prefix seatedLEISURE73 actor1-21 previously selected for equipment work;
-new admission chooses available1-20 and preserves seat/execution. Next actual
-1497409 prefix exposed RESERVED leisure seat competing with meal admission.
-4f864f71a adds Transition.commitFromPrepared: successor meal, care, migration and
-routine population derives AFTER prior release/pause. Exact snapshot1496206 plus
-1203WAL now closes LEISURE73/rest_2 and reserves MEAL74/dining_2, no food consumed.
-Stale basis rejects before callback. No schema reset or heuristic recovery.
+## Previous completed resident audit
 
-Native optional ServicePointClearance was parking a stationary fighting GUARD
-across kitchen buffer(-1448..-1455), away from player. f7bca4e95 requires exact
-activity checkpoint. Raw14 first decision0.32s but first hit16.481s/one hit;
-trajectory/contact analysis matches buffer. Release16 unchanged checked-in duel
-and circling scenario e12f5462 PASS outdoors at current patrol, six native hits,
-first hit2995.331ms, all within declared cue windows, complete747records/no loss;
-circling frame personally viewed. Not a matched-kitchen timing comparison.
+Statistical resident combat/navigation/planning repair remains COMPLETE at
+6391187f5 (ancestor); detailed causal evidence, commit list, old required incidents,
+failed intermediates and baseline test debt are retained in
+`docs/verification/northwatch-resident-execution-audit-20261108.json`.
+Earlier combat receipt: `docs/verification/northwatch-combat-latency-20261108.json`.
+Prior evidence IMPL/build/resident-execution-audit-20261108. Release17 SAME oldworld
+final pair305103->308503(+3400ticks):347alive,341nourished6hungry0starving, zero old
+meals/unclockedCOLDmoves/expiredroutes/unheldoverdue/RESTING+movement overlaps.
+Historical required incident first14991,last1497409,occ5 remains in that preserved
+old world; no claim it was repaired by erasure. Current newworld green is separate.
+The prior fixes cover clinical contradiction, physical suffix starvation, melee
+admission, bounded local access/service clearance, exact body departure/retired
+passenger cleanup, deferred transition composition, fighting guard clearance and
+returning group guide contact geometry. No new extension waives their boundaries.
 
-Last starving3-9: aborted transport READY/RETURNING without supplies, pack already
-home, guide in narrow contact. Enclosing DONKEY geometry cannot start at guide's
-position although own VILLAGER geometry can. 6391187f5 selects an actual contact
-fitting shared enclosing profile; other members join with own profiles through
-shared movement. Exact input: return preserves inventory, group CLOSED/mission
-COMPLETE, then actual food consumed. Live17 sameworld guide walked home, ate and
-became NOURISHED/PRESENCE, assignmentIDLE. No teleports/canonical mutation.
-
-## Current runtime and verification limits
-
-LIVE `/home/rd/far-frontier-server`, user far-frontier-v3-live.service ACTIVE.
-Release17 source6391187f5 from clean DETACHED
-`/home/rd/proj/pm-resident-cadence-release17-20261108/pale-mirror`.
-SHA512 b51bf8e3fe8956bd83b61304a781e4b4f77a731a692e5ca68605316f11a98fb60c6f0e7a3bc69962f254806d92c5f20d05a91b49fa24f495fcf80d30bc9be831.
-Wrapper1096560/Java1096584; invocationa97a524519c1477ab9cdfe751473277b;
-metadata/tmp/pm-resident-cadence-release17.json pins notBefore. Preflight, build,
-publish/install and postverify17 PASS. SAME world northwatch-leisure-seed139-20261108,
-seed139/r37 frontier-v3-leisure-seats-r37/schema351/network10/Java22/4–12G.
-Java22 `/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java`.
-Normal stops prove exact old Java exit/all dimensions saved/ports free. Preserve
-HTTP8092/8094/observatory. No owned client/Xvfb/JFR active.
-
-Final17 snapshot pair305103->308503(+3400ticks),347alive/12towns:341nourished,
-6hungry,0starving. Zero meals older3000ticks, unclockedCOLD moves, expired travel
-clocks, unheld overdue resident schedules or RESTING+movement overlap. Six hungry
-residents alone are not a deadlock. pendingOrdinaryTicks0/auditReadyWithoutWake0.
-`release17-population-analysis.json`, final summary/performance/why retain evidence.
-
-Required historical incident retained first14991,last1497409,occurrences5;
-diagnosticVerdict remains blocked, scene/inventory conflicts0. Protective failures
-90342/673414/1268305/1497409 have exact causal repairs in receipt; never erase them
-or claim diagnostic green. No new quarantine after4f864f71a. Schema351 has only
-explicit compatible fingerprint edge0846f523..->a4e05dd9.. for registered clinical
-producer correction; other changed descriptors/schemas reject. Full473836prefix
-256WAL and later exact prefixes replayed; same world preserved throughout.
-
-Affected checks, guardrails/package pass. Last composition47neighbors plus corrected
-new leisure/meal regression and stale callback negative pass. Group23/24 pass;
-remaining GroupMovementObservation birth-zone failure IDENTICAL on4f864f71a. Broader
-SingleHotNavigationArchitectureTest flags unchanged RestPlaceExecutor direct stop.
-Other baseline route/meal/movement/production/older JVM/Node debt remains documented;
-NO whole-suite-green claim or suppressed assertion. GOV guardrails PASS.
-JFR13 melee physical-pass median50.048ms,p95104.063,p99400.365,max1050.161;
-JFR12 median79.590ms,p95160.324,max1078.600, different evolving workloads, no controlled
-whole-server speed factor. Raw older startup first-hit delays retained. No claim
-of20TPS, all future failures eliminated, formal product promotion or kitchen-native
-acceptance. Targeted duel has semanticProgress[]; broader product gates remain.
+Skills/manual already read: Serena; visual-audit, foundry-audit,
+release-verification, test-server-ops+operations-map, prior worldgen-performance
+and engine-source. Resume from retained facts; do not repeat whole historical
+reference dumps. Relevant execution semantics remain read and binding.

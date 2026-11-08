@@ -1,0 +1,138 @@
+{
+  "status": "TECHNICAL_DELIVERY_COMPLETE_WITH_LIMITS",
+  "scope": "Functional Handcrafted restaurant chairs and benches; main alone; no product promotion",
+  "implementationCheckout": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror",
+  "sourceCommit": "0375cad2594179b9489ce9d085ea11fc3a9ddb22",
+  "oldWorldPreserved": "northwatch-leisure-seed139-20261108",
+  "newProfile": "frontier-v3-furnished-restaurant-r38",
+  "snapshotSchema": 352,
+  "counts": {
+    "beforeDining": 6,
+    "beforeRest": 2,
+    "afterDining": 16,
+    "afterRest": 12,
+    "afterTotal": 28,
+    "nativeFurnitureBlocks": 44
+  },
+  "ownership": "Existing shared seats, registered activity providers and shared movement; explicit optional SeatTable, no inferred rest table; DINING requires table. No new process or actuator.",
+  "assets": "New pinned kitchen_furnished_5 plus new furnished style; old r37 assets unchanged; exact original stairs preserved; seven blank sign removals pinned by block preimage and typed visual SNBT SHA256.",
+  "evidenceRoot": "IMPL/build/restaurant-furniture-20261108",
+  "checks": [
+    {
+      "command": "targeted frontier tests + guardrails + verifyPackagedJar",
+      "result": "PASS",
+      "jvmTests": 49,
+      "jvmFailures": 0,
+      "log": "/tmp/pm-restaurant-gates.log"
+    },
+    {
+      "command": "building-authoring native slice",
+      "result": "PASS",
+      "requiredTests": 11,
+      "log": "/tmp/pm-restaurant-authoring5.log",
+      "limits": "Native/neutral identity, actual shape compiler, every seat connected approach/egress; furniture settled in all four rotations. Not NPC pathing proof."
+    },
+    {
+      "command": "pinned import reproducibility",
+      "result": "PASS",
+      "outputs": [
+        "nbt",
+        "blocks",
+        "properties",
+        "provenance"
+      ]
+    },
+    {
+      "command": "forged sign visual preimage",
+      "result": "REJECTED_BEFORE_OUTPUT"
+    }
+  ],
+  "intermediates": [
+    "Initial concurrent Gradle compilation invalidated two loaded test classes; rerun serial49/49 passes.",
+    "Authoring gate found terrace blocked approach; both seats now use actual connected center aisle, no architectural carving.",
+    "Native neighbour state test found upper double table directions incorrect; curated source declarations corrected, all4rotations pass.",
+    "First native rest run seated resident1-12 on furnished_10 without table; inherited camera was inside staircase and failed visible entity. Camera moved to exact adjacent approach; retry active."
+  ],
+  "native": {
+    "status": "PASS",
+    "manifest": "IMPL/build/restaurant-furniture-20261108/native-rest2.json",
+    "runId": "931bd2fe-907a-4f48-84fd-ad75279599ef",
+    "actions": 27,
+    "frames": 5,
+    "recovery": "graceful after action5 with same native client",
+    "representatives": {
+      "resident:1-12": "furnished_10 tableless HANDCRAFTED_BENCH",
+      "resident:1-17": "furnished_26 tableless HANDCRAFTED_CHAIR"
+    },
+    "terminal": "both routine ordinal1 CLOSED, seat NONE, no movement; required/scene/inventory conflicts0",
+    "visualReview": "All5frames personally viewed. Ground bench before/after restart has attached legs; ground exit has coherent standing body. Upper chair frame is close from behind, so not a complete pose aesthetic certificate.",
+    "coverageLimit": "Two representative native activity flows; not a replay of every seat or dining task."
+  },
+  "deployment": {
+    "sourceRepo": "/home/rd/proj/pm-restaurant-release-20261108/pale-mirror",
+    "sourceRef": "0375cad2594179b9489ce9d085ea11fc3a9ddb22",
+    "artifact": "/home/rd/proj/pm-restaurant-release-20261108/pale-mirror/pale-mirror-neoforge/build/libs/pale_mirror-0.3.0-SNAPSHOT.jar",
+    "sha512": "edb9cea4df66620af86fc0607d1d109546dabff0d2782f8e030dbbb733b10f404a518ab3e474aca353774b52d37e7b87d0d23a5645c39fff1a13e889ceb5aa9c",
+    "target": "/home/rd/far-frontier-server",
+    "levelName": "northwatch-restaurant-seed139-20261108",
+    "java": "/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java",
+    "service": "far-frontier-v3-live.service",
+    "notBefore": 1794154053,
+    "invocation": "3fe78a2407754eec8bf032d642156dac",
+    "wrapperPid": 1438432,
+    "newWorld": "northwatch-restaurant-seed139-20261108",
+    "oldWorldPreserved": true,
+    "normalOldStop": "old Java1096584 exited, all dimensions saved,25565 free before install",
+    "cleanBuildLog": "/tmp/pm-restaurant-release-build.log",
+    "preflight": "/tmp/pm-restaurant-release-preflight.log",
+    "publish": "/tmp/pm-restaurant-release-publish.log",
+    "install": "/tmp/pm-restaurant-release-install.log",
+    "verify": "/tmp/pm-restaurant-release-final-verify.log",
+    "artifactComparison": "Clean artifact and verified WIP candidate have identical ZIP entry sets/content except META-INF/pale-mirror-runtime-identity.properties (clean sourceTree7e3793cc40ae88fbff8e521f1c988994261937e0 versus WIP unavailable). No source/classes/content change.",
+    "finalSummary": {
+      "schema": 1,
+      "kind": "summary",
+      "id": "",
+      "world": "frontier:graybox",
+      "revision": 5550,
+      "instant": 4016,
+      "status": "ok",
+      "diagnosticVerdict": "green",
+      "requiredConflicts": 0,
+      "diagnosticScope": "RETAINED_CONFLICTS",
+      "progressVerdict": "NOT_ASSESSED",
+      "preparingReplicaScopes": 0,
+      "settlements": 12,
+      "residents": 319,
+      "bioforms": 49,
+      "sites": 26,
+      "intents": 7,
+      "ambientLeases": 13,
+      "sceneLeases": 2,
+      "sceneConflicts": 0,
+      "items": 72,
+      "inventoryConflicts": 0,
+      "replicaCustodyDiagnostics": 0,
+      "incidentIndexSize": 0,
+      "optionalDiagnosticDrops": 0
+    },
+    "javaPid": 1438456
+  },
+  "limits": [
+    "No M3/HUMAN_CANDIDATE, whole-suite-green or server speed claim. Prior unrelated JVM/Node/architecture test debt remains documented in resident execution audit."
+  ],
+  "liveVisual": {
+    "status": "PASS",
+    "runId": "bcdd6828-284e-4aef-8d5d-e6c2751037a2",
+    "manifest": "IMPL/build/restaurant-furniture-20261108/after-pilot.json",
+    "freshVibeCraftScan": "after-scan.json",
+    "comparison": "scan-comparison.json",
+    "scannedBlocks": 12825,
+    "mismatchedFurniture": 0,
+    "chairs": 22,
+    "benchCells": 6,
+    "tableSections": 16,
+    "allRealStairTreadsRetained": true,
+    "review": "Before image, fresh after MCP image and central/window/upper frames personally viewed; diagnostic layout inspection only, no canonical or live block edits. First scan during receiving-level screen returned non-JSON; repeated once after pilot confirmed chunk meshes received/compiled."
+  }
+}
