@@ -5,8 +5,8 @@ import io.farfrontier.palemirror.frontier.v3.model.clinical.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import io.farfrontier.palemirror.frontier.v3.model.rest.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
-import io.farfrontier.palemirror.frontier.v3.process.ClinicalCareProcess;
 import io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
 import java.util.*;
@@ -42,7 +42,7 @@ class ClinicalCareTest {
         s=RestPlaces.apply(s,actor,new RestEvent.Changed(actor,use.revision(),Optional.empty(),RestUse.Action.ENTER,true,
                 new SurfaceAnchor(use.place().head()).standingBody()),4);
         var action=ClinicalContinuation.progress(t.id(),5);
-        var plan=ClinicalCareProcess.progress(s,action,5);
+        var plan=FrontierWorldRuntimeDefinition.planScheduled(s,action,new SimInstant(5));
         assertFalse(plan.stream().anyMatch(e->e.payload() instanceof ClinicalEvent.Destination d&&d.phase()==ClinicalTask.Phase.APPROACH),
                 "missing bandages cannot turn an occupied bed into an unwalkable departure");
         assertTrue(s.humanPopulation().clinical().wounds().get(actor).needsDressing(ClinicalAuthority.quality(s,t)));
@@ -51,11 +51,11 @@ class ClinicalCareTest {
         s=ClinicalTransitions.apply(s,actor,new ClinicalEvent.Recovered(actor,Optional.empty(),100000,
                 ClinicalAuthority.recovery(s,s.humanPopulation().clinical().wounds().get(actor),100000),true),100000);
         assertFalse(s.humanPopulation().clinical().wounds().containsKey(actor));
-        var exit=ClinicalCareProcess.progress(s,ClinicalContinuation.progress(t.id(),100001),100001);
+        var exit=FrontierWorldRuntimeDefinition.planScheduled(s,ClinicalContinuation.progress(t.id(),100001),new SimInstant(100001));
         assertTrue(exit.stream().anyMatch(e->e.payload() instanceof RestEvent.Changed c&&c.action()==RestUse.Action.EXIT));
         assertFalse(exit.stream().anyMatch(e->e.payload() instanceof ClinicalEvent.Ended),"closing cannot erase an occupied bed");
         s=ResidentRoutineProcessTest.apply(s,exit,100001);
-        var close=ClinicalCareProcess.progress(s,ClinicalContinuation.progress(t.id(),100002),100002);
+        var close=FrontierWorldRuntimeDefinition.planScheduled(s,ClinicalContinuation.progress(t.id(),100002),new SimInstant(100002));
         s=ResidentRoutineProcessTest.apply(s,close,100002);
         assertFalse(s.humanPopulation().clinical().tasks().containsKey(t.id()));
         assertFalse(s.humanPopulation().restPlaces().uses().containsKey(actor));
@@ -74,7 +74,7 @@ class ClinicalCareTest {
         s=s.withChanges(FrontierWorldStateUpdate.begin().actorMovements(ImmutableLookupMap.withEntry(s.actorMovements(),actor,movement)));
         var codec=new FrontierWorldStateCodec();s=codec.decode(codec.encode(s));
         var body=s.actorLocations().get(actor).body();var health=s.actorLocations().get(actor).condition().health();
-        var plan=ClinicalCareProcess.progress(s,ClinicalContinuation.progress(t.id(),6),6);
+        var plan=FrontierWorldRuntimeDefinition.planScheduled(s,ClinicalContinuation.progress(t.id(),6),new SimInstant(6));
         assertTrue(plan.stream().anyMatch(e->e.payload() instanceof ActorMovementInterrupted));
         s=ResidentRoutineProcessTest.apply(s,plan,6);
         assertFalse(s.actorMovements().containsKey(actor));assertEquals(body,s.actorLocations().get(actor).body());

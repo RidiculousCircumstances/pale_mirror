@@ -14,7 +14,7 @@ final class ClinicalProcessModule implements FrontierWorldProcessModule {
     static final DeterministicProcessDescriptor DESCRIPTOR=new DeterministicProcessDescriptor("clinical-care",COMMANDS,
             Set.of(ClinicalContinuation.REVIEW,ClinicalContinuation.PROGRESS),TYPES,
             java.util.stream.Stream.concat(TYPES.stream(),java.util.stream.Stream.of("frontier.rest_reserved","frontier.rest_changed","frontier.rest_released",
-                "frontier.actor_execution_resumed","frontier.actor_movement_started","kernel.schedule_created","kernel.schedule_rescheduled","kernel.schedule_cancelled",
+                "frontier.actor_execution_resumed","frontier.actor_movement_started","frontier.actor_movement_interrupted","kernel.schedule_created","kernel.schedule_rescheduled","kernel.schedule_cancelled",
                 "kernel.reconsideration_requested","frontier.reference_mutation_closed")).collect(java.util.stream.Collectors.toUnmodifiableSet()),TYPES);
     public List<ScheduledAction> initialSchedules(FrontierBootstrap b){return b.ruleset().labour().entries().containsKey(ResidentWorkKind.MEDICAL)
             ?b.settlements().stream().map(h->ClinicalContinuation.review(h.id(),b.ruleset().clinical().reviewTicks())).toList():List.of();}
