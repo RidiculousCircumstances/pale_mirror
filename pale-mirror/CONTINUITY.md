@@ -1,5 +1,19 @@
 # Active continuity — 2026-11-09
 
+USER REQUIREMENT2026-11-09: settlement economic specialization, cultivation,
+production and trade must arise from the existing economic need/planning model;
+no artificial supplier/buyer roles, fixed quotas/routes or forced trade commands
+to manufacture a first-slice success. World selection may choose natural geographic
+contrasts, never seed economic outcomes or override commitments. Terrain supplies
+actual suitable land/resources, costs and reachable capacity to existing owners.
+Internal worker jobs remain ordinary consequences of demand/reserves/cost/finance/
+labour/logistics constraints. Needs/safety/care obligations keep their owned priority.
+First-slice food exchange is an observed economic outcome, not an injected order.
+Negative checks should cover absent demand, unaffordable/unreachable supply and
+changed alternatives; committed exact orders retain continuity. If trade does not
+arise, explain the actual economics instead of forcing the expected demonstration.
+No implementation/runtime changes requested or made by this clarification.
+
 Fast territory search research2026-11-09: World Preview (Unofficial Port),
 Modrinth world-preview-fork, is a ready candidate. Official API confirmed1.5.6,
 versionD2lL0Nws for MC1.21.1/NeoForge. NOT installed or runtime-verified here.
