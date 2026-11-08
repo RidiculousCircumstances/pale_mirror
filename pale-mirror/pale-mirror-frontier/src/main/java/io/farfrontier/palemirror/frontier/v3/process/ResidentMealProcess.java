@@ -26,6 +26,7 @@ public final class ResidentMealProcess {
         if (meal == null) return java.util.Set.of(action.subject());
         if(state.actorExecutions().retainsSuspended(meal.residentId(),io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL,meal.claimId()))return java.util.Set.of(meal.residentId());
         if(state.combat().evasions().containsKey(meal.residentId()))return java.util.Set.of(meal.residentId());
+        if (mealSeatMayPlan(state, meal)) return java.util.Set.of();
         if (meal.portable()) return java.util.Set.of();
         if (meal.pendingPhysicalStep().isPresent()
                 || !FrontierSceneAdmission.available(state, List.of(meal.residentId()))
@@ -66,6 +67,21 @@ public final class ResidentMealProcess {
         return new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(), action));
     }
 
+    static boolean mealSeatMayPlan(FrontierWorldState state, ResidentMeal meal) {
+        return (meal.phase() == ResidentMeal.Phase.MOVE || meal.carriesWhileMoving()) && meal.coldTravel().isEmpty()
+                && !state.combat().evasions().containsKey(meal.residentId()) && meal.pendingPhysicalStep().isEmpty() && !state.actorMovements().containsKey(meal.residentId())
+                && ActorExecutionCoordinator.coldAvailable(state, meal.residentId())
+                && state.inventory().fungibleResources().bindingsAtAccount(meal.actorAccountId()).isEmpty()
+                && SeatAccessClearance.requestedAt(state, meal.residentId()).isPresent()
+                && ActorSpatialCourtesy.assess(state, meal.executionId()).ready();
+    }
+    static Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement> selectMealSeat(FrontierWorldState state, ResidentMeal meal, long tick) {
+        if (!mealSeatMayPlan(state, meal)) return Optional.empty();
+        var place = SeatAccessClearance.requestedAt(state, meal.residentId()).orElseThrow();
+        return ResidentServiceTurnover.selectSeatGoal(state, meal.residentId(), tick, place, meal.executionId(),
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.MealSeatClearance(place.home(), place.id(), meal.claimId()));
+    }
+
     /** HOT or an unresolved physical hand owns the meal; no COLD retry is useful. */
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
         if (!PROGRESS.equals(action.kind())) return false;
@@ -77,6 +93,7 @@ public final class ResidentMealProcess {
                 || !ActorExecutionCoordinator.coldAvailable(state, meal.residentId()))
             return true;
         if (meal.carriesFood() && !state.inventory().fungibleResources().bindingsAtAccount(meal.actorAccountId()).isEmpty()) return true;
+        if (mealSeatMayPlan(state, meal)) return false;
         return switch (meal.phase()) {
             case TAKE -> !ResidentMealApproach.displaced(state, meal)
                     && ReferenceContainerCustody.hasLiveCustody(state, meal.depotId());
@@ -107,6 +124,11 @@ public final class ResidentMealProcess {
         if (body == null || body.condition().status() != ActorLifeStatus.ALIVE)
             return List.of(new ProposedEvent(meal.residentId(), new ScheduleEffect.Consumed(action.id())));
         long now = Math.max(action.dueAt().ticks(), currentTick);
+        var courtesy = selectMealSeat(state, meal, now);
+        if (courtesy.isPresent()) return List.of(
+                new ProposedEvent(meal.residentId(), new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted(courtesy.orElseThrow())),
+                new ProposedEvent(meal.residentId(), new ScheduleEffect.Created(ActorMovementProcess.progress(courtesy.orElseThrow(), now + 1))),
+                wake(meal, now));
         var approach = ResidentMealApproach.plan(state, meal);
         if (approach.isPresent()) return List.of(new ProposedEvent(meal.residentId(), approach.orElseThrow()),
                 new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(),
@@ -139,8 +161,11 @@ public final class ResidentMealProcess {
             var waiting = new java.util.ArrayList<ProposedEvent>();
             if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING)
                 ResidentMealSeating.use(state, meal).ifPresent(use -> SeatAccessClearance.occupants(state, use).stream()
-                        .filter(actor -> ResidentServiceTurnover.mayPlan(state, actor, now))
-                        .forEach(actor -> waiting.add(ResidentActivityProcess.wakeAfterActivity(actor, now))));
+                        .forEach(actor -> {
+                            var incumbent = state.humanPopulation().meals().get(actor);
+                            if (incumbent != null && mealSeatMayPlan(state, incumbent)) waiting.add(wake(incumbent, now));
+                            else if (ResidentServiceTurnover.mayPlan(state, actor, now)) waiting.add(ResidentActivityProcess.wakeAfterActivity(actor, now));
+                        }));
             waiting.add(new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(), progress(meal, retryAt))));
             return List.copyOf(waiting);
         }

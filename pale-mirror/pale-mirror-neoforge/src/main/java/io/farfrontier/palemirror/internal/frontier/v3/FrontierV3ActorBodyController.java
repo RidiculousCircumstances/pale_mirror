@@ -598,6 +598,15 @@ final class FrontierV3ActorBodyController {
         } catch (IllegalArgumentException staleOrForeign) { return java.util.Optional.empty(); }
     }
 
+    /** Preserve an already observed physical baseline when independently confirming its exact saved row. */
+    static java.util.Optional<FrontierV3ActorBodyDeparture> storedDepartureForConfirmation(FrontierWorldState state,
+            ActorBodyId body, FrontierV3SceneDeparturePersistence.SavedBody saved,
+            java.util.Optional<FrontierV3ActorBodyDeparture> recorded) {
+        var converted = storedDeparture(state, body, saved);
+        if (converted.isEmpty() || recorded.isEmpty()) return converted;
+        return recorded.filter(receipt -> receipt.current(state) && saved.matches(receipt));
+    }
+
     /** Positive no-load disk proof supplies a missing unload callback, independently of process scopes. */
     static boolean confirmStoredDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             ActorBodyId body, io.farfrontier.palemirror.frontier.v3.model.ActorLocation expected,
@@ -611,14 +620,16 @@ final class FrontierV3ActorBodyController {
                 || level.getEntity(entityId) != null || FrontierV3AmbientPendingAdmissions.get(runtime, entityId) != null) return false;
         var saved = snapshot.snapshot().actors().get(entityId);
         if (saved == null) return false;
-        var receipt = storedDeparture(state, body, saved).orElse(null);
-        if (receipt == null) return false;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        var receipt = storedDepartureForConfirmation(state, body, saved, ledger.bodyDeparture(body.actorId())).orElse(null);
+        if (receipt == null) return false;
         if (!ledger.currentBodyResidence(body.actorId(), receipt.residenceGeneration())
                 || !ledger.permitsRecordedOwner(FrontierV3ActorOwnerBinding.body(
                     receipt.identity().liveBody(FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, 0L, body.physicalEpoch())))
-                || !ledger.recordBodyDeparture(receipt) || !ledger.confirmSavedBodyDeparture(receipt)) return false;
-        ledger.persist(level, state.bootstrap().worldId());
+                || !ledger.recordBodyDeparture(receipt)) return false;
+        ledger.publishSavedDepartures(java.util.List.of(receipt), java.util.List.of(), java.util.List.of(),
+                () -> ledger.persist(level, state.bootstrap().worldId()));
+        if (!ledger.savedBodyDeparture(receipt)) return false;
         savedDepartureAvailable(level, runtime, state, receipt);
         return true;
     }

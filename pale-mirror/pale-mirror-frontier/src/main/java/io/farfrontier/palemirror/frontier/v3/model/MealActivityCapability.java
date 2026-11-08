@@ -77,6 +77,9 @@ final class MealActivityCapability implements ActorActivityCapability {
             ActorExecutionId execution, io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
         if (!permitsNavigationOrder(state, execution, order))
             throw new IllegalArgumentException("meal route knowledge requested for a stale order");
+        var movement = state.actorMovements().get(execution.actorId());
+        if (movement != null && movement.executionId().equals(execution) && movement.order().equals(order))
+            return Optional.of(io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement).placementKnowledge(state, movement));
         return Optional.of(ResidentMealKnownNavigation.departureKnowledge(state,
                 state.humanPopulation().meals().get(execution.actorId()),
                 state.actorLocations().get(execution.actorId()).supportingSurface()));
@@ -85,6 +88,8 @@ final class MealActivityCapability implements ActorActivityCapability {
             io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
         validateReference(state, execution);
         var meal = state.humanPopulation().meals().get(execution.actorId());
+        var movement = state.actorMovements().get(execution.actorId());
+        if (movement != null && movement.executionId().equals(execution) && movement.order().equals(order)) return true;
         if (meal.pendingPhysicalStep().isPresent() && meal.phase() != ResidentMeal.Phase.CONSUME
                 || !order.actorId().equals(meal.residentId()) || !order.ownerId().equals(meal.claimId())
                 || order.goalOrdinal() != FrontierWireTags.tag(meal.phase()) || order.goalRevision() != ResidentMealSeating.goalRevision(state, meal)

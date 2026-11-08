@@ -7,7 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
-public sealed interface ActorMovementContext permits ActorMovementContext.SeatClearance, ActorMovementContext.RoutineLeg, ActorMovementContext.MealEntrance, ActorMovementContext.ClinicalLeg, ActorMovementContext.ServiceExit,
+public sealed interface ActorMovementContext permits ActorMovementContext.MealSeatClearance, ActorMovementContext.SeatClearance,
+        ActorMovementContext.RoutineLeg, ActorMovementContext.MealEntrance, ActorMovementContext.ClinicalLeg, ActorMovementContext.ServiceExit,
         ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
         ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg, ActorMovementContext.StationWorkLeg,
@@ -254,6 +255,24 @@ public sealed interface ActorMovementContext permits ActorMovementContext.SeatCl
             if (transfer == null || transfer.pending().isPresent() || !transfer.execution().equals(movement.executionId())
                     || !transfer.order(mission.id(), mission.revision()).movementOrder().equals(movement.order()))
                 throw new IllegalArgumentException("replenishment movement lost its retained stock instruction");
+        }
+    }
+    record MealSeatClearance(SubjectId home, io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id seat,
+            SubjectId claim) implements ActorMovementContext {
+        public MealSeatClearance { Objects.requireNonNull(home); Objects.requireNonNull(seat); Objects.requireNonNull(claim); }
+        public Provider provider() { return Provider.SEAT_CLEARANCE; }
+        public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
+        public java.util.List<ImmutableReferenceIndex.Read<ActorMovementReferences>> validationReads(ActorMovementReferences refs, ActorMovement movement) {
+            return java.util.List.of(ActorMovementReferences.MEALS.at(movement.order().actorId()));
+        }
+        public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
+            SeatAccessClearance.place(refs.bootstrap(), home, seat);
+            var meal = refs.people().meals().get(movement.order().actorId());
+            if (meal == null || !meal.claimId().equals(claim) || !meal.executionId().equals(movement.executionId())
+                    || !movement.order().ownerId().equals(claim) || movement.order().capability() != TraversalCapability.PEDESTRIAN
+                    || meal.pendingPhysicalStep().isPresent()
+                    || meal.coldTravel().isPresent() || !(meal.phase() == ResidentMeal.Phase.MOVE || meal.carriesWhileMoving()))
+                throw new IllegalArgumentException("seat courtesy lost its exact retained moving meal/claim");
         }
     }
     record SeatClearance(SubjectId home, io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace.Id seat) implements ActorMovementContext {

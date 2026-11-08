@@ -11,6 +11,32 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ActorCarr
 
 /** Replaces owner-transfer chain tests: activities cannot transfer the body in the first place. */
 class FrontierV3ActorBodyLifetimeTest {
+    @Test void observedUnsavedBodyCanBeIndependentlyReprovedWithoutReplacingItsCapturedExecution() {
+        var state = running(); var receipt = receipt(state); var actor = receipt.identity().actorId();
+        var body = ActorBodyAuthority.current(state, actor); var ledger = ledger(receipt);
+        assertTrue(ledger.recordBodyDeparture(receipt));
+        assertTrue(FrontierV3BodyStoredRecovery.permitsStoredProof(state, ledger, actor), "a lost save callback must not suppress positive disk inspection forever");
+        ledger = FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null);
+        assertTrue(FrontierV3BodyStoredRecovery.permitsStoredProof(state, ledger, actor));
+        var declared = receipt.identity();
+        var saved = new FrontierV3SceneDeparturePersistence.SavedBody(declared.entityId(), "minecraft:villager", actor.value(),
+                declared.kind().name(), declared.owner().name(), "LIVE_BODY", 0L, declared.epoch(), receipt.residenceGeneration(),
+                receipt.observed().body(), receipt.observed().health(), receipt.offhand(), receipt.mainhand());
+        var successor = state.actorExecutions().next(actor, ActorActivityKind.PRESENCE, actor);
+        var changed = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, successor, 50).commit(state, FrontierWorldStateUpdate.begin());
+        assertEquals(receipt, FrontierV3ActorBodyController.storedDepartureForConfirmation(changed, body, saved, Optional.of(receipt)).orElseThrow(),
+                "independent storage proof confirms the original physical receipt, never restamps it with the successor activity");
+        var wrong = new FrontierV3SceneDeparturePersistence.SavedBody(declared.entityId(), "minecraft:villager", actor.value(),
+                declared.kind().name(), declared.owner().name(), "LIVE_BODY", 0L, declared.epoch(), receipt.residenceGeneration(),
+                receipt.observed().body().offset(1, 0, 0), receipt.observed().health(), receipt.offhand(), receipt.mainhand());
+        assertTrue(FrontierV3ActorBodyController.storedDepartureForConfirmation(changed, body, wrong, Optional.of(receipt)).isEmpty());
+        assertTrue(FrontierV3ActorBodyController.storedDepartureForConfirmation(changed,
+                new ActorBodyId(actor, body.physicalEpoch() + 1), saved, Optional.of(receipt)).isEmpty());
+        ledger.publishSavedDepartures(java.util.List.of(receipt), java.util.List.of(), java.util.List.of(), () -> {});
+        assertFalse(FrontierV3BodyStoredRecovery.permitsStoredProof(changed, ledger, actor), "an already saved incarnation needs no duplicate scan");
+        assertTrue(ledger.markBodyReturnRead(receipt));
+        assertFalse(FrontierV3BodyStoredRecovery.permitsStoredProof(changed, ledger, actor), "native return reads still fence independent absence proof");
+    }
     @Test void survivorObservationCannotTurnNonFiniteHealthIntoAZeroHealthSurvivor() {
         assertTrue(FrontierV3HealthObservation.survivor(Float.NaN).isEmpty());
         assertTrue(FrontierV3HealthObservation.survivor(Float.POSITIVE_INFINITY).isEmpty());

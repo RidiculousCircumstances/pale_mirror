@@ -28,7 +28,7 @@ final class FrontierV3BodyStoredRecovery {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var entity = ActorBodyId.entityId(state.bootstrap().worldId(), actor);
         if (location == null || location.condition().status() != ActorLifeStatus.ALIVE
-                || ledger.hasBodyDeparture(actor) || ledger.hasDepartureConflict(actor)
+                || !permitsStoredProof(state, ledger, actor)
                 || level.getEntity(entity) != null || FrontierV3AmbientPendingAdmissions.get(runtime, entity) != null) return;
         var epoch = FrontierV3EntityWriteEpochs.globalStamp(level);
         if (epoch.isEmpty()) return;
@@ -37,6 +37,14 @@ final class FrontierV3BodyStoredRecovery {
         if (queue.pending.containsKey(actor) || queue.active != null && queue.active.candidates().containsKey(actor)
                 || new Attempt(candidate, epoch.orElseThrow()).equals(queue.attempted.get(actor))) return;
         if (queue.pending.size() < MAX_BATCH) queue.pending.put(actor, candidate);
+    }
+
+    /** An observed-but-unconfirmed unload needs the same positive disk proof as a missing callback. */
+    static boolean permitsStoredProof(FrontierWorldState state, FrontierV3AmbientCarrierLedger ledger, SubjectId actor) {
+        if (ledger.hasDepartureConflict(actor) || ledger.returnRead(actor)) return false;
+        var recorded = ledger.bodyDeparture(actor);
+        return recorded.isPresent() ? recorded.orElseThrow().current(state) && !ledger.savedBodyDeparture(recorded.orElseThrow())
+                : !ledger.hasBodyDeparture(actor);
     }
 
     /** One bounded asynchronous census per batch; unresolved evidence rearms only when storage changes. */

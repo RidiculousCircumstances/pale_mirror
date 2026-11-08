@@ -20,7 +20,9 @@ class SeatedMealProcessTest {
         var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home.id());
         return AutomaticStationProductionTest.supply(state, state.inventory().containers().get(pantry), "minecraft:bread", 64, "seated-meal");
     }
-    @Test void reservedMealWakesItsIdleObstructionAndOrdinaryMovementVacatesAccessWithoutInventingFood() {
+    @Test void reservedMealWakesItsIdleObstructionAndOrdinaryMovementVacatesAccessWithoutInventingFood() { verifySeatCourtesy(false); }
+    @Test void reservedMealCanPassAnotherMealsStandingBodyWithoutRetiringEitherPortionOrClaim() { verifySeatCourtesy(true); }
+    private static void verifySeatCourtesy(boolean incumbentEating) {
         var state = prepared(); var home = state.bootstrap().settlements().getFirst();
         var eater = home.residents().getFirst().id(); var blocker = home.residents().get(1).id();
         state = state.withHumanPopulation(state.humanPopulation().accrueHunger(eater, START));
@@ -34,18 +36,30 @@ class SeatedMealProcessTest {
         }
         var meal = state.humanPopulation().meals().get(eater); assertEquals(ResidentMeal.Phase.MOVE_TO_DINING, meal.phase());
         var use = ResidentMealSeating.use(state, meal).orElseThrow();
-        // Explicit fixture: a previously fed idle resident stands at the selected chair's approach.
-        state = state.withHumanPopulation(state.humanPopulation().consumeResidentFood(blocker, tick, 1000, state.bootstrap().ruleset().residentLife()));
+        // Explicit fixture: either an idle fed person or another unstarted meal occupies this approach.
+        if (incumbentEating) {
+            state = state.withHumanPopulation(state.humanPopulation().accrueHunger(blocker, tick));
+            var nextMeal = ResidentMealProcess.selectSourceAtYield(state, blocker, tick).orElseThrow();
+            state = ResidentMealProcess.reduceStarted(state, blocker, nextMeal);
+        } else state = state.withHumanPopulation(state.humanPopulation().consumeResidentFood(blocker, tick, 1000, state.bootstrap().ruleset().residentLife()));
         state = state.withActorBody(blocker, use.place().approach().standingBody());
-        assertEquals(ResidentActivityChoice.Kind.IDLE, ResidentActivityCoordinator.assess(state, blocker, tick).kind());
+        assertEquals(incumbentEating ? ResidentActivityChoice.Kind.EAT : ResidentActivityChoice.Kind.IDLE, ResidentActivityCoordinator.assess(state, blocker, tick).kind());
+        var incumbentMeal = state.humanPopulation().meals().get(blocker);
+        var executions = state.actorExecutions();
         var inventory = state.inventory(); var health = state.actorLocations().get(blocker).condition().health();
         assertTrue(ResidentMealProcess.planColdStep(state, eater, tick).isEmpty());
         var waits = FrontierWorldRuntimeDefinition.planScheduled(state, ResidentMealProcess.progress(meal, ++tick), new SimInstant(tick));
         assertTrue(waits.stream().anyMatch(e -> e.subject().equals(blocker) && e.payload() instanceof ScheduleEffect.Rescheduled));
-        var clearing = FrontierWorldRuntimeDefinition.planScheduled(state, ResidentActivityProcess.review(blocker, tick), new SimInstant(tick));
+        var review = incumbentEating ? ResidentMealProcess.progress(incumbentMeal, tick) : ResidentActivityProcess.review(blocker, tick);
+        var clearing = FrontierWorldRuntimeDefinition.planScheduled(state, review, new SimInstant(tick));
         state = driver.apply(state, clearing, tick);
         var movement = state.actorMovements().get(blocker); assertNotNull(movement);
-        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.SeatClearance.class, movement.context());
+        if (incumbentEating) {
+            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.MealSeatClearance.class, movement.context());
+            assertEquals(incumbentMeal, state.humanPopulation().meals().get(blocker));
+            assertEquals(executions, state.actorExecutions());
+            assertTrue(ActorExecutionComposition.CAPABILITIES.require(movement.executionId().activityKind()).permitsNavigationOrder(state, movement.executionId(), movement.order()));
+        } else assertInstanceOf(io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.SeatClearance.class, movement.context());
         var admitted = state;
         assertTrue(movement.order().legalStations().stream().noneMatch(p -> SeatAccessClearance.furnitureContact(admitted, p)));
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
@@ -66,6 +80,10 @@ class SeatedMealProcessTest {
         assertFalse(state.actorMovements().containsKey(blocker));
         assertNotEquals(use.place().approach(), state.actorLocations().get(blocker).supportingSurface());
         assertEquals(inventory, state.inventory(), "yielding grants no food transfer, wear or meal outcome");
+        if (incumbentEating) {
+            assertEquals(incumbentMeal, state.humanPopulation().meals().get(blocker));
+            assertEquals(executions, state.actorExecutions());
+        }
         assertEquals(health, state.actorLocations().get(blocker).condition().health());
         for (int step = 0; state.humanPopulation().meals().containsKey(eater) && step < 30; step++) {
             var current = state.humanPopulation().meals().get(eater);

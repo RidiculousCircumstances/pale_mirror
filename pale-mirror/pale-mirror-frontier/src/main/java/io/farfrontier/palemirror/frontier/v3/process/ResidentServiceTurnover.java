@@ -82,8 +82,15 @@ final class ResidentServiceTurnover {
     private static Optional<ActorMovement> selectSeat(FrontierWorldState state, SubjectId actorId, long tick) {
         var seat = eligibleSeat(state, actorId, tick, false);
         if (seat.isEmpty()) return Optional.empty();
-        var start = state.actorLocations().get(actorId).supportingSurface();
         var place = seat.orElseThrow();
+        return selectSeatGoal(state, actorId, tick, place,
+                state.actorExecutions().next(actorId, ActorActivityKind.SERVICE_EXIT, actorId),
+                new ActorMovementContext.SeatClearance(place.home(), place.id()));
+    }
+    static Optional<ActorMovement> selectSeatGoal(FrontierWorldState state, SubjectId actorId, long tick,
+            io.farfrontier.palemirror.frontier.v3.model.seating.SeatPlace place,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution, ActorMovementContext context) {
+        var start = state.actorLocations().get(actorId).supportingSurface();
         var clearance = ServiceClearanceRoutes.from(state, actorId, start);
         var excluded = ServiceDestinationClaims.excludedFor(state, actorId);
         var available = ServiceAccessCoordinator.transientDestinations(state, actorId);
@@ -93,10 +100,8 @@ final class ResidentServiceTurnover {
                         && SeatAccessClearance.parkingFloor(state, place, surface)
                         && ServiceAreaDestinations.hasStandingClearance(surface, excluded), clearance::allowsLocal)
                 .map(receipt -> receipt.route().getLast())
-                .map(destination -> new ActorMovement(new MovementOrder(actorId, actorId, 0L, Math.addExact(tick, 1L), List.of(destination),
-                        TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION), tick,
-                        new ActorMovementContext.SeatClearance(place.home(), place.id()),
-                        state.actorExecutions().next(actorId, ActorActivityKind.SERVICE_EXIT, actorId)));
+                .map(destination -> new ActorMovement(new MovementOrder(execution.activityOwnerId(), actorId, 0L, Math.addExact(tick, 1L), List.of(destination),
+                        TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION), tick, context, execution));
     }
 
 }
