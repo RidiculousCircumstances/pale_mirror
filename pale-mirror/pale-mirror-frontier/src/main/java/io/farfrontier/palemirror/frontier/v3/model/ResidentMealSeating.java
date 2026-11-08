@@ -25,6 +25,14 @@ public final class ResidentMealSeating {
         return use(state, meal).map(use -> use.phase() == SeatUse.Phase.SEATED
                 && tick >= Math.addExact(use.changedAt(), state.bootstrap().ruleset().residentLife().routines().eatingTicks())).orElse(true);
     }
+    /** Mirror the owner's native stand-up policy before a displaced COLD meal navigates again. */
+    public static Optional<SeatEvent.Changed> coldDeparture(FrontierWorldState state, ResidentMeal meal, long tick) {
+        return use(state, meal).filter(use -> use.phase() == SeatUse.Phase.SEATED && use.pendingBody().isEmpty())
+                .filter(use -> ActorExecutionComposition.CAPABILITIES.require(meal.executionId().activityKind())
+                        .seatAction(state, meal.executionId(), use, tick).equals(Optional.of(SeatUse.Action.EXIT)))
+                .flatMap(use -> SeatContacts.coldExit(state, use).map(exit -> new SeatEvent.Changed(meal.residentId(),
+                        use.revision(), Optional.empty(), SeatUse.Action.EXIT, SeatUse.ExecutionMode.LOCAL, true, exit.standingBody())));
+    }
     public static Optional<SeatEvent.Changed> coldEntrance(FrontierWorldState state, ResidentMeal meal) {
         var use = use(state, meal);
         return meal.phase() == ResidentMeal.Phase.CONSUME && use.filter(u -> u.phase() == SeatUse.Phase.RESERVED

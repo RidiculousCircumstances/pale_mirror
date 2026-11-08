@@ -20,6 +20,41 @@ class SeatedMealProcessTest {
         var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(), home.id());
         return AutomaticStationProductionTest.supply(state, state.inventory().containers().get(pantry), "minecraft:bread", 64, "seated-meal");
     }
+    @Test void retiredPassengerStandsBeforeDiningReturnAndConsumesItsOriginalPortionOnce() {
+        var state = prepared(); var actor = state.bootstrap().settlements().getFirst().residents().getFirst().id();
+        state = state.withHumanPopulation(state.humanPopulation().accrueHunger(actor, START));
+        var started = ResidentMealProcess.selectSourceAtYield(state, actor, START).orElseThrow();
+        state = ResidentMealProcess.reduceStarted(state, actor, started);
+        var driver = new ModelEventDriver(); long tick = START;
+        for (int step = 0; step < 40 && state.humanPopulation().seats().uses().get(actor).phase() != SeatUse.Phase.SEATED; step++) {
+            var meal = state.humanPopulation().meals().get(actor);
+            tick = Math.max(tick + 1, meal.coldTravel().map(t -> t.arrivalTick()).orElse(tick + 1));
+            state = driver.apply(state, ResidentMealProcess.planProgress(state, ResidentMealProcess.progress(meal, tick)), tick);
+        }
+        var use = state.humanPopulation().seats().uses().get(actor);
+        assertEquals(SeatUse.Phase.SEATED, use.phase());
+        var meal = state.humanPopulation().meals().get(actor);
+        // Recovered fixture: the old implementation requested dining return after
+        // recording a retired native passenger in the chair's actual feet cell.
+        state = state.withActorBody(actor, new BodyPosition(use.place().chair().x(), use.place().chair().y(), use.place().chair().z()))
+                .withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.requireDining()));
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        var inventory = state.inventory();
+        var events = ResidentMealProcess.planProgress(state, ResidentMealProcess.progress(state.humanPopulation().meals().get(actor), ++tick));
+        assertEquals(SeatUse.Action.EXIT, assertInstanceOf(SeatEvent.Changed.class, events.getFirst().payload()).action());
+        state = driver.apply(state, events, tick);
+        assertEquals(SeatUse.Phase.RESERVED, state.humanPopulation().seats().uses().get(actor).phase());
+        assertEquals(inventory, state.inventory(), "standing grants no food or consumption");
+        for (int step = 0; step < 40 && state.humanPopulation().meals().containsKey(actor); step++) {
+            var current = state.humanPopulation().meals().get(actor);
+            tick = Math.max(tick + 200, current.coldTravel().map(t -> t.arrivalTick()).orElse(tick + 200));
+            state = driver.apply(state, ResidentMealProcess.planProgress(state, ResidentMealProcess.progress(current, tick)), tick);
+        }
+        assertFalse(state.humanPopulation().meals().containsKey(actor));
+        assertFalse(state.humanPopulation().seats().uses().containsKey(actor));
+        assertEquals(inventory.fungibleResources().totalQuantity(meal.settlementId(), FoodCatalog.BREAD) - meal.portion().quantity(),
+                state.inventory().fungibleResources().totalQuantity(meal.settlementId(), FoodCatalog.BREAD));
+    }
     @Test void reservedMealWakesItsIdleObstructionAndOrdinaryMovementVacatesAccessWithoutInventingFood() { verifySeatCourtesy(false); }
     @Test void reservedMealCanPassAnotherMealsStandingBodyWithoutRetiringEitherPortionOrClaim() { verifySeatCourtesy(true); }
     private static void verifySeatCourtesy(boolean incumbentEating) {

@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -23,6 +24,51 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static io.farfrontier.palemirror.frontier.v3.process.ResidentMealRetiredResourceAssertions.assertFatalityRetainsMealResources;
 
 class ResidentMealProcessTest {
+    @Test void fullStandingDiningAreaAddressesIdleOccupantsWithoutWaitingForTheirNextScheduleWindow() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:standing-dining-turnover"),421L));
+        var home = state.bootstrap().settlements().get(9); var eater = home.residents().getFirst().id();
+        var pantry = CommunalDiningPlan.initialFoodStorage(state.bootstrap(),home.id());
+        var bread = new SubjectId("lot:standing-dining-bread");
+        var pantryAccount = ReferenceContainerCustody.scopeId(pantry);
+        var ledger = state.inventory().fungibleResources();
+        var input = ledger.accounts().get(pantryAccount);
+        var consumed = input.lotQuantities().entrySet().iterator().next();
+        var resources = ledger.transformCold(pantryAccount, Map.of(consumed.getKey(),1), Map.of(),
+                new ResourceLot(bread,home.id(),ResidentMeal.BREAD_KIND,2,"test",List.of()));
+        state = state.withInventory(state.inventory().withFungibleResources(resources))
+                .withHumanPopulation(state.humanPopulation().accrueHunger(eater,27_000));
+        var started = ResidentMealProcess.selectSourceAtYield(state,eater,27_000).orElseThrow();
+        assertInstanceOf(MealDestination.DiningArea.class,started.meal().destination());
+        state = ResidentMealProcess.reduceStarted(state,eater,started);
+        long tick=27_001;
+        for(int step=0;step<32 && state.humanPopulation().meals().get(eater).phase()!=ResidentMeal.Phase.MOVE_TO_DINING;step++) {
+            tick=nextColdTick(state,eater,tick);
+            var events=ResidentMealProcess.planProgress(state,ResidentMealProcess.progress(state.humanPopulation().meals().get(eater),tick));
+            var fact=events.stream().map(ProposedEvent::payload).filter(ResidentMealColdStep.class::isInstance)
+                    .map(ResidentMealColdStep.class::cast).findFirst().orElseThrow();
+            state=ResidentMealProcess.reduceColdStep(state,eater,fact);tick+=20;
+        }
+        var meal=state.humanPopulation().meals().get(eater);
+        assertEquals(ResidentMeal.Phase.MOVE_TO_DINING,meal.phase());
+        var knowledge=ResidentMealKnownNavigation.departureKnowledge(state,meal,state.actorLocations().get(eater).supportingSurface());
+        var stations=ResidentDiningPlaces.stations(state,home.id(),meal.destination(),knowledge);
+        assertFalse(stations.isEmpty());
+        var occupants=home.residents().stream().map(Resident::id).filter(id->!id.equals(eater)).limit(stations.size()).toList();
+        assertEquals(stations.size(),occupants.size());
+        for(int i=0;i<stations.size();i++)state=state.withActorBody(occupants.get(i),stations.get(i).standingBody());
+        var codec=new FrontierWorldStateCodec();state=codec.decode(codec.encode(state));
+        assertEquals(new java.util.TreeSet<>(occupants),new java.util.TreeSet<>(ResidentDiningPlaces.occupants(state,meal)));
+        var before=state;
+        var events=ResidentMealProcess.planProgress(state,ResidentMealProcess.progress(meal,tick));
+        var woken=events.stream().filter(event->event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled rescheduled
+                        && rescheduled.replacement().kind().equals(ResidentActivityProcess.REVIEW))
+                .map(ProposedEvent::subject).collect(java.util.stream.Collectors.toSet());
+        assertEquals(java.util.Set.copyOf(occupants),woken);
+        assertEquals(meal,state.humanPopulation().meals().get(eater));
+        assertEquals(before.inventory(),state.inventory());
+        assertEquals(before.actorLocations(),state.actorLocations());
+    }
+
     private static FrontierWorldState initialWithKitchenInput(FrontierBootstrap bootstrap) {
         return kitchenInput(FrontierWorldState.initial(bootstrap));
     }

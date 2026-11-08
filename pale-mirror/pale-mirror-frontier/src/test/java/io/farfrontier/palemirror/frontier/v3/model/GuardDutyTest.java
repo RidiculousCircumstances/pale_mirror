@@ -31,6 +31,8 @@ class GuardDutyTest {
         state=state.withChanges(FrontierWorldStateUpdate.begin().security(new io.farfrontier.palemirror.frontier.v3.model.security.SecurityState(
                 security.hostility(),Map.of(key,contact),Map.of(duty.id(),response),1,security.awareness())));
         assertFalse(ActorExecutionComposition.LIFECYCLE.mayBegin(state,actor),"assigned defence owns the handoff boundary before the mission projection catches up");
+        assertFalse(ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.GUARD).checkpoint(state,duty.execution()).ready(),
+                "stationary defence must also veto optional native service parking");
         var successor=state.actorExecutions().next(actor,ActorActivityKind.CLINICAL_CARE,new SubjectId("clinical:guard-gap"));
         var fighting=state;assertThrows(IllegalArgumentException.class,()->ActorExecutionComposition.LIFECYCLE.prepareBegin(fighting,successor,21001));
         state=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));

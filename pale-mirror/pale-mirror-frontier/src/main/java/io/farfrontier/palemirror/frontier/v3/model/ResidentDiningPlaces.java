@@ -7,7 +7,19 @@ import java.util.*;
 
 /** Dining policy and declared-area geometry; no food, actor, movement or table authority. */
 public final class ResidentDiningPlaces {
+    private static final ImmutableGroupView<SubjectId, ActorLocation, SurfaceAnchor> BODIES = new ImmutableGroupView<>();
     private ResidentDiningPlaces() { }
+    /** Standing dining has the same addressed turnover as a reserved chair. This
+     * reads actual occupants of legal contacts, never a reservation or arrival. */
+    public static List<SubjectId> occupants(FrontierWorldState state, ResidentMeal meal) {
+        if (!(meal.destination() instanceof MealDestination.DiningArea)) return List.of();
+        var start = state.actorLocations().get(meal.residentId()).supportingSurface();
+        var knowledge = ResidentMealKnownNavigation.departureKnowledge(state, meal, start);
+        return stations(state, meal.settlementId(), meal.destination(), knowledge).stream()
+                .flatMap(surface -> BODIES.keys(state.bootstrap(), state.actorLocations(),
+                        body -> body.condition().status() == ActorLifeStatus.ALIVE ? Set.of(body.supportingSurface()) : Set.of(), surface).stream())
+                .filter(actor -> !actor.equals(meal.residentId())).distinct().sorted().toList();
+    }
     public static List<MealDestination.DiningArea> in(FrontierWorldState state, SubjectId home) {
         return FrontierWorldStateSupport.settlement(state.bootstrap(), home).structures().stream()
                 .sorted(Comparator.comparing(SettlementStructure::id))

@@ -124,6 +124,11 @@ public final class ResidentMealProcess {
         if (body == null || body.condition().status() != ActorLifeStatus.ALIVE)
             return List.of(new ProposedEvent(meal.residentId(), new ScheduleEffect.Consumed(action.id())));
         long now = Math.max(action.dueAt().ticks(), currentTick);
+        if (ActorExecutionCoordinator.coldAvailable(state, meal.residentId()) && !coldEffectHeld(state, meal)
+                && meal.coldTravel().isEmpty() && !state.combat().evasions().containsKey(meal.residentId())) {
+            var departure = ResidentMealSeating.coldDeparture(state, meal, now);
+            if (departure.isPresent()) return List.of(new ProposedEvent(meal.residentId(), departure.orElseThrow()), wake(meal, now));
+        }
         var courtesy = selectMealSeat(state, meal, now);
         if (courtesy.isPresent()) return List.of(
                 new ProposedEvent(meal.residentId(), new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted(courtesy.orElseThrow())),
@@ -159,13 +164,16 @@ public final class ResidentMealProcess {
                             && !travel.arrivedBy(now))
                     .map(TimedKnownRoute::arrivalTick).orElse(Math.addExact(now, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge()));
             var waiting = new java.util.ArrayList<ProposedEvent>();
-            if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING)
-                ResidentMealSeating.use(state, meal).ifPresent(use -> SeatAccessClearance.occupants(state, use).stream()
-                        .forEach(actor -> {
-                            var incumbent = state.humanPopulation().meals().get(actor);
-                            if (incumbent != null && mealSeatMayPlan(state, incumbent)) waiting.add(wake(incumbent, now));
-                            else if (ResidentServiceTurnover.mayPlan(state, actor, now)) waiting.add(ResidentActivityProcess.wakeAfterActivity(actor, now));
-                        }));
+            if (meal.phase() == ResidentMeal.Phase.MOVE_TO_DINING) {
+                var occupants = ResidentMealSeating.use(state, meal)
+                        .map(use -> SeatAccessClearance.occupants(state, use))
+                        .orElseGet(() -> ResidentDiningPlaces.occupants(state, meal));
+                occupants.forEach(actor -> {
+                    var incumbent = state.humanPopulation().meals().get(actor);
+                    if (incumbent != null && mealSeatMayPlan(state, incumbent)) waiting.add(wake(incumbent, now));
+                    else if (ResidentServiceTurnover.mayPlan(state, actor, now)) waiting.add(ResidentActivityProcess.wakeAfterActivity(actor, now));
+                });
+            }
             waiting.add(new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(), progress(meal, retryAt))));
             return List.copyOf(waiting);
         }

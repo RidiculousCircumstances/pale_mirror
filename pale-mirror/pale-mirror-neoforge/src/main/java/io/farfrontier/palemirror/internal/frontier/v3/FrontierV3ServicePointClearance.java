@@ -18,6 +18,16 @@ final class FrontierV3ServicePointClearance {
     static boolean pursue(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, Mob body, AmbientActorLease lease,
                            FrontierV3ActorActuation actuation) {
         if (!actuation.current(body)) return false;
+        // Optional parking must yield to the exact activity's safety checkpoint.
+        // A guard engaging a threat is stationary between strikes, not idle.
+        var execution = actuation.id().execution();
+        var checkpoint = ActorExecutionComposition.CAPABILITIES.require(execution.activityKind())
+                .checkpoint(state, execution);
+        checkpoint.validate(state, execution);
+        if (!checkpoint.ready()) {
+            TARGETS.remove(body); SEARCHES.remove(body);
+            return false;
+        }
         ResidentProfile resident = state.humanPopulation().resident(lease.actorId());
         if (resident == null) return false;
         BodyPosition observed = FrontierV3BodyObservation.position(body);
