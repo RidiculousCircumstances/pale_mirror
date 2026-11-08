@@ -1,5 +1,16 @@
 # Active continuity — 2026-11-09
 
+Worldgen inventory verified2026-11-09 from current PACK manifests and actual LIVE
+mods: Terralith/Tectonic/Lithostitched/Structurify are ABSENT from active pack/server,
+explicitly listed in config/retired-v3-mod-prefixes.txt. Historical full-pack WORLD
+stack was Terralith+Tectonic+Structurify with Lithostitched dependency; root
+architecture/compatibility docs retain historical entries, not installed truth.
+Fast Noise1.0.13 is installed (accelerator); C2ME is optional/defaultfalse and absent
+from live mods. Quark is installed with world features. Northwatch datapack uses
+PM agricultural_flat with three authored agricultural biomes, not Terralith terrain.
+Upcoming natural-biome work must explicitly restore/select the worldgen stack and
+integrate PM terrain/land knowledge; adding JARs alone does not replace this generator.
+
 Current design direction (user2026-11-09): upcoming actual worldgen biomes must
 produce natural agricultural territories, settlement specialization and substantial
 fields sized to served population including exports. User likes the full Create
