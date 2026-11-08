@@ -331,6 +331,10 @@ class ActorExecutionLifecycleTest {
         var successor = state.actorExecutions().next(current.actorId(), ActorActivityKind.MEAL, new SubjectId("claim:transition"));
         var transition = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, successor, 27_000L);
         assertThrows(IllegalArgumentException.class, () -> transition.commit(changed, FrontierWorldStateUpdate.begin()));
+        assertThrows(IllegalArgumentException.class, () -> transition.commitFromPrepared(changed, prepared -> {
+            fail("a stale transition cannot invoke its successor update");
+            return FrontierWorldStateUpdate.begin();
+        }));
         assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.LIFECYCLE.retire(
                 state, current.actorId(), current.activityKind(), forged.activityOwnerId()));
     }

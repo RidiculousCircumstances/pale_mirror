@@ -51,6 +51,25 @@ class SeatedLeisureProcessTest {
     var due=ResidentRoutineProcess.progress(s.routines().rows().get(ACTOR),tick);
     return ResidentRoutineProcessTest.apply(s,ResidentRoutineProcess.plan(s,due,tick),tick);
   }
+  @Test void hungryResidentReleasesUnusedLeisureReservationBeforeReservingAMealSeat() {
+    var s=arrived(departed(started()));
+    var oldSeat=s.humanPopulation().seats().uses().get(ACTOR);
+    assertEquals(SeatUse.Phase.RESERVED,oldSeat.phase());
+    long tick=48_000;
+    var pantry=CommunalDiningPlan.initialFoodStorage(s.bootstrap(),s.humanPopulation().resident(ACTOR).settlementId());
+    s=AutomaticStationProductionTest.supply(s,s.inventory().containers().get(pantry),FoodCatalog.BREAD,8,"leisure-meal-transition");
+    s=s.withHumanPopulation(s.humanPopulation().accrueHunger(ACTOR,tick));
+    var recovered=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(s));
+    var meal=ResidentMealProcess.selectSourceAtYield(recovered,ACTOR,tick).orElseThrow();
+    s=ResidentMealProcess.reduceStarted(recovered,ACTOR,meal);
+    assertEquals(ResidentRoutine.Phase.CLOSED,s.routines().rows().get(ACTOR).phase());
+    assertTrue(s.humanPopulation().seats().free(oldSeat.place().id()));
+    assertEquals(meal.meal().executionId(),s.humanPopulation().seats().uses().get(ACTOR).execution());
+    assertEquals(meal.meal(),s.humanPopulation().meals().get(ACTOR));
+    assertEquals(recovered.inventory().fungibleResources().totalQuantity(meal.meal().settlementId(),FoodCatalog.BREAD),
+        s.inventory().fungibleResources().totalQuantity(meal.meal().settlementId(),FoodCatalog.BREAD),"admission never consumes food");
+    assertEquals(s,new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(s)));
+  }
   @Test void completeApproachActualSeatingTimedRestExitAndReleaseSurviveRecovery() {
     var s=started();var originalInventory=s.inventory();
     var exact=s.routines().rows().get(ACTOR).execution().orElseThrow();var selected=ResidentRoutines.use(s,s.routines().rows().get(ACTOR)).place();

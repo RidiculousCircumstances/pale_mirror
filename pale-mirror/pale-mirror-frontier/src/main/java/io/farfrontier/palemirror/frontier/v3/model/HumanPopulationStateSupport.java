@@ -53,8 +53,8 @@ public final class HumanPopulationStateSupport {
             throw new IllegalArgumentException("migration journey requires one reservable destination housing place");
         }
         requireJourneyBounds(state, journey);
-        return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, journey.executionId()).commit(state,
-                FrontierWorldStateUpdate.begin().humanPopulation(state.humanPopulation().startMigration(journey)));
+        return ActorExecutionComposition.LIFECYCLE.prepareVacant(state, journey.executionId()).commitFromPrepared(state,
+                prepared -> FrontierWorldStateUpdate.begin().humanPopulation(prepared.humanPopulation().startMigration(journey)));
     }
 
     public static FrontierWorldState advanceMigration(FrontierWorldState state, ResidentMigrationAdvanced advanced) {

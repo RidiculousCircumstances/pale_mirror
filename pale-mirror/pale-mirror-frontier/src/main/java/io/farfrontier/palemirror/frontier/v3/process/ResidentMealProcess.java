@@ -278,9 +278,10 @@ public final class ResidentMealProcess {
             ledger = ledger.reserveBound(claim, meal.sourceAccountId(), epoch);
         }
         var transition = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, meal.executionId(), meal.startedAtTick());
-        return transition.commit(state, FrontierWorldStateUpdate.begin()
-                .inventory(state.inventory().withFungibleResources(ledger))
-                .humanPopulation(ResidentMealSeating.reserve(state, state.humanPopulation().withMeal(meal), meal)));
+        var reserved = ledger;
+        return transition.commitFromPrepared(state, prepared -> FrontierWorldStateUpdate.begin()
+                .inventory(prepared.inventory().withFungibleResources(reserved))
+                .humanPopulation(ResidentMealSeating.reserve(prepared, prepared.humanPopulation().withMeal(meal), meal)));
     }
 
     public static ActorContainerItemOrder takeOrder(FrontierWorldState state, ResidentMeal meal) {

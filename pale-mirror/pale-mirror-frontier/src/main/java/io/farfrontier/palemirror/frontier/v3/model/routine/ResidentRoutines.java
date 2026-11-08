@@ -263,10 +263,12 @@ public final class ResidentRoutines {
                 ? ResidentRoutine.Phase.WALKING
                 : ResidentRoutine.Phase.PAUSING))
       throw new IllegalArgumentException("routine start changed its nominal policy or identity");
-    var changes = FrontierWorldStateUpdate.begin().routines(s.routines().with(row));
-    if (row.seat().isPresent()) changes.humanPopulation(s.humanPopulation().withSeats(s.humanPopulation().seats().reserve(
-        SeatUse.reserve(e, SeatContacts.place(s, row.home(), row.seat().orElseThrow()), tick))));
-    return ActorExecutionComposition.LIFECYCLE.prepareBegin(s, e, tick).commit(s, changes);
+    return ActorExecutionComposition.LIFECYCLE.prepareBegin(s, e, tick).commitFromPrepared(s, prepared -> {
+      var changes = FrontierWorldStateUpdate.begin().routines(prepared.routines().with(row));
+      if (row.seat().isPresent()) changes.humanPopulation(prepared.humanPopulation().withSeats(prepared.humanPopulation().seats().reserve(
+          SeatUse.reserve(e, SeatContacts.place(prepared, row.home(), row.seat().orElseThrow()), tick))));
+      return changes;
+    });
   }
 
   public static FrontierWorldState arrived(

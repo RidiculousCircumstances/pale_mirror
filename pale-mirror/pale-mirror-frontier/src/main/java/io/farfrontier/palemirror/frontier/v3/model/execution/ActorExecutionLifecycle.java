@@ -28,6 +28,13 @@ public final class ActorExecutionLifecycle {
             this.basis = basis; this.prepared = prepared; this.executions = executions;
             this.resumptionChanges = resumptionChanges;
         }
+        /** Derive a successor aggregate after the previous owner's release/pause.
+         * Reusing a population image from before release can resurrect its seat. */
+        public FrontierWorldState commitFromPrepared(FrontierWorldState current,
+                java.util.function.Function<FrontierWorldState, FrontierWorldStateUpdate> successorUpdate) {
+            if (current != basis) throw new IllegalArgumentException("prepared execution transition has a stale immutable basis");
+            return commit(current, Objects.requireNonNull(successorUpdate).apply(prepared));
+        }
         /** Family data and authority change in one reference-closed immutable update. */
         public FrontierWorldState commit(FrontierWorldState current, FrontierWorldStateUpdate ownedUpdate) {
             if (current != basis) throw new IllegalArgumentException("prepared execution transition has a stale immutable basis");

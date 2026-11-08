@@ -29,7 +29,8 @@ public final class ClinicalTransitions {
                         ||!SettlementWorkPolicy.permissions(s,t.home()).permits(ResidentWorkKind.MEDICAL,t.actor())
                         ||!s.humanPopulation().resident(t.patient()).settlementId().equals(t.home())))throw new IllegalArgumentException("invalid clinical admission");
             var lifecycle=t.role()==ClinicalTask.Role.PATIENT?ActorExecutionComposition.LIFECYCLE.prepareBegin(s,t.execution(),tick):ActorExecutionComposition.LIFECYCLE.prepareVacant(s,t.execution());
-            return lifecycle.commit(s,FrontierWorldStateUpdate.begin().humanPopulation(s.humanPopulation().withClinical(clinical.with(t))));
+            return lifecycle.commitFromPrepared(s,prepared->FrontierWorldStateUpdate.begin().humanPopulation(
+                    prepared.humanPopulation().withClinical(prepared.humanPopulation().clinical().with(t))));
         }
         if(event instanceof ClinicalEvent.HealingPrepared prepared)return prepareHealing(s,subject,prepared.healing(),tick);
         if(event instanceof ClinicalEvent.Recovered recovered)return recover(s,subject,recovered,tick);
