@@ -57,6 +57,12 @@ class SeatedLeisureProcessTest {
     assertFalse(s.humanPopulation().seats().free(selected.id()));
     s=arrived(departed(s));long tick=s.routines().rows().get(ACTOR).phaseAt()+1;
     s=step(s,tick);assertEquals(SeatUse.Phase.SEATED,s.humanPopulation().seats().uses().get(ACTOR).phase());
+    assertFalse(ActorExecutionComposition.LIFECYCLE.mayAdmitVacant(s,ACTOR),
+        "work discovery cannot select a seated release-policy owner before its ordinary exit");
+    assertInstanceOf(ActorExecutionCoordinator.Waiting.class, ActorExecutionCoordinator.ordinaryWorkAdmission(s,ACTOR));
+    var seated = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(s));
+    assertFalse(ActorExecutionComposition.LIFECYCLE.mayAdmitVacant(seated,ACTOR),
+        "recovery preserves the same family checkpoint refusal");
     s=step(s,++tick);var row=s.routines().rows().get(ACTOR);
     assertEquals(ResidentRoutine.Phase.PAUSING,row.phase());assertEquals(tick,row.phaseAt());
     assertFalse(ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.LEISURE).checkpoint(s,exact).ready());

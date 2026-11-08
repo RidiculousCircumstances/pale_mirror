@@ -15,6 +15,27 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorExecutionLifecycleTest {
+    @Test void vacantAdmissionRetainsTheSameSharedEffectFenceAsTheActualRelease() {
+        var initial = ResourceSiteHarvestProcessTest.initial();
+        var actor = initial.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        var presence = initial.actorExecutions().next(actor, ActorActivityKind.PRESENCE, actor);
+        var state = ActorExecutionComposition.LIFECYCLE.prepareVacant(initial, presence).commit(initial, FrontierWorldStateUpdate.begin());
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        var successor = state.actorExecutions().next(actor, ActorActivityKind.PRESENCE, actor);
+        var pending = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var lifecycle = new ActorExecutionLifecycle(ActorExecutionComposition.CAPABILITIES,
+                (basis, execution) -> pending.get() ? java.util.Optional.of(actor) : java.util.Optional.empty());
+        var retained = state;
+        assertFalse(lifecycle.mayAdmitVacant(state, actor), "RELEASE policy alone does not acknowledge a pending effect");
+        assertThrows(IllegalArgumentException.class, () -> lifecycle.prepareVacant(retained, successor));
+        assertEquals(presence, state.actorExecutions().actors().get(actor).current().orElseThrow());
+        pending.set(false);
+        assertTrue(lifecycle.mayAdmitVacant(state, actor));
+        var next = lifecycle.prepareVacant(state, successor).commit(state, FrontierWorldStateUpdate.begin());
+        assertEquals(state.actorLocations(), next.actorLocations());
+        assertEquals(state.inventory(), next.inventory());
+    }
+
     @Test void observedVacantHotBodyCanAcquirePassivePresenceWithoutChangingBodyOrResources() {
         var state=ResourceSiteHarvestProcessTest.initial();
         var actor=state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
