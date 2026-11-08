@@ -9,6 +9,27 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class KnownPedestrianGeometryScopesTest {
+    @Test void memoizedPristineBuildingFactsCannotHideActualObservationsOrUnknownDamage() {
+        var state=FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:authored-memo-precedence"),139L,
+                FrontierRulesets.installed("frontier-v3-leisure-seats-r37")));
+        var building=state.bootstrap().settlements().getFirst().structures().stream()
+                .filter(s->s.definition().representation()==io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingDefinition.Representation.AUTHORED)
+                .findFirst().orElseThrow();
+        var block=io.farfrontier.palemirror.frontier.v3.model.buildings.BuildingSpatialPlan.of(building).blocks().values().stream()
+                .filter(b->b.material() instanceof StructureMaterial.Authored a&&!a.emptySpace()).findFirst().orElseThrow().position();
+        var pristine=KnownPedestrianRouteKnowledge.forFrontier(state).geometry();var expected=pristine.collisions().orElseThrow().cell(block);
+        assertTrue(expected.isPresent());
+        for(int i=0;i<100;i++)assertEquals(expected,pristine.collisions().orElseThrow().cell(block));
+        var changed=new NavigationGeometryObserved(0,Map.of(block,NavigationObservation.known(NavigationCell.AIR)))
+                .apply(state,NavigationGeometryObserved.OWNER);
+        assertEquals(java.util.Optional.of(NavigationCell.AIR),KnownPedestrianRouteKnowledge.forFrontier(changed).geometry().collisions().orElseThrow().cell(block));
+        assertEquals(expected,pristine.collisions().orElseThrow().cell(block),"current observation cannot mutate the retained pristine image");
+        var unknown=state.recordPhysicalDelta(new PhysicalDelta(block,PhysicalDeltaKind.UNKNOWN_SCAR,
+                java.util.Optional.empty(),java.util.Optional.empty(),"test:unknown-authored-change"));
+        assertFalse(KnownPedestrianRouteKnowledge.forFrontier(unknown).geometry().blockKnown(block),
+                "a memoized pristine block cannot certify a changed unknown physical cell");
+    }
     @Test void newAndEvictedTaskScopesReuseRemoteFactsWithoutInheritingLocalPermissions() {
         var epoch = new Object(); var baseline = new Object();
         var local = new BlockPosition(2, 64, 2); var remote = new BlockPosition(16000, 64, 16000);

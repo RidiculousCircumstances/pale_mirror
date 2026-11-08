@@ -336,19 +336,21 @@ public final class FrontierV3CombatExecutor {
             Mob fighter,LivingEntity target,MeleeStrike strike){
         var state=runtime.decodedState().orElseThrow();var rules=state.bootstrap().ruleset().melee();
         var admission=prepareImpact(level,fighter,target,strike,rules,runtime.executionView().orElseThrow().instant().ticks());
-        FrontierV3MeleeGuidance.observe(level,state,runtime,fighter,target,strike,
-                FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),runtime.executionView().orElseThrow().instant().ticks());
+        if(FrontierV3CombatPresentation.preparationRetained(level,fighter,strike))
+            FrontierV3MeleeGuidance.observe(level,state,runtime,fighter,target,strike,
+                    FrontierV3CombatPresentation.track(level,fighter,strike,rules,target),runtime.executionView().orElseThrow().instant().ticks());
         FrontierV3CombatTrace.strike(level,fighter,target,strike,"ADMISSION",admission.waitingFor().orElse("READY"));
         return admission;
     }
     /** Runs only after durable intent, before spending the operation's live attempt. */
     static FrontierV3NativeEffect.Admission prepareImpact(ServerLevel level,Mob fighter,LivingEntity target,
             MeleeStrike strike,MeleeRules rules,long canonicalTick){
-        long started=FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
         fighter.getLookControl().setLookAt(target,30,30);
-        FrontierV3CombatPresentation.track(level,fighter,strike,rules,target);
-        // Both clocks advance concurrently after durable intent; never two serial windups.
+        // Canonical admission and journal latency must not spend the visible
+        // warning or its finite active window. A retained cue is never restarted.
         if(canonicalTick<strike.impactAt(rules))return FrontierV3NativeEffect.Admission.waiting("MELEE_CANONICAL_ADMISSION");
+        long started=FrontierV3CombatPresentation.start(level,fighter,strike,rules,target);
+        FrontierV3CombatPresentation.track(level,fighter,strike,rules,target);
         // Journal admission cannot consume the visible contact window.
         if(level.getGameTime()-started<strike.timing(rules).preparationTicks())
             return FrontierV3NativeEffect.Admission.waiting("MELEE_WINDUP");

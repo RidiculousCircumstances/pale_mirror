@@ -30,8 +30,19 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
             Map<Region, Set<SubjectId>> owners,
             Map<SubjectId, Coverage> coverage,
             Map<Region, List<SettlementStructure>> tokens,
-            TerrainSurfacePlan terrain, Set<BlockPosition> paving) {
+            TerrainSurfacePlan terrain, Set<BlockPosition> paving,
+            BoundedValueMemo<BlockPosition, Optional<NavigationCell>> declarations,
+            BoundedValueMemo<TerrainColumn, List<BlockPosition>> columns) {
+        Image(Map<Region, Set<SubjectId>> owners, Map<SubjectId, Coverage> coverage,
+                Map<Region, List<SettlementStructure>> tokens, TerrainSurfacePlan terrain, Set<BlockPosition> paving) {
+            this(owners,coverage,tokens,terrain,paving,BoundedValueMemo.readMostly(16_384),BoundedValueMemo.readMostly(4_096));
+        }
         Optional<NavigationCell> declaration(BlockPosition position) {
+            // This image contains pristine immutable authored facts only. The
+            // outer snapshot still gives current observations/damage precedence.
+            return declarations.get(position, () -> compileDeclaration(position));
+        }
+        private Optional<NavigationCell> compileDeclaration(BlockPosition position) {
             NavigationCell found = null;
             boolean declaredAir = false;
             for (var owner : owners.getOrDefault(Region.at(position), Set.of())) {
@@ -65,6 +76,9 @@ final class AuthoredBuildingKnownGeometry implements KnownSpatialGeometry.Provid
         }
 
         List<BlockPosition> column(TerrainColumn column) {
+            return columns.get(column, () -> compileColumn(column));
+        }
+        private List<BlockPosition> compileColumn(TerrainColumn column) {
             var result = new ArrayList<BlockPosition>();
             for (var owner :
                     owners.getOrDefault(

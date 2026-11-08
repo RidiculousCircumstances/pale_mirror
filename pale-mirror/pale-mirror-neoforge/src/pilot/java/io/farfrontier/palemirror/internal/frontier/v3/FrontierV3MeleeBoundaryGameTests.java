@@ -124,17 +124,21 @@ public final class FrontierV3MeleeBoundaryGameTests {
         var targetPort=FrontierV3OperationEntityParticipant.nativeObject(target);var ports=List.of(actorPort,targetPort);
         var declaration=new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MELEE_ATTACK,strike.owner(),
                 "strike-"+strike.attemptOrdinal(),strike.toString(),Set.of(actorPort.identity(),targetPort.identity()));
-        long admittedAfter=level.getGameTime()+20;var visibleSince=new AtomicLong(-1);
+        long admittedAfter=level.getGameTime()+20;var admissionSince=new AtomicLong(-1);var visibleSince=new AtomicLong(-1);
         var hits=new AtomicInteger();float health=target.getHealth();
         var effect=new FrontierV3NativeEffect(()->{
             if(level.getGameTime()<admittedAfter)return FrontierV3NativeEffect.Admission.waiting("TEST_ADMISSION");
-            visibleSince.compareAndSet(-1,level.getGameTime());
-            // Keep canonical time initially at Prepared: both preparations must run concurrently.
-            long canonical=strike.preparedAt()+level.getGameTime()-visibleSince.get();
-            if(retreat&&level.getGameTime()>visibleSince.get())target.setPos(fighter.getX()+4,fighter.getY(),fighter.getZ());
+            admissionSince.compareAndSet(-1,level.getGameTime());
+            // An asynchronous canonical predecessor may hold Prepared for much
+            // longer than the entire native warning/contact interval.
+            long canonical=strike.preparedAt()+Math.max(0,level.getGameTime()-admissionSince.get()-30);
+            if(retreat&&visibleSince.get()>=0&&level.getGameTime()>visibleSince.get())target.setPos(fighter.getX()+4,fighter.getY(),fighter.getZ());
             var admission=FrontierV3CombatExecutor.prepareImpact(level,fighter,target,strike,rules,canonical);
-            if(!retreat&&level.getGameTime()-visibleSince.get()==strike.timing(rules).preparationTicks())
-                helper.assertTrue(admission.ready(),"aligned clocks need one windup, not canonical then native");
+            if(canonical<strike.impactAt(rules))helper.assertFalse(fighter.getPersistentData().contains("pm_v3_combat_windup"),
+                    "canonical waiting cannot expose a warning whose contact window will expire before admission");
+            else visibleSince.compareAndSet(-1,fighter.getPersistentData().getCompound("pm_v3_combat_windup").getLong("startedAtTick"));
+            if(!retreat&&visibleSince.get()>=0&&level.getGameTime()-visibleSince.get()==strike.timing(rules).preparationTicks())
+                helper.assertTrue(admission.ready(),"a full native warning reaches its still-live contact window after canonical admission");
             return admission;
         },()->{
             helper.assertTrue(level.getGameTime()-visibleSince.get()>=strike.timing(rules).preparationTicks(),"native cue must last its complete preparation after admission");
