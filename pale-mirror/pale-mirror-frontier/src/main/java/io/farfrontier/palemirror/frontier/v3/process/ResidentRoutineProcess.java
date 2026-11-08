@@ -38,6 +38,10 @@ public final class ResidentRoutineProcess {
       return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
     long now = Math.max(tick, action.dueAt().ticks());
     long cadence = s.bootstrap().ruleset().residentLife().routines().admissionInterval();
+    // A concurrent native healing/interaction receipt retains this exact execution.
+    // Its physical owner must settle before any routine pose or terminal transition.
+    if (ActorInventoryInteractionFences.pending(s, row.actor()))
+      return List.of(wake(row, now + cadence));
     if (row.kind() == ResidentRoutine.Kind.SIT) {
       var use = ResidentRoutines.use(s, row);
       if (use.pendingBody().isPresent()) return List.of(wake(row, now + cadence));

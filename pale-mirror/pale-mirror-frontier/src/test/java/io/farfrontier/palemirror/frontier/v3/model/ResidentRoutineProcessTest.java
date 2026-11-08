@@ -168,6 +168,52 @@ class ResidentRoutineProcessTest {
   }
 
   @Test
+  void expiredPauseWaitsForExactNativeHealingReceiptAcrossRecovery() {
+    var actor = new SubjectId("resident:1-14");
+    var state = hotPresence(SeatedLeisureProcessTest.initial(), actor);
+    var kind = ResidentRoutines.nextKind(state, actor);
+    assertEquals(ResidentRoutine.Kind.LOOK_AROUND, kind);
+    var request = new RoutineEvent.Requested(actuation(state, actor), kind,
+        state.actorLocations().get(actor).supportingSurface());
+    state = apply(state, assertInstanceOf(CommandPlan.Accepted.class, plan(state, request, NOW)).events(), NOW);
+    var row = state.routines().rows().get(actor);
+    long due = row.phaseAt() + row.pauseTicks();
+    var location = state.actorLocations().get(actor);
+    state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(
+        ImmutableLookupMap.withEntry(state.actorLocations(), actor,
+            location.withObserved(location.body(), location.condition().withHealth(FixedScalar.whole(19))))));
+    state = io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTransitions.apply(state, actor,
+        new io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalEvent.Vitality(actor, Optional.empty(), NOW + 1), NOW + 1);
+    var wound = state.humanPopulation().clinical().wounds().get(actor);
+    var healing = new io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalHealing(actuation(state, actor),
+        location.condition().health().raw() - FixedScalar.SCALE,
+        io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalAuthority.recovery(state, wound, due),
+        due, wound.harmRevision(), due + 1);
+    state = io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTransitions.apply(state, actor,
+        new io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalEvent.HealingPrepared(healing), due);
+    var codec = new FrontierWorldStateCodec();
+    state = codec.decode(codec.encode(state));
+    var pending = state;
+    var capability = ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.LEISURE);
+    assertFalse(capability.checkpoint(state, row.execution().orElseThrow()).ready());
+    assertThrows(IllegalArgumentException.class, () -> capability.release(pending, row.execution().orElseThrow()));
+    var action = ResidentRoutineProcess.progress(row, due);
+    var wait = ResidentRoutineProcess.plan(state, action, due);
+    assertEquals(1, wait.size());
+    assertInstanceOf(ScheduleEffect.Rescheduled.class, wait.getFirst().payload());
+    assertEquals(healing, state.humanPopulation().clinical().healing().get(actor));
+    assertEquals(row, state.routines().rows().get(actor));
+    state = io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalTransitions.apply(state, actor,
+        new io.farfrontier.palemirror.frontier.v3.model.clinical.ClinicalEvent.Recovered(actor, Optional.of(healing), due, healing.amount(), false), due + 1);
+    var resumed = ResidentRoutineProcess.progress(row, due + 20);
+    state = apply(state, ResidentRoutineProcess.plan(state, resumed, due + 20), due + 20);
+    assertEquals(ResidentRoutine.Phase.CLOSED, state.routines().rows().get(actor).phase());
+    assertTrue(state.actorExecutions().actors().get(actor).current().isEmpty());
+    assertFalse(state.humanPopulation().clinical().healing().containsKey(actor));
+    assertEquals(FixedScalar.whole(19), state.actorLocations().get(actor).condition().health());
+  }
+
+  @Test
   void nativeFixtureDeclaresFourDistinctBodiesWithoutPreseedingActivitiesOrOutcomes() {
     var config =
         FrontierV3FixtureCatalog.configuration(

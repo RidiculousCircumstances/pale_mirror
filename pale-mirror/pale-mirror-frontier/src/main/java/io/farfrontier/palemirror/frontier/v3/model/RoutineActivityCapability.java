@@ -43,6 +43,7 @@ final class RoutineActivityCapability implements ActorActivityCapability {
         s,
         e,
         s.actorMovements().containsKey(e.actorId())
+                || ActorInventoryInteractionFences.pending(s, e.actorId())
                 || use != null && use.execution().equals(e) && (use.pendingBody().isPresent() || use.phase() == SeatUse.Phase.SEATED)
             ? Optional.of(
                 new ActorActivityCheckpoint.Wait(
