@@ -47,6 +47,14 @@ public final class ServiceAreaDestinations {
             if (hasStandingClearance(candidate, excluded) && available.test(candidate)
                     && !temporary.test(candidate) && routeAllowed.test(local.get(candidate))
                     && reachable.test(candidate)) return Optional.of(candidate);
+        // Parking is a bounded local opportunity. Discover its actual connected
+        // component once through shared walking edges before requesting routes.
+        // A sealed service aisle must not queue one world search per exterior
+        // target and hold every other resident behind that repeated prefix.
+        // Exhaustion/unknown space is no global NO_PATH claim: a later ordinary
+        // owner review can reconsider the opportunity after geometry/demand changes.
+        var connected = Set.copyOf(io.farfrontier.palemirror.frontier.v3.model.geometry.ReachableSurfaceArea.select(
+                knowledge.geometry(), List.of(start), start, MAX_SEARCH_RADIUS, 4096, 4096, surface -> true).selected());
         var candidates = new java.util.PriorityQueue<Candidate>(java.util.Comparator.comparingLong(Candidate::distance)
                 .thenComparingInt(Candidate::ordinal));
         int ordinal = 0;
@@ -64,7 +72,7 @@ public final class ServiceAreaDestinations {
             }
             while (!candidates.isEmpty() && candidates.peek().distance() <= distance) {
                 var candidate = candidates.remove().surface();
-                if (local.containsKey(candidate) || !hasStandingClearance(candidate, excluded)
+                if (!connected.contains(candidate) || local.containsKey(candidate) || !hasStandingClearance(candidate, excluded)
                         || !available.test(candidate) || temporary.test(candidate)) continue;
                 MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
                         TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);

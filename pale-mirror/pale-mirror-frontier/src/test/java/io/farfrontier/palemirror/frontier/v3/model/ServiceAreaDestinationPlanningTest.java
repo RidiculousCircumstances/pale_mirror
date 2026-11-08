@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.*;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Set;
@@ -9,6 +10,58 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ServiceAreaDestinationPlanningTest {
+    @Test void sealedLocalComponentDoesNotRequestEveryExteriorParkingRouteAndReopensNormally() throws Exception {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:sealed-parking"), 421L));
+        var actor = initial.bootstrap().settlements().getFirst().residents().getFirst().id();
+        var start = SurfaceAnchor.at(3, 63, 1);
+        initial = initial.withActorBody(actor, start.standingBody());
+        var observations = new java.util.HashMap<BlockPosition, NavigationObservation>();
+        for (var offset : List.of(new int[]{1, 0}, new int[]{-1, 0}, new int[]{0, 1}, new int[]{0, -1}))
+            for (int dy = 1; dy <= 2; dy++) observations.put(start.support().offset(offset[0], dy, offset[1]),
+                    NavigationObservation.known(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
+        var sealed = new NavigationGeometryObserved(0, observations).apply(initial, NavigationGeometryObserved.OWNER);
+        var queries = new AtomicInteger();
+        try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            queries.incrementAndGet();
+            return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "pending");
+        })) {
+            assertTrue(ServiceAreaDestinations.select(ServiceClearanceRoutes.from(sealed, actor, start), actor, start,
+                    Set.of(), candidate -> candidate.manhattanDistance(start) > 4, candidate -> true).isEmpty());
+            assertEquals(0, queries.get(), "a known sealed component cannot request one route per exterior cell");
+            var opened = initial;
+            assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> ServiceAreaDestinations.select(
+                    ServiceClearanceRoutes.from(opened, actor, start), actor, start, Set.of(),
+                    candidate -> candidate.manhattanDistance(start) > 4, candidate -> true));
+            assertEquals(1, queries.get(), "changed geometry reconsiders the real shared route without an invented arrival");
+            assertEquals(start, opened.actorLocations().get(actor).supportingSurface());
+        }
+    }
+    @Test void authoredNoParkingFloorRemainsLegalTransitForItsServiceExit() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:authored-service-exit"), 139L,
+                FrontierRulesets.installed("frontier-v3-leisure-seats-r37")));
+        var home = state.bootstrap().settlements().getFirst();
+        var actor = home.residents().getFirst().id();
+        // Exact authored floor from the Northwatch stalled review. This is a
+        // public transit contact inside a no-parking interior, not a stock grant.
+        var start = SurfaceAnchor.at(-1489, 64, -1419);
+        var target = SurfaceAnchor.at(-1489, 63, -1402);
+        state = state.withActorBody(actor, start.standingBody());
+        var point = ServiceBoundaryComposition.declaration(state, FrontierWorldState.depotId(home.id()));
+        var clearance = ServiceClearanceRoutes.fromService(state, actor, start, point.identity());
+        assertTrue(FacilityPedestrianContacts.of(state.bootstrap()).noParking().contains(start.support()));
+        assertTrue(KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, actor).traversable(List.of(start)));
+        assertFalse(clearance.publicDestination(start));
+        var route = clearance.knowledge().plannedBetween(start, target);
+        assertTrue(point.boundary().allowsWaitingRoute(route));
+        assertTrue(clearance.allows(route), "an idle-placement restriction cannot delay the transit exit threshold");
+        assertFalse(clearance.allows(List.of(start)), "transit permission does not grant parking");
+        var reentry = new java.util.ArrayList<>(route); reentry.addAll(route.reversed()); reentry.addAll(route);
+        assertFalse(clearance.allows(reentry), "an incumbent exit still grants no re-entry");
+        var damaged = state.recordPhysicalDelta(new PhysicalDelta(route.get(2).support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, java.util.Optional.empty(), java.util.Optional.empty(), "test:changed-service-exit"));
+        assertFalse(ServiceClearanceRoutes.fromService(damaged, actor, start, point.identity()).allows(route));
+    }
     @Test void occupiedServiceCanClearWithoutAcquiringAnotherTurnOrReentering() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:private-clearance"), 421L));
         var settlement = state.bootstrap().settlements().getFirst();
@@ -62,6 +115,26 @@ class ServiceAreaDestinationPlanningTest {
         var clearance=ServiceClearanceRoutes.from(state,actor,route.getFirst());
         assertTrue(clearance.allows(route),"an unused neighbouring interaction envelope is not a transit wall");
         assertTrue(ServiceAccessCapabilities.current(state,new io.farfrontier.palemirror.frontier.v3.api.SubjectId("container:aisle-5")).isEmpty());
+        var point = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("container:aisle-5");
+        var visitor = state.bootstrap().settlements().getFirst().residents().get(1).id();
+        var claim = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("claim:busy-aisle");
+        var execution = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(visitor,
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, claim, 1);
+        var meal = new ResidentMeal(visitor, home, point, SurfaceAnchor.at(10,63,1),
+                new MealDestination.DiningArea(new io.farfrontier.palemirror.frontier.v3.api.SubjectId("structure:1-kitchen"), "dining"),
+                ReferenceContainerCustody.scopeId(point), new io.farfrontier.palemirror.frontier.v3.api.SubjectId("custody:busy-aisle"),
+                new FoodPortion(FoodCatalog.BREAD, 1000, java.util.Map.of(
+                        new io.farfrontier.palemirror.frontier.v3.api.SubjectId("lot:busy-aisle"),1)), claim,
+                java.util.Optional.empty(), ResidentMeal.Phase.MOVE, 0, java.util.Optional.empty(), execution);
+        var busy = state.withChanges(FrontierWorldStateUpdate.begin()
+                .humanPopulation(state.humanPopulation().withMeal(meal))
+                .actorExecutions(state.actorExecutions().begin(execution, 0)));
+        var protectedClearance = ServiceClearanceRoutes.from(busy, actor, route.getFirst());
+        assertFalse(protectedClearance.knowledge().traversable(List.of(SurfaceAnchor.at(6,63,1))),
+                "the shared search itself excludes the demanded unheld throat before choosing a shortcut");
+        assertFalse(protectedClearance.allows(route));
+        assertTrue(ServiceClearanceRoutes.from(state, actor, route.getFirst()).knowledge()
+                .traversable(List.of(SurfaceAnchor.at(6,63,1))), "releasing the actual demand restores ordinary transit");
         var damaged=state.recordPhysicalDelta(new PhysicalDelta(route.get(4).support().offset(0,1,0),PhysicalDeltaKind.UNKNOWN_SCAR,
                 java.util.Optional.empty(),java.util.Optional.empty(),"test:aisle-obstruction"));
         assertFalse(ServiceClearanceRoutes.from(damaged,actor,route.getFirst()).allows(route),"shared transit retains real geometry checks");

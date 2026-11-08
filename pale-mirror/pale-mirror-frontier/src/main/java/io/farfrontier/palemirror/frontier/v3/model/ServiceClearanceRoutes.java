@@ -18,7 +18,15 @@ public final class ServiceClearanceRoutes {
     private ServiceClearanceRoutes(FrontierWorldState state, SubjectId actor, SurfaceAnchor origin, java.util.Optional<ServicePointId> incumbent) {
         this.origin = origin; this.state = state; this.incumbent = incumbent;
         incumbent.ifPresent(point -> ServiceBoundaryComposition.require(state, point));
-        departure = PedestrianLocalDeparture.departure(state, origin).forActor(state, actor);
+        // Reject unheld, currently demanded throats during the shared search,
+        // rather than calculating an illegal shortcut for every parking target.
+        var excluded = new java.util.ArrayList<ServiceAccessBoundary>();
+        for (var point : ServiceBoundaryComposition.operationalDeclarations(state).values()) {
+            if (point.boundary().occupied(origin.standingBody())) continue;
+            if (busy.computeIfAbsent(point.pointId(), id -> !ServiceAccessCapabilities.current(state, id).isEmpty()))
+                excluded.add(point.boundary());
+        }
+        departure = PedestrianLocalDeparture.departure(state, origin).forActor(state, actor).excludingServiceBoundaries(excluded);
         publicGeometry = KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, actor);
         nearby = ServiceBoundaryComposition.nearbyDeclarationIndex(state);
     }
@@ -47,7 +55,10 @@ public final class ServiceClearanceRoutes {
     public boolean allows(List<SurfaceAnchor> route) {
         if (route.isEmpty() || !route.getFirst().equals(origin) || !publicDestination(route.getLast())) return false;
         int firstPublic = 0;
-        while (firstPublic < route.size() && !publicDestination(route.get(firstPublic))) firstPublic++;
+        // A no-parking contact is still ordinary transit. Using destination
+        // policy here can move the exit threshold beyond its own boundary and
+        // reject every otherwise legal route out of an authored building.
+        while (firstPublic < route.size() && !publicGeometry.traversable(List.of(route.get(firstPublic)))) firstPublic++;
         if (firstPublic == route.size()) return false;
         // Only the declared, geometrically valid private exit may precede public service space.
         if (firstPublic > 0 && !departure.traversable(route.subList(0, firstPublic + 1))) return false;

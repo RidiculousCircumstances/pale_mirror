@@ -660,6 +660,18 @@ public final class KnownPedestrianRouteKnowledge {
         excluded = Set.copyOf(Objects.requireNonNull(excluded, "excluded task surfaces"));
         if (excluded.size() > io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin.MAX_SURFACES)
             throw new IllegalArgumentException("task surface exclusions exceed the bounded path profile");
+        return excludingAccessSurfaces(excluded);
+    }
+
+    /** Closed service declarations, bounded by the installed world's registry rather
+     * than the caller-owned local rejoin profile. This grants no new access. */
+    KnownPedestrianRouteKnowledge excludingServiceBoundaries(java.util.Collection<ServiceAccessBoundary> boundaries) {
+        var excluded = boundaries.stream().flatMap(boundary -> boundary.occupiedSurfaces().stream())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return excludingAccessSurfaces(excluded);
+    }
+
+    private KnownPedestrianRouteKnowledge excludingAccessSurfaces(Set<SurfaceAnchor> excluded) {
         if (excluded.isEmpty()) return this;
         var forbidden = excluded.stream().map(SurfaceAnchor::support).collect(java.util.stream.Collectors.toSet());
         var allowedDepartures = new HashSet<>(raisedDepartureSupports);
