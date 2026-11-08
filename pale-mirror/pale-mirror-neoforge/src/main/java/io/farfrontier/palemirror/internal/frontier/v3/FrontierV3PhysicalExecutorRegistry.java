@@ -87,18 +87,17 @@ final class FrontierV3PhysicalExecutorRegistry {
         if (turn.pass.begin(world.getGameTime())) turn.preparation = preparation.computeIfAbsent(world, ignored -> new FrontierV3PreparationAdmission(
                 ordered.stream().filter(definition -> definition.admission() == Admission.DEFERABLE_PREPARATION)
                         .map(Definition::id).toList())).begin(allowance, turn.pass::elapsed);
-        run(world, runtime, turn, allowance);
+        run(world, runtime, turn);
     }
     void resume(ServerLevel world, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         var turn = continuations.get(runtime);
-        if (turn != null && turn.pass.current(world.getGameTime())) run(world, runtime, turn,
-                (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D));
+        if (turn != null && turn.pass.current(world.getGameTime())) run(world, runtime, turn);
     }
     private void run(ServerLevel world, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
-            Turn turn, long allowance) {
+            Turn turn) {
         var admission = turn.preparation;
         activePreparation.put(world, admission);
-        try { turn.pass.run(ordered.size(), allowance, () -> {
+        try { turn.pass.run(ordered.size(), () -> {
             var capacity = runtime.commandAdmissionCapacity();
             // A predecessor can quarantine the runtime. Preserve that primary trace and
             // stop this turn instead of throwing a second missing-Optional exception.

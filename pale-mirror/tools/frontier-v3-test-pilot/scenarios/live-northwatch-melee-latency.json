@@ -196,7 +196,7 @@
         "settlements": 12,
         "sceneConflicts": 0,
         "inventoryConflicts": 0,
-        "incidentIndexSize": 1
+        "requiredConflicts": 1
       }
     }
   ],
