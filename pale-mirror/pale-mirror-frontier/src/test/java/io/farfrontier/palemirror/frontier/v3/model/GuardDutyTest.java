@@ -13,6 +13,31 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Complete causal path with actual material consumption, station work, travel and custody. */
 class GuardDutyTest {
+    @Test void assignedSecurityResponseCannotYieldToCareBeforeThePatrolMissionRedirects() {
+        var state=armed();var duty=state.strategicPlans().guards().values().iterator().next();
+        var actor=duty.execution().actorId();
+        assertTrue(duty.mission().flatMap(io.farfrontier.palemirror.frontier.v3.model.security.GuardMission::response).isEmpty());
+        assertTrue(ActorExecutionComposition.LIFECYCLE.mayBegin(state,actor));
+        var target=new io.farfrontier.palemirror.frontier.v3.model.combat.CombatTarget(
+                io.farfrontier.palemirror.frontier.v3.model.combat.CombatTarget.Kind.PLAYER,new UUID(9,17),"pale_mirror:frontier_graybox");
+        var contact=new io.farfrontier.palemirror.frontier.v3.model.security.SecurityState.Contact(duty.home(),target,
+                state.actorLocations().get(actor).supportingSurface().support(),21001,1);
+        var key=new io.farfrontier.palemirror.frontier.v3.model.security.SecurityState.ContactKey(duty.home(),target);
+        var response=new io.farfrontier.palemirror.frontier.v3.model.security.SecurityState.Response(duty.id(),key,21001,
+                new io.farfrontier.palemirror.frontier.v3.model.combat.CombatEnvelope(target,
+                    io.farfrontier.palemirror.frontier.v3.model.combat.CombatEnvelope.Kind.SELF_DEFENCE,
+                    new SurfaceAnchor(contact.position()),16));
+        var security=state.security().offence(duty.home(),target.entity(),21001);
+        state=state.withChanges(FrontierWorldStateUpdate.begin().security(new io.farfrontier.palemirror.frontier.v3.model.security.SecurityState(
+                security.hostility(),Map.of(key,contact),Map.of(duty.id(),response),1,security.awareness())));
+        assertFalse(ActorExecutionComposition.LIFECYCLE.mayBegin(state,actor),"assigned defence owns the handoff boundary before the mission projection catches up");
+        var successor=state.actorExecutions().next(actor,ActorActivityKind.CLINICAL_CARE,new SubjectId("clinical:guard-gap"));
+        var fighting=state;assertThrows(IllegalArgumentException.class,()->ActorExecutionComposition.LIFECYCLE.prepareBegin(fighting,successor,21001));
+        state=new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertFalse(ActorExecutionComposition.LIFECYCLE.mayBegin(state,actor));
+        state=state.withChanges(FrontierWorldStateUpdate.begin().security(state.security().retired(duty.id())));
+        assertTrue(ActorExecutionComposition.LIFECYCLE.mayBegin(state,actor),"actual security withdrawal restores ordinary care admission");
+    }
     private static FrontierWorldState initial() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:peaceful-guards"), 41,
                 FrontierRulesets.installed("frontier-v3-simulation-baseline-r31")));

@@ -42,7 +42,8 @@ final class GuardActivityCapability implements ActorActivityCapability {
         var duty = GuardAuthority.require(state, execution);
         return new ActorActivityCheckpoint(state, execution, GuardAuthority.pending(state, duty)
                 ? Optional.of(new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION, duty.id()))
-                : state.actorMovements().containsKey(execution.actorId()) || duty.mission().flatMap(io.farfrontier.palemirror.frontier.v3.model.security.GuardMission::response).isPresent()
+                : state.actorMovements().containsKey(execution.actorId()) || state.security().response(duty.id()).isPresent()
+                    || duty.mission().flatMap(io.farfrontier.palemirror.frontier.v3.model.security.GuardMission::response).isPresent()
                     ? Optional.of(new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.OWNER_TERMINAL_BOUNDARY, duty.id())) : Optional.empty());
     }
     public ActorActivityCheckpoint spatialYieldCheckpoint(FrontierWorldState state, ActorExecutionId execution) {
