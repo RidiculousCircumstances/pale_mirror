@@ -113,17 +113,17 @@ final class FrontierV3DepartureReturnReadFence {
             return false;
         if (!FrontierV3StoredEntityInventory.matchesStoredChunk(raw, chunk))
             throw new IllegalStateException("misplaced stored entity chunk during return fencing");
-        var entities = FrontierV3StoredEntityInventory.serializedEntities(raw)
+        var entities = FrontierV3StoredEntityInventory.serializedEntityIds(raw)
                 .orElseThrow(() -> new IllegalStateException("invalid stored entity inventory during return fencing"));
         boolean actorReturn = false;
         for (var receipt : bodyReceipts) {
-            if (entities.containsKey(receipt.identity().entityId())) actorReturn |= actors.markBodyReturnRead(receipt);
+            if (entities.contains(receipt.identity().entityId())) actorReturn |= actors.markBodyReturnRead(receipt);
         }
         for (var receipt : ambientReceipts) {
-            if (entities.containsKey(receipt.carrier().identity().entityId())) actorReturn |= actors.markAmbientReturnRead(receipt);
+            if (entities.contains(receipt.carrier().identity().entityId())) actorReturn |= actors.markAmbientReturnRead(receipt);
         }
         for (var receipt : actorReceipts) {
-            if (entities.containsKey(receipt.carrier().identity().entityId()))
+            if (entities.contains(receipt.carrier().identity().entityId()))
                 actorReturn |= actors.markReturnRead(receipt);
         }
         return actorReturn;

@@ -20,23 +20,37 @@ final class FrontierV3StoredEntityInventory {
     }
 
     static Optional<Set<UUID>> serializedEntityIds(CompoundTag data) {
-        return serializedEntities(data).map(Map::keySet);
+        return serializedRows(data).map(rows -> {
+            var ids = new HashSet<UUID>();
+            rows.forEach(row -> ids.add(row.getUUID("UUID")));
+            return Set.copyOf(ids);
+        });
     }
 
     static Optional<Map<UUID, CompoundTag>> serializedEntities(CompoundTag data) {
-        if (data == null) return Optional.of(Map.of());
+        return serializedRows(data).flatMap(rows -> {
+            var entities = new HashMap<UUID, CompoundTag>();
+            for (var row : rows)
+                if (entities.putIfAbsent(row.getUUID("UUID"), row) != null) return Optional.empty();
+            return Optional.of(Map.copyOf(entities));
+        });
+    }
+
+    /** Presence fences are monotonic even with duplicate identities. Body proofs still require uniqueness. */
+    private static Optional<List<CompoundTag>> serializedRows(CompoundTag data) {
+        if (data == null) return Optional.of(List.of());
         if (!data.contains("Entities", Tag.TAG_LIST)) return Optional.empty();
         var queue = new ArrayDeque<CompoundTag>();
         var root = data.getList("Entities", Tag.TAG_COMPOUND);
         if (!data.getList("Entities", Tag.TAG_COMPOUND).equals(data.get("Entities"))) return Optional.empty();
         if (root.size() > MAX_SERIALIZED_ENTITIES) return Optional.empty();
         root.forEach(value -> queue.add((CompoundTag) value));
-        var entities = new HashMap<UUID, CompoundTag>(); int visited = 0;
+        var entities = new ArrayList<CompoundTag>(); int visited = 0;
         while (!queue.isEmpty()) {
             if (++visited > MAX_SERIALIZED_ENTITIES) return Optional.empty();
             var entity = queue.removeFirst();
             if (!entity.hasUUID("UUID")) return Optional.empty();
-            if (entities.putIfAbsent(entity.getUUID("UUID"), entity) != null) return Optional.empty();
+            entities.add(entity);
             if (entity.contains("Passengers")) {
                 if (!entity.contains("Passengers", Tag.TAG_LIST)) return Optional.empty();
                 var passengers = entity.getList("Passengers", Tag.TAG_COMPOUND);
@@ -44,7 +58,7 @@ final class FrontierV3StoredEntityInventory {
                 passengers.forEach(value -> queue.add((CompoundTag) value));
             }
         }
-        return Optional.of(Map.copyOf(entities));
+        return Optional.of(List.copyOf(entities));
     }
 
     static CompletableFuture<Void> afterSuccessfulWriteAndSync(CompletableFuture<Void> written,

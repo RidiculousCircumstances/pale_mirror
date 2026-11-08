@@ -1,7 +1,5 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
-import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 
@@ -42,11 +40,8 @@ final class FrontierV3BodyJoinRejection {
             reason = Reason.FOREIGN_IDENTITY;
         else if (ledger.hasDepartureConflict(declaration.actorId())) reason = Reason.DEPARTURE_CONFLICT;
         else if (!known) reason = Reason.UNKNOWN_RESIDENCE;
-        else if (retired != null && retired.asset() == FencedRecoveryAsset.BODY
-                && retired.ownerId().equals(declaration.actorId()) && retired.ownerRevision() == 0L
-                && (retired.disposition() == FencedRecoveryDisposition.REJECT_STALE
-                    || retired.disposition() == FencedRecoveryDisposition.RESUME_COLD)
-                && declaration.epoch() <= retired.retiredEpoch()) reason = Reason.RETIRED_INCARNATION;
+        else if (FrontierV3ActorBodyController.retiredJoin(state, ledger, declaration, residence))
+            reason = Reason.RETIRED_INCARNATION;
         else if (current == null) reason = Reason.NO_CURRENT_AUTHORITY;
         else if (declaration.epoch() != current.authorityEpoch()) reason = Reason.EPOCH_MISMATCH;
         else if (indexedDuplicate) reason = Reason.DUPLICATE_UUID;

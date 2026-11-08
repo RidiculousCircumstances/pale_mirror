@@ -801,6 +801,7 @@ public final class FrontierV3ServerLifecycle {
                     entity.getUUID(), entity.getPersistentData().getString(FrontierV3ActorCarrierComposition.ACTOR_KEY),
                     evidence == null ? "OWNERSHIP_UNAVAILABLE" : evidence.reason(),
                     runtime == null ? "ABSENT" : runtime.status().kind(), declaration, evidence);
+            if (state != null) FrontierV3ActorBodyController.discardRetiredJoin(level, state, entity);
         }
     }
     public static boolean recognizesManagedCarrier(ServerLevel level, Entity entity) {

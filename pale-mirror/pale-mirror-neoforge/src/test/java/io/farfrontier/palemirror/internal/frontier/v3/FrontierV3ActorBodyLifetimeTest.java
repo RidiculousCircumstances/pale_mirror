@@ -157,6 +157,7 @@ class FrontierV3ActorBodyLifetimeTest {
         var current = FrontierV3BodyJoinRejection.inspect(state, ledger, live, 1L, false);
         assertEquals(FrontierV3BodyJoinRejection.Reason.CURRENT_BODY_CANCELED, current.reason());
         assertFalse(current.expectedRetirement());
+        assertFalse(FrontierV3ActorBodyController.retiredJoin(state, ledger, live, 1L));
         assertEquals(FrontierV3BodyJoinRejection.Reason.DUPLICATE_UUID,
                 FrontierV3BodyJoinRejection.inspect(state, ledger, live, 1L, true).reason());
         var retired = ActorBodyAuthority.released(state, ActorBodyAuthority.current(state, live.actorId()));
@@ -165,6 +166,8 @@ class FrontierV3ActorBodyLifetimeTest {
             var stale = FrontierV3BodyJoinRejection.inspect(image, ledger, live, 1L, false);
             assertEquals(FrontierV3BodyJoinRejection.Reason.RETIRED_INCARNATION, stale.reason());
             assertTrue(stale.expectedRetirement());
+            assertTrue(FrontierV3ActorBodyController.retiredJoin(image, ledger, live, 1L));
+            assertFalse(FrontierV3ActorBodyController.retiredJoin(image, ledger, live, 999L));
             assertFalse(FrontierV3ActorBodyController.recognizesDeclaration(image, live));
             assertEquals(FrontierV3BodyJoinRejection.Reason.UNKNOWN_RESIDENCE,
                     FrontierV3BodyJoinRejection.inspect(image, ledger, live, 999L, false).reason());
@@ -172,14 +175,38 @@ class FrontierV3ActorBodyLifetimeTest {
                     live.representation(), 0L, live.epoch());
             assertEquals(FrontierV3BodyJoinRejection.Reason.FOREIGN_IDENTITY,
                     FrontierV3BodyJoinRejection.inspect(image, ledger, foreign, 1L, false).reason());
+            assertFalse(FrontierV3ActorBodyController.retiredJoin(image, ledger, foreign, 1L));
         }
         assertEquals(FrontierV3BodyJoinRejection.Reason.INVALID_DECLARATION,
                 FrontierV3BodyJoinRejection.inspect(next, ledger, null, 1L, false).reason());
         var future = live.liveBody(Owner.ACTOR_BODY, 0L, live.epoch() + 2L);
         assertEquals(FrontierV3BodyJoinRejection.Reason.EPOCH_MISMATCH,
                 FrontierV3BodyJoinRejection.inspect(next, ledger, future, 1L, false).reason());
+        assertFalse(FrontierV3ActorBodyController.retiredJoin(next, ledger, future, 1L));
         assertTrue(ledger.permitsRecordedOwner(FrontierV3ActorOwnerBinding.body(live)),
                 "explanation cannot consume residence, admission or custody evidence");
+    }
+
+    @Test void duplicateSeatedBodyFencesColdCustodyWithoutPreventingNativeReturnAndCleanup() {
+        var receipt = receipt(running()); var ledger = ledger(receipt);
+        assertTrue(ledger.recordBodyDeparture(receipt));
+        var chunk = new net.minecraft.world.level.ChunkPos(Math.floorDiv(receipt.observed().body().x(), 16),
+                Math.floorDiv(receipt.observed().body().z(), 16));
+        var stored = storedBody(receipt, chunk);
+        var roots = stored.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        var seat = new CompoundTag(); seat.putUUID("UUID", java.util.UUID.randomUUID());
+        var passengers = new net.minecraft.nbt.ListTag(); passengers.add(roots.getCompound(0).copy());
+        seat.put("Passengers", passengers); roots.add(seat);
+        var before = stored.copy();
+        assertTrue(FrontierV3StoredEntityInventory.serializedEntities(stored).isEmpty(), "duplicate bodies never supply unique saved proof");
+        assertThrows(IllegalStateException.class, () -> FrontierV3StoredEntityCensus.select(
+                Optional.of(stored), chunk, java.util.Set.of(receipt.identity().entityId())));
+        assertTrue(FrontierV3DepartureReturnReadFence.fenceStoredInventory(chunk, stored, ledger),
+                "positive UUID presence must fence COLD custody and allow ordinary native loading to reject the retired passenger");
+        assertTrue(ledger.returnRead(receipt.identity().actorId()));
+        assertEquals(before, stored, "presence inspection cannot deduplicate or repair saved rows");
+        var malformed = stored.copy(); malformed.getList("Entities", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).remove("UUID");
+        assertTrue(FrontierV3StoredEntityInventory.serializedEntityIds(malformed).isEmpty());
     }
 
     @Test void changingActivityPreservesPhysicalProofButDoesNotBlessItsOldActuator() {

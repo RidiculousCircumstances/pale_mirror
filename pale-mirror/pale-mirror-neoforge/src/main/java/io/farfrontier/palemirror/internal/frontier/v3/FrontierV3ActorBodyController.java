@@ -3,12 +3,15 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryAsset;
+import io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.Entity;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -687,6 +690,36 @@ final class FrontierV3ActorBodyController {
         if (!FrontierV3GoalNavigation.retireIncarnation(body, id)) return false;
         body.discard();
         return true;
+    }
+
+    /** A canceled passenger is still reachable from its accepted seat root and would otherwise save again. */
+    static boolean discardRetiredJoin(ServerLevel level, FrontierWorldState state, Entity entity) {
+        if (!(entity instanceof Mob body) || body.level() != level || body.isRemoved()) return false;
+        var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElse(null);
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        if (!retiredJoin(state, ledger, declaration, body.getPersistentData().getLong(RESIDENCE_KEY))) return false;
+        if (!FrontierV3GoalNavigation.retireIncarnation(body, new ActorBodyId(declaration.actorId(), declaration.epoch()))) return false;
+        body.stopRiding();
+        body.discard();
+        return true;
+    }
+
+    /** Exact durable BODY tombstones retire only known historical residences, never a competing current body. */
+    static boolean retiredJoin(FrontierWorldState state, FrontierV3AmbientCarrierLedger ledger,
+            FrontierV3ActorCarrierComposition.Declaration declaration, long residence) {
+        if (declaration == null || declaration.representation() != FrontierV3ActorCarrierComposition.Representation.LIVE_BODY)
+            return false;
+        var actor = state.actorLocations().get(declaration.actorId());
+        var retired = state.fencedRecovery().tombstones().get(ActorBodyId.recoveryBindingId(declaration.actorId()));
+        return actor != null && actor.kind() == declaration.kind()
+                && ActorBodyId.entityId(state.bootstrap().worldId(), declaration.actorId()).equals(declaration.entityId())
+                && !ledger.hasDepartureConflict(declaration.actorId())
+                && ledger.knownBodyResidence(declaration.actorId(), residence)
+                && retired != null && retired.asset() == FencedRecoveryAsset.BODY
+                && retired.ownerId().equals(declaration.actorId()) && retired.ownerRevision() == 0L
+                && (retired.disposition() == FencedRecoveryDisposition.REJECT_STALE
+                    || retired.disposition() == FencedRecoveryDisposition.RESUME_COLD)
+                && declaration.epoch() <= retired.retiredEpoch();
     }
 
     static Result materialize(ServerLevel level, FrontierWorldState state, BirthRequest request) {
