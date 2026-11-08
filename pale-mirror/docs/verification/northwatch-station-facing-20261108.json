@@ -1,0 +1,307 @@
+{
+  "schema": 1,
+  "recordedAt": "2026-11-08T07:14:10.126209+00:00",
+  "scope": "Face the declared physical workstation while rendering resident work; retain higher-priority animations and release native heading when the finite cue ends",
+  "source": {
+    "commit": "27fab98a06672fae3302b320439ed4dc96335d83",
+    "sourceTree": "1985dfb828b13ceafbc972faacb8578be66f276b",
+    "implementation": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror",
+    "detachedRelease": "/home/rd/proj/pm-station-facing-release-20261108/pale-mirror"
+  },
+  "implementation": [
+    "Current production uses its declared machine socket; legacy facility work uses its workplace socket; service and block work use their retained effect targets",
+    "At proven work, set native entity/body/head heading through Minecraft lookAt without changing position, work credit, custody or navigation",
+    "Both renderer adapters use replicated entity heading for active work and align head relative to that heading; combat, meal and routine priorities remain higher",
+    "No new scan, timer, thread, payload, network version, schema or asset edit"
+  ],
+  "checks": {
+    "jvm": {
+      "passed": 64,
+      "split": "4 fixture and 60 render/parser",
+      "log": "/tmp/pm-station-facing-fuel-gate.log",
+      "seconds": 39,
+      "architectureDebtSelfTests": 19
+    },
+    "finalCarrier": {
+      "passed": true,
+      "log": "/tmp/pm-station-facing-worker-carrier-gate.log",
+      "seconds": 13
+    },
+    "nodeParser": {
+      "passed": 57,
+      "log": "/tmp/pm-station-facing-parser-6.log",
+      "command": "node --test tools/frontier-v3-test-pilot/test/scenario.test.mjs"
+    },
+    "detachedBuild": {
+      "status": "passed",
+      "seconds": 16,
+      "log": "/tmp/pm-station-facing-detached-release.log",
+      "command": "JAVA_HOME=/home/rd/.gradle/jdks/eclipse_adoptium-21-amd64-linux.2 ./gradlew -PfrontierV3GrayboxDisabledModsCatalog=/home/rd/proj/minecraft/config/graybox-disabled-mods.txt guardrails :pale-mirror-neoforge:build :pale-mirror-neoforge:verifyPackagedJar -x test --no-daemon"
+    },
+    "finalGovernanceGuardrails": {
+      "status": "passed",
+      "seconds": 14,
+      "log": "/tmp/pm-station-facing-governance-final.log"
+    }
+  },
+  "native": {
+    "status": "ok",
+    "manifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/northwatch-living-routines/pilot-station-facing-6.json",
+    "scenario": "tools/frontier-v3-test-pilot/scenarios/disposable-station-work-facing.json",
+    "runId": "27a06866-11cb-457b-9718-fdc8282c6084",
+    "isolation": {
+      "world": "v3-disposable_station_work_facing-f4553410",
+      "port": 25599,
+      "freshWorld": true
+    },
+    "recovery": {
+      "mode": "graceful",
+      "world": "v3-disposable_station_work_facing-f4553410",
+      "splitAfterAction": 10,
+      "beforeRestartManifest": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/northwatch-living-routines/pilot-station-facing-6.before-restart.json",
+      "clientSession": {
+        "runId": "f4553410-935d-4bf3-915e-f5a7a14eddc3",
+        "reusedJvm": true,
+        "controlDirectory": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/f4553410-935d-4bf3-915e-f5a7a14eddc3-persistent-session"
+      }
+    },
+    "terminalCleanup": {
+      "mode": "exact_owned_post_semantic_disposal",
+      "serverPid": 1668584,
+      "port": 25599,
+      "portClosed": true
+    },
+    "motion": [
+      {
+        "status": "ok",
+        "samples": 160,
+        "workPoses": 80,
+        "maxFacingErrorDeg": 0.39312744140625,
+        "uuid": "9b7acc20-9b1d-3602-acb3-72caef02cb1c"
+      },
+      {
+        "status": "ok",
+        "samples": 160,
+        "workPoses": 117,
+        "maxFacingErrorDeg": 0.38631439208984375,
+        "uuid": "9b7acc20-9b1d-3602-acb3-72caef02cb1c"
+      }
+    ],
+    "frames": [
+      {
+        "after": 10,
+        "name": "human-era-facing-workstation-before-restart",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_station_work_facing-27a06866-11cb-457b-9718-fdc8282c6084-human-era-facing-workstation-before-restart.png",
+        "manuallyReviewed": true,
+        "observation": "Human Era body faces physical work surface; hands act toward the surface; captured from supported nearby player position"
+      },
+      {
+        "after": 12,
+        "name": "human-era-facing-workstation-after-restart",
+        "presentation": "clean",
+        "path": "/home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror/build/frontier-v3-scenarios/disposable_station_work_facing-27a06866-11cb-457b-9718-fdc8282c6084-human-era-facing-workstation-after-restart.png",
+        "manuallyReviewed": true,
+        "observation": "Human Era body faces physical work surface; hands act toward the surface; captured from supported nearby player position"
+      }
+    ],
+    "resources": [
+      {
+        "schema": 1,
+        "kind": "resource",
+        "id": "custody:container-authored-25650174-8b8d-3795-8635-2f7fa8b98ae5",
+        "world": "frontier:graybox",
+        "revision": 30,
+        "instant": 966,
+        "status": "not_found",
+        "pilotActionStep": 1,
+        "pilotCausalMilestone": "output_storage_empty_before_baking"
+      },
+      {
+        "schema": 1,
+        "kind": "resource",
+        "id": "custody:container-authored-25650174-8b8d-3795-8635-2f7fa8b98ae5",
+        "world": "frontier:graybox",
+        "revision": 1139,
+        "instant": 5166,
+        "status": "ok",
+        "account": "custody:container-authored-25650174-8b8d-3795-8635-2f7fa8b98ae5",
+        "custody": {
+          "kind": "CONTAINER",
+          "container": "container:authored-25650174-8b8d-3795-8635-2f7fa8b98ae5"
+        },
+        "quantity": 21,
+        "lots": [
+          {
+            "id": "lot:job-production-development-fungible-production-output",
+            "owner": "settlement:1",
+            "itemKind": "minecraft:bread",
+            "quantity": 21
+          }
+        ],
+        "claims": [],
+        "bindingCount": 0,
+        "bindings": [],
+        "pilotActionStep": 6,
+        "pilotCausalMilestone": "canonical_bread_in_depot"
+      }
+    ],
+    "finalSummary": {
+      "schema": 1,
+      "kind": "summary",
+      "id": "",
+      "world": "frontier:graybox",
+      "revision": 1141,
+      "instant": 5170,
+      "status": "ok",
+      "diagnosticVerdict": "green",
+      "requiredConflicts": 0,
+      "diagnosticScope": "RETAINED_CONFLICTS",
+      "progressVerdict": "NOT_ASSESSED",
+      "preparingReplicaScopes": 0,
+      "settlements": 12,
+      "residents": 319,
+      "bioforms": 48,
+      "sites": 24,
+      "intents": 0,
+      "ambientLeases": 21,
+      "sceneLeases": 3,
+      "sceneConflicts": 0,
+      "items": 72,
+      "inventoryConflicts": 0,
+      "replicaCustodyDiagnostics": 0,
+      "incidentIndexSize": 0,
+      "optionalDiagnosticDrops": 0,
+      "pilotActionStep": 8
+    },
+    "fixture": "Current r35 authored Northwatch/seed139; low initial pantry stock, finite 64 coal, ordinary economic review then production admission before first wheat transfer; no work/pose/receipt outcome injection"
+  },
+  "earlierAttempts": [
+    {
+      "attempt": 1,
+      "status": "failed",
+      "reason": "Legacy production profile lacks agriculture required by installed agricultural generator; failed first visit before work"
+    },
+    {
+      "attempt": 2,
+      "status": "failed",
+      "reason": "Current economic profile lacked initial ordinary review needed to admit the job; failed before readiness"
+    },
+    {
+      "attempt": 3,
+      "status": "failed",
+      "reason": "Machine awaited fuel; correctly produced zero work-animation proof"
+    },
+    {
+      "attempt": 4,
+      "status": "failed",
+      "reason": "Legacy camera offset placed player below floor; supported camera replacement restored ordinary work demand"
+    },
+    {
+      "attempt": 5,
+      "status": "failed",
+      "reason": "Pre-restart actual work passed: 119 poses/max error 0.420883 degrees; after reconnect process-name cache absent; explicit exact worker ID fixed declaration"
+    }
+  ],
+  "releaseByteProof": {
+    "status": "ok",
+    "commit": "27fab98a06672fae3302b320439ed4dc96335d83",
+    "changedEntries": [
+      "META-INF/pale-mirror-runtime-identity.properties"
+    ],
+    "sha512": "978adbb82a8a841122869276fb4a53c41dcc5421c7a24af3c15b1e938fc351c716e7a1d8475fb2d37683974216d92167279df458c1f37502790a1bbcc4b884df",
+    "identity": "# Build-owned source provenance. The runtime host reads this declaration; canonical reducers never derive it.\nsourceTree=1985dfb828b13ceafbc972faacb8578be66f276b\n"
+  },
+  "deployment": {
+    "status": "postverify-passed",
+    "runtime": "/home/rd/far-frontier-server",
+    "world": "northwatch-max-living-seed139-20261108",
+    "sameWorldPreserved": true,
+    "seed": 139,
+    "ruleset": "frontier-v3-living-residents-r36",
+    "schema": 350,
+    "network": 9,
+    "service": "far-frontier-v3-live.service",
+    "wrapperPid": 1691024,
+    "javaPid": 1691049,
+    "java": "/home/rd/.local/share/far-frontier/java/temurin-22.0.2+9/bin/java",
+    "invocationId": "19c551b13bd54adc8a0b8dd851a6c91a",
+    "notBefore": 1794121954,
+    "oldJavaPid": 1338988,
+    "allDimensionsSavedBeforeInstall": true,
+    "oldJvmAndPortsExitedBeforeInstall": true,
+    "packIndexChecksums": 172,
+    "coreSha512": "978adbb82a8a841122869276fb4a53c41dcc5421c7a24af3c15b1e938fc351c716e7a1d8475fb2d37683974216d92167279df458c1f37502790a1bbcc4b884df",
+    "visualsSha512": "2fd468cb382d64fa62eaa2cb2239d7bd75c89a4a06c21ce1bf2a15f0775db02e5daf2591b91863b74d4dc87a90067ef714dd631e4174daf79c9caad78f994601",
+    "preflightLog": "/tmp/pm-station-facing-preflight.log",
+    "publishLog": "/tmp/pm-station-facing-publish.log",
+    "installLog": "/tmp/pm-station-facing-install.log",
+    "postverifyLog": "/tmp/pm-station-facing-postverify.log",
+    "before": {
+      "schema": 1,
+      "kind": "summary",
+      "id": "",
+      "world": "frontier:graybox",
+      "revision": 613205,
+      "instant": 165330,
+      "status": "ok",
+      "diagnosticVerdict": "green",
+      "requiredConflicts": 0,
+      "diagnosticScope": "RETAINED_CONFLICTS",
+      "progressVerdict": "NOT_ASSESSED",
+      "preparingReplicaScopes": 0,
+      "settlements": 12,
+      "residents": 342,
+      "bioforms": 49,
+      "sites": 36,
+      "intents": 23,
+      "ambientLeases": 22,
+      "sceneLeases": 14,
+      "sceneConflicts": 0,
+      "items": 110,
+      "inventoryConflicts": 0,
+      "replicaCustodyDiagnostics": 0,
+      "incidentIndexSize": 5,
+      "optionalDiagnosticDrops": 0
+    },
+    "after": {
+      "schema": 1,
+      "kind": "summary",
+      "id": "",
+      "world": "frontier:graybox",
+      "revision": 618650,
+      "instant": 166404,
+      "status": "ok",
+      "diagnosticVerdict": "green",
+      "requiredConflicts": 0,
+      "diagnosticScope": "RETAINED_CONFLICTS",
+      "progressVerdict": "NOT_ASSESSED",
+      "preparingReplicaScopes": 0,
+      "settlements": 12,
+      "residents": 342,
+      "bioforms": 49,
+      "sites": 36,
+      "intents": 21,
+      "ambientLeases": 22,
+      "sceneLeases": 14,
+      "sceneConflicts": 0,
+      "items": 110,
+      "inventoryConflicts": 0,
+      "replicaCustodyDiagnostics": 0,
+      "incidentIndexSize": 5,
+      "optionalDiagnosticDrops": 0
+    }
+  },
+  "limits": [
+    "Native graphical acceptance covers actual Human Era station work before/after recovery and terminal delivery in a disposable full-pack world; no new exact-live-world HUMAN_CANDIDATE claim",
+    "Prestop live incident index was already 5 and remains 5; required/scene/inventory conflicts remain zero",
+    "Known unrelated broad check baseline failures remain recorded in northwatch-living-20261108.json; scoped green is not a blanket all-tests-green claim",
+    "No incremental CPU measurement or multiplayer-scale claim"
+  ],
+  "clientAction": "Run normal pack updater and fully restart Minecraft to load corrected renderer",
+  "repositories": {
+    "implementation": "Tracked clean at scoped commit; unrelated .serena preserved",
+    "pack": "HEAD909c26c tracked clean; unrelated .f0v-baseline preserved",
+    "governance": "Only this receipt staged; other preexisting WIP and continuity retained"
+  }
+}
